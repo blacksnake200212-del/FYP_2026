@@ -34,7 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
         "service": "SDAS ML Inference Service",
@@ -47,7 +47,7 @@ def root():
         }
     }
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     return {"status": "HEALTHY", "uptime": "OK"}
 
