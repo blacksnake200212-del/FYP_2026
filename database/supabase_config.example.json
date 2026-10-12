@@ -1,0 +1,12 @@
+{
+  "project_ref": "YOUR_PROJECT_REF",
+  "project_url": "https://your-project.supabase.co",
+  "publishable_key": "YOUR_PUBLISHABLE_KEY",
+  "direct_connection_string": "postgresql://postgres:[YOUR-PASSWORD]@db.your-project.supabase.co:5432/postgres",
+  "cli_commands": {
+    "login": "supabase login",
+    "init": "supabase init",
+    "link": "supabase link --project-ref YOUR_PROJECT_REF",
+    "db_push": "supabase db push"
+  }
+}

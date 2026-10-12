@@ -1,0 +1,316 @@
+--- PAGE 1 ---
+Smart Dam Alert System with Automated Gate Control 
+Dias Adrian (Cyber Security), AAA Aadhil (Data Science), JMRA Dilshan (Software Engineering)  
+Supervisor: Dr. Sanika Wijayasekara (Data Science and Cyber Security), Co-supervisor: Mr. Kavinda Tharindu (Data Science) 
+Faculty of Computing and IT, SLTC Research University, Ingiriya Road, Meepe, Sri Lanka
+1. Introduction 
+Floods in the Puttalam region of Sri Lanka occur because 
+of the unavailability of automation in dam monitoring. 
+Manually operated gate responses take about 30+ 
+minutes, and may lead to destruction of property, losses 
+in agriculture, and even human lives. SDAS addresses the 
+issue by integrating IoT sensors, machine learning-based 
+prediction, threshold mechanism in the controller, a cloud 
+backend using Supabase, and two mobile applications – 
+one for public and another for operators. 
+1.1 Summary of literature 
+Weerasinghe et al. [1] explored the characteristics 
+necessary for designing an EWS to ensure minimal 
+chances of dam failures in Sri Lanka. They have created 
+the design criteria of the local dams' safety system but 
+failed to develop the prototype of the aut omated system. 
+Sasikala et al. [2] created the IoT -based system for the 
+water level monitoring and management in reservoirs that 
+proved to be effective with regards to real -time sensor 
+acquisitions but lacked automatic gate control and 
+warning system featu res for the end users. Nirmal and 
+Shekapure [3] suggested an AI -based intelligent 
+management system of dams for ensuring safety and flood 
+protection using the machine learning techniques but did 
+not consider the multi-layered public alert process. 
+1.2 Research Gap 
+In the examined literature, the systems can be grouped 
+into those that  
+(a) have water level monitoring while gate operation and 
+warnings are left to manual actions,  
+(b) use automation of gate operation but only have general 
+SMS notifications without having a mobile application 
+that can reach both users at two levels, and (c) use 
+artificial intelligence/machine learning for decision -
+making while lacking a three -stage w arning protocol. 
+None of the present systems includes  
+(i) IoT-based water level monitoring in real-time,  
+(ii) machine learning -based water level forecast and 
+sensor anomalies detection,  
+(iii) automated gate operation with manual override,  
+(iv) three-stage warning protocol including pre -warning, 
+clear area warning, and danger phases, and  
+(v) two separate mobile applications: public (login -free) 
+and operator (login-based). 
+ 
+ 
+1.3 Problem definition 
+The manual manipulation of the gates leads to a delay of 
+more than 30 minutes during emergencies; the lack of 
+monitoring of the water level prevents any early warning 
+system; there is only a small group of people who can be 
+alerted using the radio and telephones; there is no separate 
+mobile-based interface for the general public and the 
+operators; there is no gradual warning system to alert the 
+communities surrounding the area before the full opening 
+of the gate; and there is no automated decision -making 
+process with the help of machine learning. 
+1.4 Research Questions 
+(1) How can one guarantee optimal water level sensing 
+with IoT sensors in a resilient fashion?  
+(2) What kind of logic should be safe to apply for total 
+automation of the gate operation yet allow manual control 
+as well? 
+(3) What is the precision rate of SMS and local alarms in 
+notifying emergency services in 2 seconds?  
+(4) Is it possible to create an app for mobile devices that 
+will allow operators of the flood to receive real -time 
+monitoring data and make decisions accordingly? 
+(5) How precise can a machine learning model be in 
+predicting rising water levels and detecting sensor 
+malfunctions to implement a multi-stage public warning 
+system? 
+2. Goal of the project 
+Design a prototype of a Smart Dam Alarm System that 
+incorporates IoT devices, embedded software, Supabase 
+cloud services, machine learning algorithms, SMS 
+alarms, and two different mobile applications. This 
+system offers real-time water level monitoring, 
+automatic gate regulation, public alarms, and operator 
+manual override of system operation. There are two 
+mobile applications – one for the community (without 
+logging in) and another for the operator (with login). The 
+LSTM model is used to predict the water level in 1 hour, 
+while the Autoencoder algorithm is applied to detect 
+anomalies in sensors’ readings. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+--- PAGE 2 ---
+ 
+3. Aims and objectives 
+• Design an end-to-end IoT-based smart dam 
+monitoring system comprising of hardware 
+(ESP32, water level and temperature sensors, 
+gate motor, buzzer, RGB LED), embedded 
+software, cloud database (Supabase), and mobile 
+applications. 
+• Design two React Native (Expo) applications: 
+Public App for real-time water level updates and 
+notifications, and Operator App that provides 
+authentication, gate controlling, and alert 
+handling capabilities. 
+• Apply machine learning (TensorFlow) 
+techniques using LSTM model for predicting 
+water level for the short term and Autoencoder 
+for detecting anomalies. 
+• Send staged notifications using SMS through the 
+SIM800L GSM module when water levels 
+increase and gates open. 
+• Test the system with high precision (±2 cm), low 
+latency (<2 s), reliable gate operation (>100 
+cycles), and more than 95% SMS delivery rate. 
+• Ensure reliability through use of temperature-
+compensated double ultrasonic sensing 
+technology, hysteresis window (3%), and edge 
+machine learning. 
+4. Expected Outcomes 
+Deliverables: 
+• Fully working IoT hardware prototype (with sensors 
+and motors) 
+• C/C++ firmware (with automated decision making < 
+2s) 
+• Supabase (PostgreSQL) database (for storing 
+sensors' readings, alarms and contacts) 
+• Released public mobile application (without login) 
+(visualisation of sensor values and alarm 
+notifications) 
+• Operator mobile application (with login) (manually 
+controlling the gate, viewing the history of alarms) 
+• Machine learning model (for water level prediction 
+and detection of anomalies in sensor readings) 
+• Staged SMS alarm notifications system (pre-alarm 
+notification when 20-30% gate is opened, clear area 
+alarm and danger alarm) 
+• Test report 
+• Hybrid LSTM+Autoencoder ML pipeline for one 
+hour ahead prediction and anomalies detection, run 
+on the edge-inference server 
+• Detailed technical documentation 
+Operator override is accessible to the operators through 
+the operator mobile application always. Criteria for 
+evaluation include sensor accuracy, sensor response 
+time, gate cycle reliability, rate of delivery of the staged 
+SMS alerts, machine learning prediction accuracy and 
+false positive rate, and mobile application data-refresh 
+time. 
+Accuracy of ±2.0cm is expected from the sensors, sensor 
+to gate response time of <2.0s, gate cycles 100+, SMS 
+delivery rate of 95%+, and <1.0s mobile application 
+data-refresh time. For the LSTM model, MAPE of <5% 
+is targeted for 1-hour ahead prediction, Autoencoder will 
+detect anomalies of the sensors within 5 seconds, and 
+SIM800L SMS broadcast will take less than 10 seconds 
+for reaching the local emergency contact list. 
+5. Proposed methodology 
+There are five parts of the system namely: Hardware 
+(HC-SR04 ultrasonic sensor, temperature sensor, 12V 
+DC motor with relay, SIM800L GSM, buzzer, RGB 
+LED); Microcontroller (ESP32 with C/C++ software that 
+will read the sensors, apply thresholds, control motors 
+and run offline); Cloud (Supabase backend, PostgreSQL 
+database); Machine Learning (TensorFlow model using 
+past water level and rainfall to predict water levels in the 
+next hour and detect anomalies) and Mobile 
+Applications (Public app without any need for login, 
+Operator app with a secure login). The ML results feed 
+into the decision making regarding the gate operation as 
+a recommendation rather than a trigger itself. An LSTM 
+component will forecast water level 1 hour ahead based 
+on the historical data of the sensor while the 
+Autoencoder will reconstruct the data coming from the 
+sensors and calculate MSE between the reconstruction 
+and the original data, any reading above a certain 
+threshold will be considered an anomaly. Hysteresis is 
+used for all status changes at 3%. 
+6. Resource requirements 
+ESP32, HC -SR04, DHT11/22, 12V DC motor, relay 
+module, SIM800L GSM, buzzer, RGB LED, 12V lithium 
+battery (if necessary) are among the hardware to be used. 
+Software: Arduino IDE (C/C++), Supabase (PostgreSQL, 
+Auth, Edge Functions), React Native with Expo (tw o 
+mobile applications), TensorFlow (ML 
+forecasting/anomaly detection model), Git, and GitHub. 
+Cloud Services: Supabase Cloud (free tier); SMS 
+services: local SIM800L gateway (paid). Dependencies to 
+be considered: Information on water resources of the 
+Status Trigger Gate Colour Alert Sent 
+NORMAL <70% capacity Closed Green No alert; continuous 
+monitoring 
+PRE-
+WARNING 
+70-85%; gate 
+ 
+ 
+ 
+Yellow Pre-warning SMS to 
+all registered 
+contacts 
+CLEAR-
+AREA 
+WARNING 
+Rising further; 
+ 
+Progressively 
+opening 
+Orange "Clear the area" 
+SMS to all registered 
+contacts 
+DANGER >85%; gate 
+beyond warning 
+threshold 
+Auto full 
+open 
+Red Local alarm + 
+danger SMS to all 
+operators & public 
+list 
+CLOSED
+CLOSE 20-30%
+20-30%gate
+--- PAGE 3 ---
+Puttalam District, flood history data for 2017 -2023, dam 
+design information, and sensor calibration standards 
+ SDAS data flow: ESP32 hardware node posts sensor readings to the Supabase database, 
+which triggers Edge Functions for ML inference (FastAPI server) and pushes realtime 
+updates to the operator and public mobile applications 
+7. Ethics and AI Compliance 
+No personal information from human subjects is used in 
+the process of training the models with machine 
+learning. The models are trained on the historical 
+hydrological and sensor data only. Contact information 
+for operators and the general public is kept safely in 
+Supabase after being encrypted for SMS emergency 
+alerts. Operators’ authentication is performed through 
+Supabase Auth and accessing the database is done by 
+selected administrators only. The machine learning 
+model predictions and anomalies detection provide the 
+input into a rules-based decision system, while gate 
+automation happens according to the pre-defined safety 
+thresholds.. 
+ 
+8. Risk Assessment 
+Technical: sensor problem (double sensor redundancy); 
+network problem (ESP32 offline operation and backup 
+through GSM); motor problem (manually operable); ML 
+risk of false predictions or false positives for anomalies 
+(offset with having the ML outputs only advisory at a 
+rules-based thresholding layer). Operational: delay in 
+schedule (12-month buffer plan); resource unavailable 
+(early acquisition); mobile app store approval (early 
+submission and Expo). Project: scope creep (scope 
+defined, in alignment with supervisor); integration 
+difficulties (modular approach, continuous testing).  
+09. Timeplan 
+12 Months Plan: Gantt Chart 
+ 
+10. Conclusion 
+SDAS is an end -to-end flood management system that 
+includes hardware, firmware, cloud-based backend (using 
+Supabase), ML-based forecast and anomalies prediction 
+capabilities, and two mobile applications (for public and 
+operators). All of this is interconne cted and designed for 
+use within the district of Puttalam. Restrictions: prototype 
+level deployment only. Further research will include 
+integration with weather predictions, connection to the 
+disaster management systems of Sri Lanka, and prediction 
+capabilities using ML. 
+11. References 
+The IEEE referencing format (provided below) is used 
+for referencing. 
+[1] L. N. K. Weerasinghe, M. Thayaparan, and T. 
+Fernando, "Functional Characteristics of an EWS to 
+Minimise the Risk of Dam Breaks in Sri Lanka," in 
+Proc. 10th World Construction Symposium, Jun. 
+2022, pp. 507-517. Available: 
+https://dl.lib.uom.lk/items/070611e2-a6f3-435d-8b6e-
+87179f1741ca 
+[2] G. Sasikala, S. Srinivasan, J. Navarajan, and M. M. 
+Theresa, "IoT based Water Level Monitoring and 
+Management in Reservoir," in Proc. 2022 3rd Int. 
+Conf. on Electronics and Sustainable Communication 
+Systems (ICESC), Coimbatore, India, 2022, pp. 1763-
+1767.  Available: 
+https://doi.org/10.1109/ICS54411.2022.9885714 
+[3] B. Nirmal and S. Shekapure, "AI-Driven Smart Dam 
+Management System for Enhanced Safety and Flood 
+Prevention," Journal of Mines, Metals and Fuels, vol. 
+73, no. 7, 2025, pp. 2137-2145. Available: 
+https://doi.org/10.18311/jmmf/2025/49125 
+[4] ESP32 Technical Reference Manual, Espressif 
+Systems. [Online]. Available: 
+https://www.espressif.com. [Accessed: 2026]. 
+[5] Arduino, "Arduino IDE Documentation." [Online]. 
+Available: https://docs.arduino.cc. [Accessed: 2026]. 
+[6] Supabase, "Supabase Documentation." [Online]. 
+Available: https://supabase.com/docs. [Accessed: 
+2026]. 
+[7] Meta Platforms, "React Native Documentation." 
+[Online]. Available: https://reactnative.dev. 
+[Accessed: 2026]. 
+[8] Expo, "Expo Documentation." [Online]. Available: 
+https://docs.expo.dev. [Accessed: 2026]. 
+[9] Google, "TensorFlow Documentation." [Online]. 
+Available: https://www.tensorflow.org. [Accessed: 
+2026]. 
+ 

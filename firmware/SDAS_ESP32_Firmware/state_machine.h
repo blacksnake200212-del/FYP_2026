@@ -1,0 +1,59 @@
+#ifndef SDAS_STATE_MACHINE_H
+#define SDAS_STATE_MACHINE_H
+
+#include <Arduino.h>
+#include <Preferences.h>
+#include "config.h"
+#include "actuators.h"
+#include "sensors.h"
+
+enum ControlMode {
+    MODE_AUTO = 0,
+    MODE_MANUAL = 1,
+    MODE_EMERGENCY = 2
+};
+
+struct SystemStatus {
+    AlertState  alertState;
+    ControlMode controlMode;
+    int         targetGatePercent;
+    int         actualGatePercent;
+    bool        smsDispatchRequired;
+    const char* lastAlertMessage;
+    unsigned long manualModeExpiryMs;
+};
+
+class SDASStateMachine {
+public:
+    SDASStateMachine();
+    void begin();
+    
+    // Core state evaluation called on each sensor update
+    void evaluate(const SensorData& sensorData, ActuatorManager& actuators);
+    
+    // Manual & Emergency overrides
+    void requestManualGatePercent(int targetPercent, uint32_t durationSec);
+    void triggerEmergencyStop();
+    void releaseEmergencyStop();
+    void revertToAuto();
+    
+    // Hardware button polling (with 20ms debounce)
+    void checkPhysicalButtons();
+    
+    const SystemStatus& getStatus() const { return currentStatus; }
+    bool checkAndClearSmsTrigger();
+
+private:
+    SystemStatus currentStatus;
+    Preferences  preferences;
+    
+    // Button debouncing state
+    unsigned long lastBtnOpenMs;
+    unsigned long lastBtnCloseMs;
+    unsigned long lastBtnStopMs;
+    
+    void saveGateStateToNVS(int percent);
+    int  loadGateStateFromNVS();
+};
+
+#endif // SDAS_STATE_MACHINE_H
