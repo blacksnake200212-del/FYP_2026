@@ -1,0 +1,100 @@
+{
+  "version": 1,
+  "author": "Smart Dam Alert System (SDAS) Engineering Team",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "us1",
+      "top": -210,
+      "left": -260,
+      "attrs": { "label": "Sensor 1 (JSN-SR04T)" }
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "us2",
+      "top": -210,
+      "left": 160,
+      "attrs": { "label": "Sensor 2 (JSN-SR04T)" }
+    },
+    {
+      "type": "wokwi-dht22",
+      "id": "dht",
+      "top": 90,
+      "left": -240,
+      "attrs": { "label": "DHT22 Ambient" }
+    },
+    {
+      "type": "wokwi-servo",
+      "id": "servo",
+      "top": 30,
+      "left": 230,
+      "attrs": { "label": "MG996R Sluice Gate" }
+    },
+    {
+      "type": "wokwi-rgb-led",
+      "id": "rgb",
+      "top": 210,
+      "left": 180,
+      "attrs": { "common": "anode", "label": "4-Tier Alert LED" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "buzzer",
+      "top": 260,
+      "left": -20,
+      "attrs": { "label": "5V Alarm Siren" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_open",
+      "top": 200,
+      "left": -240,
+      "attrs": { "color": "green", "label": "OPEN" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_close",
+      "top": 270,
+      "left": -240,
+      "attrs": { "color": "grey", "label": "CLOSE" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_stop",
+      "top": 340,
+      "left": -240,
+      "attrs": { "color": "red", "label": "E-STOP" }
+    }
+  ],
+  "connections": [
+    [ "esp:5V", "us1:VCC", "red", [ "v-30", "h-150" ] ],
+    [ "esp:5V", "us2:VCC", "red", [ "v-30", "h130" ] ],
+    [ "esp:5V", "servo:V+", "red", [ "v20", "h120" ] ],
+    [ "esp:3V3", "dht:VCC", "red", [ "h-80" ] ],
+    [ "esp:3V3", "rgb:COM", "red", [ "h60", "v150" ] ],
+    [ "esp:GND.1", "us1:GND", "black", [ "v-20", "h-170" ] ],
+    [ "esp:GND.1", "us2:GND", "black", [ "v-20", "h120" ] ],
+    [ "esp:GND.1", "dht:GND", "black", [ "h-60" ] ],
+    [ "esp:GND.1", "btn_open:2.l", "black", [ "h-40", "v130" ] ],
+    [ "esp:GND.1", "btn_close:2.l", "black", [ "h-40", "v200" ] ],
+    [ "esp:GND.1", "btn_stop:2.l", "black", [ "h-40", "v270" ] ],
+    [ "esp:GND.2", "servo:GND", "black", [ "v10", "h100" ] ],
+    [ "esp:GND.2", "buzzer:2", "black", [ "v180", "h-80" ] ],
+    [ "esp:5", "us1:TRIG", "blue", [ "v-70", "h-200" ] ],
+    [ "esp:19", "us1:ECHO", "cyan", [ "v-50", "h-180" ] ],
+    [ "esp:18", "us2:TRIG", "blue", [ "v-60", "h80" ] ],
+    [ "esp:21", "us2:ECHO", "cyan", [ "v-40", "h60" ] ],
+    [ "esp:4", "dht:SDA", "gold", [ "h-90" ] ],
+    [ "esp:25", "servo:PWM", "purple", [ "h80" ] ],
+    [ "esp:27", "buzzer:1", "orange", [ "v140", "h-40" ] ],
+    [ "esp:32", "rgb:R", "red", [ "h50", "v140" ] ],
+    [ "esp:33", "rgb:G", "green", [ "h40", "v120" ] ],
+    [ "esp:13", "rgb:B", "blue", [ "h30", "v100" ] ],
+    [ "esp:14", "btn_open:1.l", "green", [ "h-60", "v120" ] ],
+    [ "esp:26", "btn_close:1.l", "grey", [ "h-60", "v190" ] ],
+    [ "esp:22", "btn_stop:1.l", "red", [ "h-60", "v260" ] ]
+  ],
+  "dependencies": {}
+}
