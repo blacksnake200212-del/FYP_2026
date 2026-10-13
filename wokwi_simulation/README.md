@@ -14,11 +14,11 @@ You can run and test the complete audited circuit, sensors, actuators, disaster 
 | **Ultrasonic Sensor 1** | `wokwi-hc-sr04` | Trig: **GPIO5**, Echo: **GPIO19** | Simulates JSN-SR04T #1 (Water level primary transducer) |
 | **Ultrasonic Sensor 2** | `wokwi-hc-sr04` | Trig: **GPIO18**, Echo: **GPIO21** | Simulates JSN-SR04T #2 (Redundant plausibility verification) |
 | **Environmental Sensor** | `wokwi-dht22` | Data: **GPIO4** | Dynamic temperature/humidity for acoustic velocity formula |
-| **Sluice Gate Servo** | `wokwi-servo` | PWM: **GPIO25** | Simulates MG996R gate arm (0° = 0%, 54° = 30%, 90° = 50%) |
+| **Sluice Gate Servo** | `wokwi-servo` | PWM: **GPIO25** | Simulates MG996R gate arm (0% = 0°, 20% = 36°, 50% = 90° max limit) |
 | **4-Tier Alert RGB LED** | `wokwi-rgb-led` (Common Anode) | R: **GPIO32**, G: **GPIO33**, B: **GPIO13** | Visual alert indicator (Green, Yellow, Orange, Red, Magenta) |
 | **Audio Alarm / Siren** | `wokwi-buzzer` | Signal: **GPIO27** | Audible alarm with 4 distinct cadences driven via BC547 driver |
-| **Manual OPEN Button** | `wokwi-pushbutton` (Green) | Signal: **GPIO14** $\rightarrow$ GND | Fully opens gate (100% / 180°) and activates MANUAL mode [Key: O] |
-| **Manual CLOSE Button**| `wokwi-pushbutton` (Grey) | Signal: **GPIO26** $\rightarrow$ GND | Fully closes gate (0% / 0°) and activates MANUAL mode [Key: C] |
+| **Manual OPEN Button** | `wokwi-pushbutton` (Green) | Signal: **GPIO14** $\rightarrow$ GND | Steps gate open: 0% $\rightarrow$ 20% $\rightarrow$ 50% (MAX) [Key: O] |
+| **Manual CLOSE Button**| `wokwi-pushbutton` (Grey) | Signal: **GPIO26** $\rightarrow$ GND | Steps gate closed: 50% $\rightarrow$ 20% $\rightarrow$ 0% (CLOSED) [Key: C] |
 | **Emergency STOP Button**| `wokwi-pushbutton` (Red) | Signal: **GPIO22** $\rightarrow$ GND | Freezes gate position & triggers siren alarm [Key: S] |
 | **Virtual Wi-Fi** | `Wokwi-GUEST` | Internal | Connects to live Render ML Cloud API |
 
@@ -82,7 +82,7 @@ While the simulation is running, you can click on any component to adjust its va
 - **Expected Behavior:**
   - Water Level $\approx 82.5\%$
   - Alert State: **CLEAR AREA**
-  - Gate Servo: **Smoothly opens to 30% (54°)**
+  - Gate Servo: **Smoothly opens to 20% (36°)**
   - RGB LED: **Orange / Amber**
   - Buzzer: **Pulsed warning (400ms ON / 400ms OFF)**
 
@@ -111,11 +111,16 @@ While the simulation is running, you can click on any component to adjust its va
 
 ### Scenario 7: Manual Override & Safety Watchdog
 - **How to test:**
-  1. Click the **green OPEN button** (GPIO14 or press keyboard key **`O`**) $\rightarrow$ Sluice gate rotates to **FULL OPEN (100% / 180°)**, switches from `AUTO` to `MANUAL` mode.
-  2. Click the **grey CLOSE button** (GPIO26 or press keyboard key **`C`**) $\rightarrow$ Sluice gate rotates to **FULL CLOSE (0% / 0°)**.
+  1. Click the **green OPEN button** (GPIO14 or press keyboard key **`O`**):
+     - **1st Click:** Sluice gate opens to **20% (36°)** (Advisory release).
+     - **2nd Click:** Sluice gate opens to **50% (90° - Maximum allowed limit)** (Emergency flood release).
+     - **3rd Click:** Stays safely capped at **50%** (no 100% opening).
+  2. Click the **grey CLOSE button** (GPIO26 or press keyboard key **`C`**):
+     - **1st Click (from 50%):** Sluice gate steps down to **20% (36°)**.
+     - **2nd Click (from 20%):** Sluice gate fully closes to **0% (0°)**.
   3. Click the **red E-STOP button** (GPIO22 or press keyboard key **`S`**) $\rightarrow$ Sluice gate locks instantly in place and continuous emergency siren sounds. Press **`S`** again to safely release E-STOP.
   4. Leave the dam untouched for **60 seconds** $\rightarrow$ Watchdog safely expires and restores autonomous regulation (`MODE_AUTO`), setting the gate to match current water levels.
-  5. **Serial Monitor Console:** You can also type `OPEN`, `CLOSE`, `30`, `50`, `100`, `AUTO`, or `STOP` into the Serial Monitor for instant testing!
+  5. **Serial Monitor Console:** You can also type `20`, `50`, `0`, `OPEN`, `CLOSE`, `AUTO`, or `STOP` into the Serial Monitor for instant testing!
 
 ### Scenario 8: Live Render AI Backend Sync
 - **How to test:** Watch the Serial Monitor every 10 seconds.

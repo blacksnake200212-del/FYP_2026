@@ -59,22 +59,24 @@ void SDASStateMachine::checkPhysicalButtons() {
     // If currently in hardware E-STOP, ignore other manual buttons
     if (currentStatus.controlMode == MODE_EMERGENCY) return;
     
-    // 2. Manual CLOSE Button (GPIO26) - Immediate Full Closure (0% / 0 deg)
+    // 2. Manual CLOSE Button (GPIO26) - Stepped Gate Closure (50% -> 20% -> 0%)
     if (lastBtnCloseState == HIGH && readClose == LOW) {
         if (now - lastBtnCloseMs >= 100) {
             lastBtnCloseMs = now;
-            requestManualGatePercent(GATE_PCT_CLOSED, MANUAL_WATCHDOG_TIMEOUT_SEC);
-            Serial.printf("[MANUAL] CLOSE Pressed -> Gate set to 0%% (Watchdog: %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
+            int targetPct = (currentStatus.targetGatePercent > 20) ? 20 : 0;
+            requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[MANUAL] CLOSE Pressed -> Sluice Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnCloseState = readClose;
     
-    // 3. Manual OPEN Button (GPIO14) - Immediate Full Opening (100% / 180 deg)
+    // 3. Manual OPEN Button (GPIO14) - Stepped Gate Opening (0% -> 20% -> 50% Max)
     if (lastBtnOpenState == HIGH && readOpen == LOW) {
         if (now - lastBtnOpenMs >= 100) {
             lastBtnOpenMs = now;
-            requestManualGatePercent(GATE_PCT_FULL_EMERGENCY, MANUAL_WATCHDOG_TIMEOUT_SEC);
-            Serial.printf("[MANUAL] OPEN Pressed -> Sluice Gate FULLY OPENED (100%% / 180 deg) (Watchdog: %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
+            int targetPct = (currentStatus.targetGatePercent < 20) ? 20 : 50;
+            requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[MANUAL] OPEN Pressed -> Sluice Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnOpenState = readOpen;

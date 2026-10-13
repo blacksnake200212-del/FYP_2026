@@ -85,16 +85,16 @@
 #define EXIT_CLEARAREA_PCT       (THRESH_CLEARAREA_PCT - HYSTERESIS_PCT)  // 77.0%
 #define EXIT_DANGER_PCT          (THRESH_DANGER_PCT - HYSTERESIS_PCT)     // 82.0%
 
-// Sluice Gate Positions (% Open & Corresponding Servo Degrees)
+// Sluice Gate Positions (% Open & Corresponding Servo Degrees - 20% & 50% only)
 #define GATE_PCT_CLOSED          0
-#define GATE_PCT_CLEAR_AREA      30    // 30% open
-#define GATE_PCT_DANGER          50    // 50% open
-#define GATE_PCT_FULL_EMERGENCY  100   // 100% full flush
+#define GATE_PCT_CLEAR_AREA      20    // 20% open (Advisory release)
+#define GATE_PCT_DANGER          50    // 50% open (Emergency flood release)
+#define GATE_PCT_MAX_LIMIT       50    // 50% maximum allowed gate opening
 
 #define GATE_DEG_CLOSED          0
-#define GATE_DEG_CLEAR_AREA      54    // 30% of 180 degrees
+#define GATE_DEG_CLEAR_AREA      36    // 20% of 180 degrees
 #define GATE_DEG_DANGER          90    // 50% of 180 degrees
-#define GATE_DEG_FULL_EMERGENCY  180   // 100% of 180 degrees
+#define GATE_DEG_MAX_LIMIT       90    // 50% of 180 degrees
 
 // Manual Mode Safety Watchdog Timeout (Seconds)
 // Automatically reverts to AUTO if operator does not send commands
