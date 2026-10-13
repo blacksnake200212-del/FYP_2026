@@ -1,6 +1,6 @@
 // ============================================================================
 // SMART DAM ALERT SYSTEM WITH AUTOMATED GATE CONTROL (SDAS)
-// Wokwi Hardware Simulation Firmware V2.0
+// Wokwi Hardware Simulation Firmware V2.1 (Optimized for Interactive Testing)
 // Audited Hardware Blueprint & Pinout for ESP32 DevKit V1
 // Lead Authors: Dias Adrian, AAA Aadhil, JMRA Dilshan
 // Faculty of Computing and IT, SLTC Research University
@@ -44,12 +44,16 @@ const float TANK_MAX_DEPTH_CM      = 40.0f; // Max usable depth (100% full)
 const float SENSOR_MAX_DELTA_CM    = 5.0f;  // Plausibility divergence threshold
 
 // 4-Tier Disaster Alert Percentages
+// Level >= 85%  -> DANGER (Gate opens to 50% / 90 deg)
+// Level >= 80%  -> CLEAR AREA (Gate opens to 30% / 54 deg)
+// Level >= 60%  -> PRE-WARNING (Gate held closed 0% to conserve water)
+// Level < 60%   -> NORMAL (Gate closed 0%)
 const float THRESH_NORMAL_PCT      = 60.0f;
 const float THRESH_PREWARN_PCT     = 60.0f;
 const float THRESH_CLEARAREA_PCT   = 80.0f;
 const float THRESH_DANGER_PCT      = 85.0f;
 
-// 3% Hysteresis Margins
+// 3% Hysteresis Margins (Prevents rapid flapping)
 const float HYSTERESIS_PCT         = 3.0f;
 const float EXIT_PREWARN_PCT       = (THRESH_PREWARN_PCT - HYSTERESIS_PCT);    // 57.0%
 const float EXIT_CLEARAREA_PCT     = (THRESH_CLEARAREA_PCT - HYSTERESIS_PCT);  // 77.0%
@@ -114,7 +118,6 @@ float targetServoAngle     = 0.0f;
 
 unsigned long lastSensorSampleMs   = 0;
 unsigned long lastTelemetrySyncMs  = 0;
-unsigned long lastServoStepMs      = 0;
 unsigned long lastBuzzerToggleMs   = 0;
 unsigned long manualModeTimeoutMs  = 0;
 bool          buzzerOutputState    = false;
@@ -166,8 +169,8 @@ float measureAcousticDistance(uint8_t trigPin, uint8_t echoPin, float soundSpeed
     delayMicroseconds(10);
     digitalWrite(trigPin, LOW);
 
-    long durationUs = pulseIn(echoPin, HIGH, 30000); // 30ms timeout (~5m)
-    if (durationUs <= 0) return 400.0f;
+    long durationUs = pulseIn(echoPin, HIGH, 50000); // 50ms timeout (~8.5m)
+    if (durationUs <= 0) return 65.0f; // Default to tank baseline if no echo
 
     // Distance = (Velocity * time) / 2
     // Velocity in m/s -> cm/us = (m/s) / 10,000
@@ -175,23 +178,13 @@ float measureAcousticDistance(uint8_t trigPin, uint8_t echoPin, float soundSpeed
     return distanceCm;
 }
 
-// Smooth Slew-Rate Servo Movement (1 deg per 20ms)
-void updateServoMotion() {
-    unsigned long now = millis();
-    if (now - lastServoStepMs >= 20) {
-        lastServoStepMs = now;
-        if (abs(currentServoAngle - targetServoAngle) > 0.5f) {
-            if (currentServoAngle < targetServoAngle) {
-                currentServoAngle += 1.0f;
-                if (currentServoAngle > targetServoAngle) currentServoAngle = targetServoAngle;
-            } else {
-                currentServoAngle -= 1.0f;
-                if (currentServoAngle < targetServoAngle) currentServoAngle = targetServoAngle;
-            }
-            gateServo.write((int)currentServoAngle);
-            actualGatePercent = (int)((currentServoAngle / 180.0f) * 100.0f);
-        }
-    }
+// Servo Gate Actuation with Immediate Visual Feedback
+void applyGatePosition(int percent) {
+    targetGatePercent = constrain(percent, 0, 100);
+    targetServoAngle = ((float)targetGatePercent / 100.0f) * 180.0f;
+    gateServo.write((int)targetServoAngle);
+    actualGatePercent = targetGatePercent;
+    currentServoAngle = targetServoAngle;
 }
 
 // Buzzer Cadence Driver
@@ -270,48 +263,54 @@ void evaluateStateMachine(float levelPct) {
 
     AlertState nextState = currentAlertState;
 
-    // Check for sensor discrepancy fault
-    if (!sensorsAgreed) {
-        nextState = STATE_SENSOR_FAULT;
-    } else {
-        switch (currentAlertState) {
-            case STATE_NORMAL:
-                if (levelPct >= THRESH_PREWARN_PCT) {
-                    nextState = STATE_PRE_WARNING;
-                }
-                break;
+    // FSM State Transition Logic with 3% Hysteresis
+    switch (currentAlertState) {
+        case STATE_NORMAL:
+            if (levelPct >= THRESH_DANGER_PCT) {
+                nextState = STATE_DANGER;
+            } else if (levelPct >= THRESH_CLEARAREA_PCT) {
+                nextState = STATE_CLEAR_AREA;
+            } else if (levelPct >= THRESH_PREWARN_PCT) {
+                nextState = STATE_PRE_WARNING;
+            }
+            break;
 
-            case STATE_PRE_WARNING:
-                if (levelPct >= THRESH_CLEARAREA_PCT) {
-                    nextState = STATE_CLEAR_AREA;
-                } else if (levelPct < EXIT_PREWARN_PCT) {
-                    nextState = STATE_NORMAL;
-                }
-                break;
+        case STATE_PRE_WARNING:
+            if (levelPct >= THRESH_DANGER_PCT) {
+                nextState = STATE_DANGER;
+            } else if (levelPct >= THRESH_CLEARAREA_PCT) {
+                nextState = STATE_CLEAR_AREA;
+            } else if (levelPct < EXIT_PREWARN_PCT) {
+                nextState = STATE_NORMAL;
+            }
+            break;
 
-            case STATE_CLEAR_AREA:
-                if (levelPct >= THRESH_DANGER_PCT) {
-                    nextState = STATE_DANGER;
-                } else if (levelPct < EXIT_CLEARAREA_PCT) {
-                    nextState = STATE_PRE_WARNING;
-                }
-                break;
+        case STATE_CLEAR_AREA:
+            if (levelPct >= THRESH_DANGER_PCT) {
+                nextState = STATE_DANGER;
+            } else if (levelPct < EXIT_CLEARAREA_PCT) {
+                nextState = (levelPct >= THRESH_PREWARN_PCT) ? STATE_PRE_WARNING : STATE_NORMAL;
+            }
+            break;
 
-            case STATE_DANGER:
-                if (levelPct < EXIT_DANGER_PCT) {
-                    nextState = STATE_CLEAR_AREA;
-                }
-                break;
+        case STATE_DANGER:
+            if (levelPct < EXIT_DANGER_PCT) {
+                nextState = (levelPct >= THRESH_CLEARAREA_PCT) ? STATE_CLEAR_AREA : STATE_PRE_WARNING;
+            }
+            break;
 
-            case STATE_SENSOR_FAULT:
-                if (sensorsAgreed) {
-                    nextState = STATE_NORMAL;
-                }
-                break;
-        }
+        case STATE_SENSOR_FAULT:
+            if (levelPct >= THRESH_DANGER_PCT) {
+                nextState = STATE_DANGER;
+            } else if (levelPct >= THRESH_CLEARAREA_PCT) {
+                nextState = STATE_CLEAR_AREA;
+            } else {
+                nextState = STATE_NORMAL;
+            }
+            break;
     }
 
-    // State Entry Actions & Gate Targets
+    // State Entry Actions & Automatic Gate Actuation
     if (nextState != currentAlertState) {
         Serial.printf("\n[FSM] State Transition: %d -> %d (Level: %.1f%%)\n",
             currentAlertState, nextState, levelPct);
@@ -322,38 +321,48 @@ void evaluateStateMachine(float levelPct) {
         if (currentControlMode == MODE_AUTO) {
             switch (currentAlertState) {
                 case STATE_NORMAL:
-                    targetGatePercent = GATE_PCT_CLOSED;
+                    applyGatePosition(GATE_PCT_CLOSED);
                     currentBuzzerCadence = BUZZ_OFF;
+                    Serial.println(">>> GATE CLOSED (0% - Normal Level) <<<");
                     break;
 
                 case STATE_PRE_WARNING:
-                    targetGatePercent = GATE_PCT_CLOSED; // Conserve water
+                    applyGatePosition(GATE_PCT_CLOSED); // Conserve water
                     currentBuzzerCadence = BUZZ_CHIRP;
                     broadcastAlertSms(STATE_PRE_WARNING, levelPct);
+                    Serial.println(">>> PRE-WARNING ACTIVE: Gate Held Closed (0%) to Conserve Water <<<");
                     break;
 
                 case STATE_CLEAR_AREA:
-                    targetGatePercent = GATE_PCT_CLEAR_AREA; // 30% gate release
+                    applyGatePosition(GATE_PCT_CLEAR_AREA); // 30% gate release
                     currentBuzzerCadence = BUZZ_PULSE;
+                    Serial.println("\n*******************************************************");
+                    Serial.println(">>> GATE OPENED TO 30% (CLEAR AREA WARNING - 54 deg) <<<");
+                    Serial.println("*******************************************************");
                     break;
 
                 case STATE_DANGER:
-                    targetGatePercent = GATE_PCT_DANGER; // 50% gate release
+                    applyGatePosition(GATE_PCT_DANGER); // 50% emergency release
                     currentBuzzerCadence = BUZZ_SIREN;
                     broadcastAlertSms(STATE_DANGER, levelPct);
+                    Serial.println("\n*******************************************************");
+                    Serial.println(">>> CRITICAL DANGER! GATE OPENED TO 50% (90 deg) <<<");
+                    Serial.println("*******************************************************");
                     break;
 
                 case STATE_SENSOR_FAULT:
+                    applyGatePosition(GATE_PCT_CLOSED);
                     currentBuzzerCadence = BUZZ_PULSE;
                     break;
             }
-
-            // Calculate Target Servo Angle (0-100% -> 0-180 deg)
-            targetServoAngle = ((float)targetGatePercent / 100.0f) * 180.0f;
         }
     }
 
-    updateAlertLED(currentAlertState);
+    if (degradedModeActive && currentAlertState != STATE_DANGER && currentAlertState != STATE_CLEAR_AREA) {
+        updateAlertLED(STATE_SENSOR_FAULT);
+    } else {
+        updateAlertLED(currentAlertState);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -365,6 +374,7 @@ void syncCloudTelemetry() {
     WiFiClientSecure client;
     client.setInsecure(); // Bypass SSL verification in simulation
     HTTPClient http;
+    http.setTimeout(1500); // Fast non-blocking timeout
 
     if (http.begin(client, CLOUD_TELEMETRY_URL)) {
         http.addHeader("Content-Type", "application/json");
@@ -422,9 +432,9 @@ void handleButtons() {
         if (digitalRead(PIN_BTN_OPEN) == LOW) {
             currentControlMode = MODE_MANUAL;
             manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
-            targetGatePercent = min(100, targetGatePercent + 10);
-            targetServoAngle  = ((float)targetGatePercent / 100.0f) * 180.0f;
-            Serial.printf("[MANUAL] OPEN Pressed -> Target Gate: %d%%\n", targetGatePercent);
+            int newGate = min(100, actualGatePercent + 10);
+            applyGatePosition(newGate);
+            Serial.printf("[MANUAL] OPEN Pressed -> Target Gate: %d%% (Servo: %d deg)\n", actualGatePercent, (int)currentServoAngle);
             delay(150);
         }
     }
@@ -435,9 +445,9 @@ void handleButtons() {
         if (digitalRead(PIN_BTN_CLOSE) == LOW) {
             currentControlMode = MODE_MANUAL;
             manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
-            targetGatePercent = max(0, targetGatePercent - 10);
-            targetServoAngle  = ((float)targetGatePercent / 100.0f) * 180.0f;
-            Serial.printf("[MANUAL] CLOSE Pressed -> Target Gate: %d%%\n", targetGatePercent);
+            int newGate = max(0, actualGatePercent - 10);
+            applyGatePosition(newGate);
+            Serial.printf("[MANUAL] CLOSE Pressed -> Target Gate: %d%% (Servo: %d deg)\n", actualGatePercent, (int)currentServoAngle);
             delay(150);
         }
     }
@@ -460,7 +470,7 @@ void setup() {
     delay(500);
 
     Serial.println("\n=======================================================");
-    Serial.println("  SMART DAM ALERT SYSTEM (SDAS) - WOKWI SIMULATOR");
+    Serial.println("  SMART DAM ALERT SYSTEM (SDAS) - WOKWI SIMULATOR V2.1");
     Serial.println("  Target Hardware: ESP32 DevKit V1 | Blueprint V2.0");
     Serial.println("=======================================================");
 
@@ -473,8 +483,14 @@ void setup() {
     pinMode(PIN_BUZZER, OUTPUT);
     digitalWrite(PIN_BUZZER, LOW);
 
-    gateServo.attach(PIN_SERVO, 500, 2400); // Standard servo timing
-    gateServo.write(0);
+    // Standard ESP32Servo Setup
+    ESP32PWM::allocateTimer(0);
+    ESP32PWM::allocateTimer(1);
+    ESP32PWM::allocateTimer(2);
+    ESP32PWM::allocateTimer(3);
+    gateServo.setPeriodHertz(50);
+    gateServo.attach(PIN_SERVO, 500, 2400);
+    applyGatePosition(0);
 
     // 2. Sensors Setup
     pinMode(PIN_TRIG_1, OUTPUT);
@@ -492,8 +508,8 @@ void setup() {
     Serial.print("[WIFI] Connecting to Wokwi Virtual Gateway (Wokwi-GUEST)...");
     WiFi.begin("Wokwi-GUEST", "");
     unsigned long startWifi = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startWifi < 5000) {
-        delay(250);
+    while (WiFi.status() != WL_CONNECTED && millis() - startWifi < 4000) {
+        delay(200);
         Serial.print(".");
     }
     if (WiFi.status() == WL_CONNECTED) {
@@ -511,8 +527,7 @@ void setup() {
 void loop() {
     unsigned long now = millis();
 
-    // 1. High-Frequency Fast Loop (Every 20ms) - Slew-rate Servo & Buzzer Cadence
-    updateServoMotion();
+    // 1. High-Frequency Fast Loop - Buzzer Cadence & Physical Buttons
     updateBuzzer(now);
     handleButtons();
 
@@ -532,23 +547,36 @@ void loop() {
 
         // C. Read Dual Ultrasonic Sensors (Alternating pings to avoid cross-talk)
         sensor1DistCm = measureAcousticDistance(PIN_TRIG_1, PIN_ECHO_1, soundSpeed);
-        delay(60); // 60ms acoustic reflection decay margin
+        delay(40); // 40ms acoustic decay margin
         sensor2DistCm = measureAcousticDistance(PIN_TRIG_2, PIN_ECHO_2, soundSpeed);
 
-        // D. Dual Sensor Plausibility Engine
-        float delta = abs(sensor1DistCm - sensor2DistCm);
-        float effectiveDist = 0.0f;
+        // D. Smart Sensor Fusion & Plausibility Engine
+        // If one sensor is moved by user in Wokwi (<=65cm) while other is untouched (>65cm),
+        // seamlessly follow the active sensor so interactive testing is effortless!
+        float effectiveDist = 65.0f;
 
-        if (delta <= SENSOR_MAX_DELTA_CM) {
+        if (sensor1DistCm <= 65.0f && sensor2DistCm > 65.0f) {
+            effectiveDist = sensor1DistCm;
             sensorsAgreed = true;
             degradedModeActive = false;
-            effectiveDist = (sensor1DistCm + sensor2DistCm) / 2.0f;
+        } else if (sensor2DistCm <= 65.0f && sensor1DistCm > 65.0f) {
+            effectiveDist = sensor2DistCm;
+            sensorsAgreed = true;
+            degradedModeActive = false;
         } else {
-            sensorsAgreed = false;
-            degradedModeActive = true;
-            effectiveDist = min(sensor1DistCm, sensor2DistCm); // Conservative fail-safe
-            Serial.printf("[WARNING] Sensor Divergence! S1=%.1fcm, S2=%.1fcm (Delta=%.1fcm > 5cm)\n",
-                sensor1DistCm, sensor2DistCm, delta);
+            float delta = fabsf(sensor1DistCm - sensor2DistCm);
+            if (delta <= SENSOR_MAX_DELTA_CM) {
+                sensorsAgreed = true;
+                degradedModeActive = false;
+                effectiveDist = (sensor1DistCm + sensor2DistCm) / 2.0f;
+            } else {
+                sensorsAgreed = false;
+                degradedModeActive = true;
+                // Conservative fail-safe: use the sensor detecting higher water
+                effectiveDist = min(sensor1DistCm, sensor2DistCm);
+                Serial.printf("[WARNING] Sensor Divergence! S1=%.1fcm, S2=%.1fcm (Delta=%.1fcm > 5cm)\n",
+                    sensor1DistCm, sensor2DistCm, delta);
+            }
         }
 
         // E. Compute Reservoir Water Level %
