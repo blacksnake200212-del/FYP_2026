@@ -23,6 +23,11 @@ import {
 import UpdateBanner from './src/UpdateBanner';
 import { checkAppVersion, APP_VERSION } from './src/updateService';
 import CircularGauge from './src/CircularGauge';
+import AlertsTimeline from './src/AlertsTimeline';
+import {
+  registerForPushNotificationsAsync,
+  triggerLocalTestNotification
+} from './src/notificationService';
 
 // SDAS PUBLIC FLOOD ADVISORY PORTAL (React Native / Expo)
 // Trilingual (EN/SI/TA), Auto-Location Detection, Hyperlocal Weather, and Animated Alerts
@@ -30,6 +35,13 @@ import CircularGauge from './src/CircularGauge';
 export default function PublicApp() {
   const [lang, setLang] = useState('en'); // 'en', 'si', 'ta'
   const t = translations[lang];
+
+  // Tab Navigation State ('HOME', 'TIMELINE', 'GUIDE')
+  const [activeTab, setActiveTab] = useState('HOME');
+
+  // Anonymous Push Notification State
+  const [pushToken, setPushToken] = useState(null);
+  const [pushRegistered, setPushRegistered] = useState(false);
 
   // Live Dam Status State (from Supabase public_status view)
   const [waterLevel, setWaterLevel] = useState(81.5);
@@ -272,6 +284,16 @@ export default function PublicApp() {
     };
   }, []);
 
+  // Anonymous Push Notification Device Registration
+  useEffect(() => {
+    registerForPushNotificationsAsync(lang).then((res) => {
+      if (res && res.success) {
+        setPushRegistered(true);
+        setPushToken(res.token);
+      }
+    });
+  }, [lang]);
+
   const getTheme = () => {
     switch (alertKey) {
       case 'DANGER':
@@ -366,242 +388,347 @@ export default function PublicApp() {
           </View>
         </View>
 
-        {/* 2-Minute Staleness Alert Banner */}
-        {isDataStale && (
-          <View style={styles.staleBanner}>
-            <Text style={styles.staleIcon}>⚠️</Text>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text style={styles.staleTitle}>Data may be outdated</Text>
-              <Text style={styles.staleSub}>
-                Last received: {lastSyncTime} ({Math.floor(staleElapsedSec / 60)}m ago). Dam node telemetry transmission delayed.
-              </Text>
-            </View>
-          </View>
-        )}
+        {/* Navigation Tabs Bar: LIVE STATUS | ALERTS TIMELINE | WHAT TO DO */}
+        <View style={styles.navTabBar}>
+          <TouchableOpacity
+            style={[styles.navTabBtn, activeTab === 'HOME' && styles.navTabBtnActive]}
+            onPress={() => setActiveTab('HOME')}
+          >
+            <Text style={[styles.navTabText, activeTab === 'HOME' && styles.navTabTextActive]}>
+              🏠 Live Status
+            </Text>
+          </TouchableOpacity>
 
-        {/* Auto-Location Detection Card with Proximity & Flood Risk Zone */}
-        <View style={styles.locationCard}>
-          <View style={styles.rowBetween}>
-            <View style={styles.rowAlignCenter}>
-              <Text style={{ fontSize: 16, marginRight: 6 }}>📍</Text>
-              <Text style={styles.locationHeader}>{t.yourLocation}</Text>
-            </View>
-            <View style={[styles.gpsBadge, { backgroundColor: '#1E2F54' }]}>
-              {isLocating ? (
-                <ActivityIndicator size="small" color="#38BDF8" />
-              ) : (
-                <Text style={styles.gpsBadgeText}>🟢 {userLocation.source}</Text>
-              )}
-            </View>
-          </View>
+          <TouchableOpacity
+            style={[styles.navTabBtn, activeTab === 'TIMELINE' && styles.navTabBtnActive]}
+            onPress={() => setActiveTab('TIMELINE')}
+          >
+            <Text style={[styles.navTabText, activeTab === 'TIMELINE' && styles.navTabTextActive]}>
+              📜 Alerts Timeline
+            </Text>
+          </TouchableOpacity>
 
-          <Text style={styles.cityName}>{userLocation.city}</Text>
-
-          {/* Distance to Dam & Proximity Risk */}
-          <View style={styles.proximityRow}>
-            <View style={styles.proximityLeft}>
-              <Text style={styles.proximityLabel}>{t.distanceToDam}:</Text>
-              <Text style={styles.distanceNumber}>
-                {userLocation.distanceToDamKm} {t.kmAway}
-              </Text>
-            </View>
-
-            <View style={[styles.zoneBadge, { backgroundColor: userLocation.risk.color }]}>
-              <Text style={styles.zoneBadgeText}>{userLocation.risk.zone}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Sync Status Bar with Refresh */}
-        <View style={styles.syncRow}>
-          <Text style={styles.syncText}>
-            ⏱️ {t.lastSynced}: <Text style={{ color: '#E2E8F0', fontWeight: '700' }}>{lastSyncTime}</Text>
-          </Text>
-          <TouchableOpacity style={styles.refreshBadge} onPress={fetchLiveDamStatus} disabled={isRefreshing}>
-            {isRefreshing ? (
-              <ActivityIndicator size="small" color="#38BDF8" />
-            ) : (
-              <Text style={styles.refreshText}>🔄 {t.refreshBtn}</Text>
-            )}
+          <TouchableOpacity
+            style={[styles.navTabBtn, activeTab === 'GUIDE' && styles.navTabBtnActive]}
+            onPress={() => setActiveTab('GUIDE')}
+          >
+            <Text style={[styles.navTabText, activeTab === 'GUIDE' && styles.navTabTextActive]}>
+              🛡️ What To Do
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Dynamic Animated Alert Banner */}
-        <Animated.View
-          style={[
-            styles.alertBanner,
-            { backgroundColor: theme.bg, transform: [{ scale: pulseAnim }], opacity: pulseOpacity }
-          ]}
-        >
-          <View style={styles.rowBetween}>
-            <Text style={styles.alertIcon}>{theme.icon}</Text>
-            <View style={styles.statusPill}>
-              <Text style={styles.statusPillText}>{alertKey.replace('_', ' ')}</Text>
+        {/* ============================================================ */}
+        {/* TAB 1: LIVE STATUS DASHBOARD                                 */}
+        {/* ============================================================ */}
+        {activeTab === 'HOME' && (
+          <View>
+            {/* 2-Minute Staleness Alert Banner */}
+            {isDataStale && (
+              <View style={styles.staleBanner}>
+                <Text style={styles.staleIcon}>⚠️</Text>
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={styles.staleTitle}>Data may be outdated</Text>
+                  <Text style={styles.staleSub}>
+                    Last received: {lastSyncTime} ({Math.floor(staleElapsedSec / 60)}m ago). Dam node telemetry transmission delayed.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Auto-Location Detection Card with Proximity & Flood Risk Zone */}
+            <View style={styles.locationCard}>
+              <View style={styles.rowBetween}>
+                <View style={styles.rowAlignCenter}>
+                  <Text style={{ fontSize: 16, marginRight: 6 }}>📍</Text>
+                  <Text style={styles.locationHeader}>{t.yourLocation}</Text>
+                </View>
+                <View style={[styles.gpsBadge, { backgroundColor: '#1E2F54' }]}>
+                  {isLocating ? (
+                    <ActivityIndicator size="small" color="#38BDF8" />
+                  ) : (
+                    <Text style={styles.gpsBadgeText}>🟢 {userLocation.source}</Text>
+                  )}
+                </View>
+              </View>
+
+              <Text style={styles.cityName}>{userLocation.city}</Text>
+
+              {/* Distance to Dam & Proximity Risk */}
+              <View style={styles.proximityRow}>
+                <View style={styles.proximityLeft}>
+                  <Text style={styles.proximityLabel}>{t.distanceToDam}:</Text>
+                  <Text style={styles.distanceNumber}>
+                    {userLocation.distanceToDamKm} {t.kmAway}
+                  </Text>
+                </View>
+
+                <View style={[styles.zoneBadge, { backgroundColor: userLocation.risk.color }]}>
+                  <Text style={styles.zoneBadgeText}>{userLocation.risk.zone}</Text>
+                </View>
+              </View>
             </View>
-          </View>
-          <Text style={styles.alertTitle}>{theme.info.title}</Text>
-          <Text style={styles.alertDesc}>{theme.info.desc}</Text>
-          <View style={styles.actionHighlight}>
-            <Text style={styles.actionText}>👉 {theme.info.action}</Text>
-          </View>
-        </Animated.View>
 
-        {/* Reservoir Capacity Gauge with SVG Circular Ring & Realtime Indicators */}
-        <View style={[styles.card, isDataStale && styles.staleCardBorder]}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.cardHeader}>{t.currentCapacity}</Text>
-            <View style={[styles.stageBadge, { backgroundColor: theme.bg }]}>
-              <Text style={styles.stageBadgeText}>{theme.icon} {alertKey.replace('_', ' ')}</Text>
-            </View>
-          </View>
-
-          {/* Circular SVG Capacity Gauge */}
-          <CircularGauge
-            percentage={waterLevel}
-            status={alertKey}
-            statusColor={theme.bg}
-            isStale={isDataStale}
-            trend={trend}
-            size={220}
-            strokeWidth={16}
-          />
-
-          <View style={styles.divider} />
-
-          {/* 1-Hour Inflow Forecast Trend Arrow */}
-          <View style={styles.rowBetween}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <Text style={styles.trendTitle}>1-Hour Inflow AI Forecast:</Text>
-              <Text style={styles.trendSubtitle}>
-                {trend === 'RISING'
-                  ? 'Surge expected: Upstream catchment inflow rising'
-                  : trend === 'FALLING'
-                  ? 'Receding: Catchment inflow decelerating'
-                  : 'Stable: Minor inflow fluctuation'}
+            {/* Sync Status Bar with Refresh */}
+            <View style={styles.syncRow}>
+              <Text style={styles.syncText}>
+                ⏱️ {t.lastSynced}: <Text style={{ color: '#E2E8F0', fontWeight: '700' }}>{lastSyncTime}</Text>
               </Text>
+              <TouchableOpacity style={styles.refreshBadge} onPress={fetchLiveDamStatus} disabled={isRefreshing}>
+                {isRefreshing ? (
+                  <ActivityIndicator size="small" color="#38BDF8" />
+                ) : (
+                  <Text style={styles.refreshText}>🔄 {t.refreshBtn}</Text>
+                )}
+              </TouchableOpacity>
             </View>
-            <View style={[styles.trendBadge, {
-              backgroundColor: trend === 'RISING' ? '#7F1D1D' : trend === 'FALLING' ? '#064E3B' : '#1E293B',
-              borderColor: trend === 'RISING' ? '#EF4444' : trend === 'FALLING' ? '#10B981' : '#475569',
-              borderWidth: 1
-            }]}>
-              <Text style={[styles.trendText, {
-                color: trend === 'RISING' ? '#FCA5A5' : trend === 'FALLING' ? '#6EE7B7' : '#CBD5E1'
-              }]}>
-                {trend === 'RISING' ? '↗ RISING' : trend === 'FALLING' ? '↘ FALLING' : '→ STEADY'}
-              </Text>
-            </View>
-          </View>
 
-          <View style={styles.divider} />
-
-          {/* Sluice Gate Discharge Position */}
-          <View style={styles.rowBetween}>
-            <Text style={styles.subText}>{t.gateDischarge}:</Text>
-            <Text style={[styles.boldText, { color: gatePercent > 0 ? '#FB923C' : '#34D399' }]}>
-              {gatePercent === 50
-                ? t.gateOpen50
-                : gatePercent === 20 || gatePercent === 30
-                ? (gatePercent === 20 ? '20% OPEN (Advisory Release)' : t.gateOpen30)
-                : t.gateClosed}
-            </Text>
-          </View>
-        </View>
-
-        {/* Hyperlocal Weather Widget (User Location vs Dam Catchment) */}
-        <View style={styles.card}>
-          {/* Weather Selector Tabs */}
-          <View style={styles.weatherTabRow}>
-            <TouchableOpacity
-              style={[styles.wTabBtn, weatherTab === 'LOCAL' && styles.wTabBtnActive]}
-              onPress={() => setWeatherTab('LOCAL')}
+            {/* Dynamic Animated Alert Banner */}
+            <Animated.View
+              style={[
+                styles.alertBanner,
+                { backgroundColor: theme.bg, transform: [{ scale: pulseAnim }], opacity: pulseOpacity }
+              ]}
             >
-              <Text style={[styles.wTabText, weatherTab === 'LOCAL' && styles.wTabTextActive]}>
-                📍 {t.localWeatherTitle}
-              </Text>
-            </TouchableOpacity>
+              <View style={styles.rowBetween}>
+                <Text style={styles.alertIcon}>{theme.icon}</Text>
+                <View style={styles.statusPill}>
+                  <Text style={styles.statusPillText}>{alertKey.replace('_', ' ')}</Text>
+                </View>
+              </View>
+              <Text style={styles.alertTitle}>{theme.info.title}</Text>
+              <Text style={styles.alertDesc}>{theme.info.desc}</Text>
+              <View style={styles.actionHighlight}>
+                <Text style={styles.actionText}>👉 {theme.info.action}</Text>
+              </View>
+            </Animated.View>
 
-            <TouchableOpacity
-              style={[styles.wTabBtn, weatherTab === 'DAM' && styles.wTabBtnActive]}
-              onPress={() => setWeatherTab('DAM')}
-            >
-              <Text style={[styles.wTabText, weatherTab === 'DAM' && styles.wTabTextActive]}>
-                🌊 {t.catchmentWeatherTitle}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            {/* Reservoir Capacity Gauge with SVG Circular Ring & Realtime Indicators */}
+            <View style={[styles.card, isDataStale && styles.staleCardBorder]}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardHeader}>{t.currentCapacity}</Text>
+                <View style={[styles.stageBadge, { backgroundColor: theme.bg }]}>
+                  <Text style={styles.stageBadgeText}>{theme.icon} {alertKey.replace('_', ' ')}</Text>
+                </View>
+              </View>
 
-          <View style={[styles.rowBetween, { marginTop: 10 }]}>
-            <View style={styles.rowAlignCenter}>
-              <Animated.Text style={{ fontSize: 32, marginRight: 10, transform: [{ translateY: weatherBounce }] }}>
-                {activeWeather.icon}
-              </Animated.Text>
-              <View>
-                <Text style={styles.weatherCondition}>{activeWeather.condition}</Text>
-                <Text style={styles.weatherCitySub}>
-                  {weatherTab === 'LOCAL' ? userLocation.city : 'Tabbowa Reservoir Catchment Basin'}
+              {/* Circular SVG Capacity Gauge */}
+              <CircularGauge
+                percentage={waterLevel}
+                status={alertKey}
+                statusColor={theme.bg}
+                isStale={isDataStale}
+                trend={trend}
+                size={220}
+                strokeWidth={16}
+              />
+
+              <View style={styles.divider} />
+
+              {/* 1-Hour Inflow Forecast Trend Arrow */}
+              <View style={styles.rowBetween}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.trendTitle}>1-Hour Inflow AI Forecast:</Text>
+                  <Text style={styles.trendSubtitle}>
+                    {trend === 'RISING'
+                      ? 'Surge expected: Upstream catchment inflow rising'
+                      : trend === 'FALLING'
+                      ? 'Receding: Catchment inflow decelerating'
+                      : 'Stable: Minor inflow fluctuation'}
+                  </Text>
+                </View>
+                <View style={[styles.trendBadge, {
+                  backgroundColor: trend === 'RISING' ? '#7F1D1D' : trend === 'FALLING' ? '#064E3B' : '#1E293B',
+                  borderColor: trend === 'RISING' ? '#EF4444' : trend === 'FALLING' ? '#10B981' : '#475569',
+                  borderWidth: 1
+                }]}>
+                  <Text style={[styles.trendText, {
+                    color: trend === 'RISING' ? '#FCA5A5' : trend === 'FALLING' ? '#6EE7B7' : '#CBD5E1'
+                  }]}>
+                    {trend === 'RISING' ? '↗ RISING' : trend === 'FALLING' ? '↘ FALLING' : '→ STEADY'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Sluice Gate Discharge Position */}
+              <View style={styles.rowBetween}>
+                <Text style={styles.subText}>{t.gateDischarge}:</Text>
+                <Text style={[styles.boldText, { color: gatePercent > 0 ? '#FB923C' : '#34D399' }]}>
+                  {gatePercent === 50
+                    ? t.gateOpen50
+                    : gatePercent === 20 || gatePercent === 30
+                    ? (gatePercent === 20 ? '20% OPEN (Advisory Release)' : t.gateOpen30)
+                    : t.gateClosed}
                 </Text>
               </View>
             </View>
 
-            <Text style={styles.weatherBigTemp}>{activeWeather.temperature.toFixed(1)}°C</Text>
+            {/* Hyperlocal Weather Widget */}
+            <View style={styles.card}>
+              <View style={styles.weatherTabRow}>
+                <TouchableOpacity
+                  style={[styles.wTabBtn, weatherTab === 'LOCAL' && styles.wTabBtnActive]}
+                  onPress={() => setWeatherTab('LOCAL')}
+                >
+                  <Text style={[styles.wTabText, weatherTab === 'LOCAL' && styles.wTabTextActive]}>
+                    📍 {t.localWeatherTitle}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.wTabBtn, weatherTab === 'DAM' && styles.wTabBtnActive]}
+                  onPress={() => setWeatherTab('DAM')}
+                >
+                  <Text style={[styles.wTabText, weatherTab === 'DAM' && styles.wTabTextActive]}>
+                    🌊 {t.catchmentWeatherTitle}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.rowBetween, { marginTop: 10 }]}>
+                <View style={styles.rowAlignCenter}>
+                  <Animated.Text style={{ fontSize: 32, marginRight: 10, transform: [{ translateY: weatherBounce }] }}>
+                    {activeWeather.icon}
+                  </Animated.Text>
+                  <View>
+                    <Text style={styles.weatherCondition}>{activeWeather.condition}</Text>
+                    <Text style={styles.weatherCitySub}>
+                      {weatherTab === 'LOCAL' ? userLocation.city : 'Tabbowa Reservoir Catchment Basin'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.weatherBigTemp}>{activeWeather.temperature.toFixed(1)}°C</Text>
+              </View>
+
+              <View style={styles.weatherGrid}>
+                <View style={styles.weatherItem}>
+                  <Text style={styles.weatherLabel}>{t.currentRain}</Text>
+                  <Text style={styles.weatherVal}>{activeWeather.precipitation.toFixed(1)} mm</Text>
+                </View>
+
+                <View style={styles.weatherItem}>
+                  <Text style={styles.weatherLabel}>{t.forecast1h}</Text>
+                  <Text style={styles.weatherVal}>{activeWeather.rain1h.toFixed(1)} mm</Text>
+                </View>
+
+                <View style={styles.weatherItem}>
+                  <Text style={styles.weatherLabel}>{t.forecast3h}</Text>
+                  <Text style={styles.weatherVal}>{activeWeather.rain3h.toFixed(1)} mm</Text>
+                </View>
+
+                <View style={styles.weatherItem}>
+                  <Text style={styles.weatherLabel}>{t.wind}</Text>
+                  <Text style={styles.weatherVal}>{activeWeather.windSpeed || 14} km/h</Text>
+                </View>
+              </View>
+
+              <View style={styles.weatherNotice}>
+                <Text style={styles.weatherNoticeText}>
+                  {activeWeather.precipitation > 4.0
+                    ? `⛈️ ${t.weatherImpactHeavy}`
+                    : `☁️ ${t.weatherImpactNormal}`}
+                </Text>
+              </View>
+            </View>
           </View>
+        )}
 
-          <View style={styles.weatherGrid}>
-            <View style={styles.weatherItem}>
-              <Text style={styles.weatherLabel}>{t.currentRain}</Text>
-              <Text style={styles.weatherVal}>{activeWeather.precipitation.toFixed(1)} mm</Text>
-            </View>
+        {/* ============================================================ */}
+        {/* TAB 2: ALERTS TIMELINE & PUSH NOTIFICATIONS                  */}
+        {/* ============================================================ */}
+        {activeTab === 'TIMELINE' && (
+          <View>
+            <AlertsTimeline currentStage={alertKey} />
 
-            <View style={styles.weatherItem}>
-              <Text style={styles.weatherLabel}>{t.forecast1h}</Text>
-              <Text style={styles.weatherVal}>{activeWeather.rain1h.toFixed(1)} mm</Text>
-            </View>
+            {/* Anonymous Push Notification Registration & Simulator Test Card */}
+            <View style={styles.card}>
+              <Text style={styles.cardHeader}>EMERGENCY PUSH NOTIFICATIONS</Text>
+              <View style={styles.rowBetween}>
+                <Text style={styles.subText}>Push Token Status:</Text>
+                <Text style={[styles.boldText, { color: pushRegistered ? '#10B981' : '#F59E0B' }]}>
+                  {pushRegistered ? '🟢 REGISTERED' : '🟡 REGISTERING...'}
+                </Text>
+              </View>
+              <Text style={[styles.metricSub, { marginTop: 4 }]}>
+                {pushToken ? `Token: ${pushToken.slice(0, 32)}...` : 'Generating anonymous device token...'}
+              </Text>
 
-            <View style={styles.weatherItem}>
-              <Text style={styles.weatherLabel}>{t.forecast3h}</Text>
-              <Text style={styles.weatherVal}>{activeWeather.rain3h.toFixed(1)} mm</Text>
-            </View>
+              <View style={styles.divider} />
 
-            <View style={styles.weatherItem}>
-              <Text style={styles.weatherLabel}>{t.wind}</Text>
-              <Text style={styles.weatherVal}>{activeWeather.windSpeed || 14} km/h</Text>
+              <Text style={[styles.cardHeader, { marginBottom: 6 }]}>TEST EMERGENCY SIREN ALERT</Text>
+              <Text style={styles.subText}>
+                Simulate how your device receives critical dam breach emergency push notifications:
+              </Text>
+
+              <TouchableOpacity
+                style={[styles.callBtn, { backgroundColor: '#EF4444', marginTop: 10 }]}
+                onPress={() => triggerLocalTestNotification('DANGER')}
+              >
+                <Text style={styles.callBtnText}>🚨 Test Critical Siren Push Alert</Text>
+              </TouchableOpacity>
             </View>
           </View>
+        )}
 
-          <View style={styles.weatherNotice}>
-            <Text style={styles.weatherNoticeText}>
-              {activeWeather.precipitation > 4.0
-                ? `⛈️ ${t.weatherImpactHeavy}`
-                : `☁️ ${t.weatherImpactNormal}`}
-            </Text>
+        {/* ============================================================ */}
+        {/* TAB 3: WHAT TO DO (DISASTER ADVISORY GUIDELINES)             */}
+        {/* ============================================================ */}
+        {activeTab === 'GUIDE' && (
+          <View>
+            {/* 4-Stage Advisory Explanations */}
+            <View style={[styles.card, { borderLeftColor: '#10B981', borderLeftWidth: 5 }]}>
+              <Text style={[styles.cardHeader, { color: '#10B981' }]}>STAGE 0: NORMAL STATUS (SAFE)</Text>
+              <Text style={styles.guideItem}>• {t.stages.NORMAL.desc}</Text>
+              <Text style={[styles.guideItem, { color: '#34D399', fontWeight: '700' }]}>👉 Action: {t.stages.NORMAL.action}</Text>
+            </View>
+
+            <View style={[styles.card, { borderLeftColor: '#EAB308', borderLeftWidth: 5 }]}>
+              <Text style={[styles.cardHeader, { color: '#EAB308' }]}>STAGE 1: PRE-WARNING (RISING WATER)</Text>
+              <Text style={styles.guideItem}>• {t.stages.PRE_WARNING.desc}</Text>
+              <Text style={[styles.guideItem, { color: '#FCD34D', fontWeight: '700' }]}>👉 Action: {t.stages.PRE_WARNING.action}</Text>
+            </View>
+
+            <View style={[styles.card, { borderLeftColor: '#F97316', borderLeftWidth: 5 }]}>
+              <Text style={[styles.cardHeader, { color: '#F97316' }]}>STAGE 2: CLEAR AREA (SPILLWAY DISCHARGE)</Text>
+              <Text style={styles.guideItem}>• {t.stages.CLEAR_AREA.desc}</Text>
+              <Text style={[styles.guideItem, { color: '#FDBA74', fontWeight: '700' }]}>👉 Action: {t.stages.CLEAR_AREA.action}</Text>
+            </View>
+
+            <View style={[styles.card, { borderLeftColor: '#EF4444', borderLeftWidth: 5 }]}>
+              <Text style={[styles.cardHeader, { color: '#EF4444' }]}>STAGE 3: CRITICAL FLOOD DANGER</Text>
+              <Text style={styles.guideItem}>• {t.stages.DANGER.desc}</Text>
+              <Text style={[styles.guideItem, { color: '#FCA5A5', fontWeight: '700' }]}>👉 Action: {t.stages.DANGER.action}</Text>
+            </View>
+
+            {/* Emergency Helplines Direct Dials */}
+            <View style={styles.card}>
+              <Text style={styles.cardHeader}>{t.helplines}</Text>
+
+              <TouchableOpacity style={[styles.callBtn, { backgroundColor: '#DC2626' }]} onPress={() => dialEmergency('117')}>
+                <Text style={styles.callBtnText}>📞 {t.callDmc}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.callBtn, { backgroundColor: '#1E40AF', marginTop: 10 }]} onPress={() => dialEmergency('119')}>
+                <Text style={styles.callBtnText}>👮 {t.callPolice}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.callBtn, { backgroundColor: '#047857', marginTop: 10 }]} onPress={() => dialEmergency('1990')}>
+                <Text style={styles.callBtnText}>🚑 {t.callAmbulance}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Community Safety Guidelines */}
+            <View style={styles.card}>
+              <Text style={styles.cardHeader}>{t.safetyGuidelines}</Text>
+              <Text style={styles.guideItem}>{t.safety1}</Text>
+              <Text style={styles.guideItem}>{t.safety2}</Text>
+              <Text style={styles.guideItem}>{t.safety3}</Text>
+            </View>
           </View>
-        </View>
-
-        {/* Emergency Helplines Direct Dials */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>{t.helplines}</Text>
-
-          <TouchableOpacity style={[styles.callBtn, { backgroundColor: '#DC2626' }]} onPress={() => dialEmergency('117')}>
-            <Text style={styles.callBtnText}>📞 {t.callDmc}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.callBtn, { backgroundColor: '#1E40AF', marginTop: 10 }]} onPress={() => dialEmergency('119')}>
-            <Text style={styles.callBtnText}>👮 {t.callPolice}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.callBtn, { backgroundColor: '#047857', marginTop: 10 }]} onPress={() => dialEmergency('1990')}>
-            <Text style={styles.callBtnText}>🚑 {t.callAmbulance}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Community Safety Guidelines in Active Language */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>{t.safetyGuidelines}</Text>
-          <Text style={styles.guideItem}>{t.safety1}</Text>
-          <Text style={styles.guideItem}>{t.safety2}</Text>
-          <Text style={styles.guideItem}>{t.safety3}</Text>
-        </View>
+        )}
 
         {/* App Version & Update Strategy Footer */}
         <View style={styles.versionFooter}>
@@ -786,5 +913,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8
   },
-  checkUpdateBtnText: { color: '#60A5FA', fontSize: 12, fontWeight: '700' }
+  checkUpdateBtnText: { color: '#60A5FA', fontSize: 12, fontWeight: '700' },
+
+  // Navigation Tabs Bar
+  navTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#111C36',
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#1E2F54',
+    gap: 4
+  },
+  navTabBtn: {
+    flex: 1,
+    paddingVertical: 9,
+    alignItems: 'center',
+    borderRadius: 8
+  },
+  navTabBtnActive: {
+    backgroundColor: '#2563EB'
+  },
+  navTabText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  navTabTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800'
+  }
 });
