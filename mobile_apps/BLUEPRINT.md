@@ -234,4 +234,61 @@ LEFT JOIN LATERAL (
 ) f ON true
 ORDER BY r.created_at DESC
 LIMIT 1;
+
+-- 11. Versioned Public Contract View (Guarantees backward compatibility)
+CREATE OR REPLACE VIEW public.public_status_v1 AS
+SELECT * FROM public.public_status;
+
+-- 12. App Version & Update Strategy Metadata Table
+CREATE TABLE public.app_config (
+    app_id VARCHAR(50) PRIMARY KEY, -- 'public_app', 'operator_app'
+    min_supported_version VARCHAR(20) NOT NULL,
+    latest_version VARCHAR(20) NOT NULL,
+    update_message TEXT,
+    store_url TEXT,
+    apk_url TEXT,
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
 ```
+
+---
+
+## 5. SDAS App Update Strategy
+
+How users of the public and operator apps learn about new versions, and how old versions keep working:
+
+### 5.1 Two Update Types
+| Type | What Changed | How it Reaches Users |
+|---|---|---|
+| **Over-The-Air (OTA)** | JavaScript, screens, text, translations, images | `expo-updates` (EAS Update). App downloads in the background on launch and applies on the next restart. No store review required. |
+| **Store / Binary Update** | Native code, permissions, new Expo SDK, native libraries | Play Store / App Store or direct APK download. Requires binary compile. |
+
+*Each build carries a `runtimeVersion`. An OTA update only reaches builds with a matching runtime. When native code changes, `runtimeVersion` is bumped and a new binary is shipped. Old binaries keep receiving compatible OTA updates.*
+
+### 5.2 User Update Notifications
+1. **OTA Updates:**
+   - Checked automatically on app launch and foreground transitions.
+   - If a new JS bundle is downloaded, a non-blocking toast displays: *"Update ready, restart to apply"*.
+2. **Store / APK Updates:**
+   - Powered by the `app_config` Supabase table.
+   - **Below `min_supported_version`:** Displays a full-screen **blocking modal** *"Update Required"* with a direct button to Google Play / APK download. Used strictly for breaking changes or security patches.
+   - **Below `latest_version`:** Displays a dismissible top banner: *"New version available (vX.X.X): [message] [Update]"*.
+   - **Settings Screen:** Explicit "App Version" line with a manual *"Check for Updates"* button.
+3. **Push Notifications:**
+   - Store device `app_version` inside `push_tokens` table to broadcast targeted upgrade advisories.
+
+### 5.3 Backward Compatibility & Old Version Longevity
+- **Additive Changes Only:** Database schemas add new columns with safe defaults; columns are never renamed or deleted while older clients remain active.
+- **Versioned Public Contract:** Public apps consume `public_status_v1` (with alias to `public_status`). New major revisions will introduce `public_status_v2` without breaking existing clients.
+- **Versioned Commands (`schema_version`):** Operator app dispatches include `schema_version: 1`. Edge functions and hardware nodes reject stale schema versions with clear update prompts.
+
+### 5.4 Safety Rule (Zero Alert Dependency on Updates)
+**The emergency alert chain must NEVER depend on anyone updating their app.**
+- Physical cellular SMS broadcasts dispatched via the SIM800L module reach all resident feature phones and smartphones unconditionally.
+- Push notifications trigger across all registered push tokens regardless of client version.
+- Stale or outdated apps continue to receive live stage alerts (CLEAR AREA, DANGER) without obstruction. Update prompts enhance features and security, but never gate life-safety warnings.
+
+### 5.5 Distribution Model
+- **Public App:** Google Play Store (and Apple App Store) for automatic updates and frictionless installation.
+- **Operator App:** Direct Standalone APK distribution during prototype and deployment, leveraging `app_config` version checks and EAS OTA updates.
+

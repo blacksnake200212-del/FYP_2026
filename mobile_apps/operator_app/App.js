@@ -11,6 +11,9 @@ import {
   StatusBar
 } from 'react-native';
 
+import UpdateBanner from './src/UpdateBanner';
+import { checkAppVersion, APP_VERSION, COMMAND_SCHEMA_VERSION } from './src/updateService';
+
 // SDAS OPERATOR CONSOLE (React Native / Expo)
 // Secure authenticated control interface for Irrigation Engineers & Disaster Officers
 // Includes Live Telemetry, MQTT Gate Override, and Emergency Contact Management for Danger SMS
@@ -18,6 +21,7 @@ import {
 export default function OperatorApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [operatorUser, setOperatorUser] = useState('23ug1-0018@sltc.ac.lk');
+  const [updateInfo, setUpdateInfo] = useState(null);
   
   // Real-time Telemetry State
   const [waterLevel, setWaterLevel] = useState(81.5);
@@ -48,6 +52,11 @@ export default function OperatorApp() {
   const [newTier, setNewTier] = useState(1);
   const [isSavingContact, setIsSavingContact] = useState(false);
 
+  // App Version Check on Launch (Checks Supabase app_config table)
+  useEffect(() => {
+    checkAppVersion('operator_app', APP_VERSION).then(setUpdateInfo);
+  }, []);
+
   // Watchdog Countdown Effect
   useEffect(() => {
     let interval = null;
@@ -65,8 +74,16 @@ export default function OperatorApp() {
     return () => clearInterval(interval);
   }, [controlMode, watchdogSeconds]);
 
-  // Command Dispatcher (Simulates MQTT sub-2-second publish)
+  // Command Dispatcher (Simulates MQTT sub-2-second publish with schema_version)
   const dispatchCommand = (cmd, targetPct) => {
+    // Audit payload carries schema_version to safeguard hardware from stale commands
+    const commandPayload = {
+      cmd,
+      target_percent: targetPct,
+      schema_version: COMMAND_SCHEMA_VERSION,
+      operator: operatorUser,
+      timestamp: new Date().toISOString()
+    };
     if (cmd === 'ESTOP') {
       setControlMode('EMERGENCY');
       setWatchdogSeconds(0);
@@ -171,6 +188,10 @@ export default function OperatorApp() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <UpdateBanner
+        updateInfo={updateInfo}
+        onCheckUpdate={() => checkAppVersion('operator_app', APP_VERSION).then(setUpdateInfo)}
+      />
       <ScrollView contentContainerStyle={styles.scroll}>
         
         {/* Header Bar */}
@@ -371,6 +392,22 @@ export default function OperatorApp() {
           </View>
         </View>
 
+        {/* Operator App Version & Update Strategy Footer */}
+        <View style={styles.versionFooter}>
+          <Text style={styles.versionFooterText}>SDAS Operator Console v{APP_VERSION} (SDK 57) | Schema v{COMMAND_SCHEMA_VERSION}</Text>
+          <TouchableOpacity
+            style={styles.checkUpdateBtn}
+            onPress={() => checkAppVersion('operator_app', APP_VERSION).then((info) => {
+              setUpdateInfo(info);
+              if (!info.hasUpdate) {
+                Alert.alert('Console Up to Date', `You are running the latest version (v${APP_VERSION}).`);
+              }
+            })}
+          >
+            <Text style={styles.checkUpdateBtnText}>Check for Updates</Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -496,5 +533,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 6
   },
-  deleteBtnText: { color: '#FCA5A5', fontSize: 10, fontWeight: '700' }
+  deleteBtnText: { color: '#FCA5A5', fontSize: 10, fontWeight: '700' },
+
+  // Version Footer
+  versionFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#334155',
+    marginTop: 10
+  },
+  versionFooterText: { color: '#64748B', fontSize: 12, marginBottom: 8 },
+  checkUpdateBtn: {
+    backgroundColor: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  checkUpdateBtnText: { color: '#60A5FA', fontSize: 12, fontWeight: '700' }
 });

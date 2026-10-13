@@ -20,6 +20,8 @@ import {
   fetchWeatherForLocation,
   DAM_COORDINATES
 } from './src/locationService';
+import UpdateBanner from './src/UpdateBanner';
+import { checkAppVersion, APP_VERSION } from './src/updateService';
 
 // SDAS PUBLIC FLOOD ADVISORY PORTAL (React Native / Expo)
 // Trilingual (EN/SI/TA), Auto-Location Detection, Hyperlocal Weather, and Animated Alerts
@@ -28,12 +30,21 @@ export default function PublicApp() {
   const [lang, setLang] = useState('en'); // 'en', 'si', 'ta'
   const t = translations[lang];
 
-  // Live Dam Status State (from Supabase public_dam_status_view)
+  // Live Dam Status State (from Supabase public_status view)
   const [waterLevel, setWaterLevel] = useState(81.5);
   const [gatePercent, setGatePercent] = useState(30);
   const [alertKey, setAlertKey] = useState('CLEAR_AREA'); // NORMAL, PRE_WARNING, CLEAR_AREA, DANGER
+  const [trend, setTrend] = useState('STEADY'); // RISING, STEADY, FALLING
   const [lastSyncTime, setLastSyncTime] = useState('Just now');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // App Version & Update Strategy State
+  const [updateInfo, setUpdateInfo] = useState(null);
+
+  // Staleness Watcher State (Stale if older than 2 minutes / 120 seconds)
+  const [isDataStale, setIsDataStale] = useState(false);
+  const [lastReadingTimestamp, setLastReadingTimestamp] = useState(new Date());
+  const [staleElapsedSec, setStaleElapsedSec] = useState(0);
 
   // User's Auto-Detected Location & Proximity
   const [userLocation, setUserLocation] = useState({
@@ -158,11 +169,11 @@ export default function PublicApp() {
     setIsLocating(false);
   };
 
-  // Live Supabase Status Fetcher
+  // Live Supabase Status Fetcher (Queries public_status view)
   const fetchLiveDamStatus = async () => {
     setIsRefreshing(true);
     try {
-      const endpoint = `${SUPABASE_CONFIG.URL}/rest/v1/public_dam_status_view?select=*`;
+      const endpoint = `${SUPABASE_CONFIG.URL}/rest/v1/public_status?select=*`;
       const response = await fetch(endpoint, {
         headers: {
           apikey: SUPABASE_CONFIG.PUBLISHABLE_KEY,
@@ -174,12 +185,25 @@ export default function PublicApp() {
         const data = await response.json();
         if (data && data.length > 0) {
           const latest = data[0];
-          setWaterLevel(Number(latest.water_level_pct) || 85.5);
-          setGatePercent(Number(latest.gate_percent) || 50);
+          setWaterLevel(Number(latest.level_pct ?? latest.water_level_pct) || 81.5);
+          setGatePercent(Number(latest.gate_percent) || 0);
 
-          const stateMap = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER'];
-          const mappedKey = stateMap[latest.alert_state] || 'DANGER';
-          setAlertKey(mappedKey);
+          if (latest.status) {
+            setAlertKey(latest.status.replace('-', '_').replace(' ', '_'));
+          } else if (latest.alert_state !== undefined) {
+            const stateMap = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER'];
+            setAlertKey(stateMap[latest.alert_state] || 'NORMAL');
+          }
+
+          if (latest.trend) {
+            setTrend(latest.trend);
+          }
+
+          const recTime = new Date(latest.updated_at || latest.recorded_at || Date.now());
+          setLastReadingTimestamp(recTime);
+          const diffSec = Math.floor((Date.now() - recTime.getTime()) / 1000);
+          setStaleElapsedSec(diffSec);
+          setIsDataStale(diffSec > 120);
 
           const now = new Date();
           setLastSyncTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -191,14 +215,29 @@ export default function PublicApp() {
     setIsRefreshing(false);
   };
 
+  // On App Launch: Check for Updates & Initialize Services
   useEffect(() => {
     initLocationAndWeather();
     fetchLiveDamStatus();
 
+    // Version Check
+    checkAppVersion('public_app', APP_VERSION).then(setUpdateInfo);
+
     // 15-second background sync interval
-    const interval = setInterval(fetchLiveDamStatus, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    const syncInterval = setInterval(fetchLiveDamStatus, 15000);
+
+    // 10-second staleness watcher
+    const staleInterval = setInterval(() => {
+      const diffSec = Math.floor((Date.now() - lastReadingTimestamp.getTime()) / 1000);
+      setStaleElapsedSec(diffSec);
+      setIsDataStale(diffSec > 120);
+    }, 10000);
+
+    return () => {
+      clearInterval(syncInterval);
+      clearInterval(staleInterval);
+    };
+  }, [lastReadingTimestamp]);
 
   const getTheme = () => {
     switch (alertKey) {
@@ -249,6 +288,10 @@ export default function PublicApp() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <UpdateBanner
+        updateInfo={updateInfo}
+        onCheckUpdate={() => checkAppVersion('public_app', APP_VERSION).then(setUpdateInfo)}
+      />
       <ScrollView contentContainerStyle={styles.scroll}>
 
         {/* Brand Header with Unique SDAS Emblem Logo & Trilingual Switcher */}
@@ -289,6 +332,19 @@ export default function PublicApp() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* 2-Minute Staleness Alert Banner */}
+        {isDataStale && (
+          <View style={styles.staleBanner}>
+            <Text style={styles.staleIcon}>⚠️</Text>
+            <View style={{ flex: 1, marginLeft: 8 }}>
+              <Text style={styles.staleTitle}>Data may be outdated</Text>
+              <Text style={styles.staleSub}>
+                Last received: {lastSyncTime} ({Math.floor(staleElapsedSec / 60)}m ago). Dam node telemetry transmission delayed.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Auto-Location Detection Card with Proximity & Flood Risk Zone */}
         <View style={styles.locationCard}>
@@ -395,6 +451,22 @@ export default function PublicApp() {
                 : t.gateClosed}
             </Text>
           </View>
+
+          <View style={styles.divider} />
+
+          {/* 1-Hour Inflow Forecast Trend */}
+          <View style={styles.rowBetween}>
+            <Text style={styles.subText}>1-Hour Inflow Forecast:</Text>
+            <View style={[styles.trendBadge, {
+              backgroundColor: trend === 'RISING' ? '#7F1D1D' : trend === 'FALLING' ? '#064E3B' : '#1E293B'
+            }]}>
+              <Text style={[styles.trendText, {
+                color: trend === 'RISING' ? '#F87171' : trend === 'FALLING' ? '#34D399' : '#94A3B8'
+              }]}>
+                {trend === 'RISING' ? '↗ RISING (+Inflow)' : trend === 'FALLING' ? '↘ FALLING (-Inflow)' : '→ STEADY'}
+              </Text>
+            </View>
+          </View>
         </View>
 
         {/* Hyperlocal Weather Widget (User Location vs Dam Catchment) */}
@@ -490,6 +562,22 @@ export default function PublicApp() {
           <Text style={styles.guideItem}>{t.safety1}</Text>
           <Text style={styles.guideItem}>{t.safety2}</Text>
           <Text style={styles.guideItem}>{t.safety3}</Text>
+        </View>
+
+        {/* App Version & Update Strategy Footer */}
+        <View style={styles.versionFooter}>
+          <Text style={styles.versionFooterText}>SDAS Public Portal v{APP_VERSION} (SDK 57)</Text>
+          <TouchableOpacity
+            style={styles.checkUpdateBtn}
+            onPress={() => checkAppVersion('public_app', APP_VERSION).then((info) => {
+              setUpdateInfo(info);
+              if (!info.hasUpdate) {
+                alert('You are running the latest version (v' + APP_VERSION + ').');
+              }
+            })}
+          >
+            <Text style={styles.checkUpdateBtnText}>Check for Updates</Text>
+          </TouchableOpacity>
         </View>
 
       </ScrollView>
@@ -595,5 +683,43 @@ const styles = StyleSheet.create({
 
   callBtn: { paddingVertical: 13, borderRadius: 10, alignItems: 'center' },
   callBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-  guideItem: { color: '#CBD5E1', fontSize: 12, lineHeight: 19, marginVertical: 4 }
+  guideItem: { color: '#CBD5E1', fontSize: 12, lineHeight: 19, marginVertical: 4 },
+
+  // Staleness Alert Banner
+  staleBanner: {
+    backgroundColor: '#78350F',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  staleIcon: { fontSize: 24 },
+  staleTitle: { color: '#FDE68A', fontSize: 13, fontWeight: '800' },
+  staleSub: { color: '#FDF6B2', fontSize: 11, marginTop: 2, lineHeight: 15 },
+
+  // Trend Badge
+  trendBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  trendText: { fontSize: 12, fontWeight: '800' },
+
+  // Version Footer
+  versionFooter: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#1E2F54',
+    marginTop: 10
+  },
+  versionFooterText: { color: '#64748B', fontSize: 12, marginBottom: 8 },
+  checkUpdateBtn: {
+    backgroundColor: '#16223F',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  checkUpdateBtnText: { color: '#60A5FA', fontSize: 12, fontWeight: '700' }
 });

@@ -62,6 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON public.alerts (created_at DE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.commands (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    schema_version INT DEFAULT 1 NOT NULL,
     type VARCHAR(30) NOT NULL CHECK (type IN ('OPEN_20', 'OPEN_50', 'CLOSE', 'ESTOP', 'AUTO', 'PREWARN_SMS')),
     params JSONB DEFAULT '{}'::jsonb,
     issued_by UUID REFERENCES auth.users(id),
@@ -107,8 +108,22 @@ CREATE TABLE IF NOT EXISTS public.push_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     token TEXT UNIQUE NOT NULL,
     language VARCHAR(10) DEFAULT 'en' NOT NULL,
+    app_version VARCHAR(20) DEFAULT '2.0.0' NOT NULL,
     platform VARCHAR(20),
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- ============================================================================
+-- 8. APP_CONFIG TABLE (OTA & Store Version Control for Both Mobile Apps)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.app_config (
+    app_id VARCHAR(50) PRIMARY KEY, -- 'public_app', 'operator_app'
+    min_supported_version VARCHAR(20) NOT NULL,
+    latest_version VARCHAR(20) NOT NULL,
+    update_message TEXT,
+    store_url TEXT,
+    apk_url TEXT,
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
 -- ============================================================================
@@ -162,6 +177,10 @@ LEFT JOIN LATERAL (
 ) f ON true
 ORDER BY r.created_at DESC
 LIMIT 1;
+
+-- Versioned Public Contract View (Guarantees backward compatibility for older apps)
+CREATE OR REPLACE VIEW public.public_status_v1 AS
+SELECT * FROM public.public_status;
 
 -- ============================================================================
 -- 11. BACKWARDS COMPATIBILITY VIEWS (For existing ESP32 firmware / endpoints)
@@ -250,6 +269,7 @@ ALTER TABLE public.commands ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sms_jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.contacts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.push_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
@@ -314,6 +334,20 @@ WITH CHECK (
 CREATE POLICY "Allow public insert push_tokens"
 ON public.push_tokens FOR INSERT TO anon, authenticated
 WITH CHECK (true);
+
+-- App Config: Public read-only; Admins manage
+CREATE POLICY "Allow public read app_config"
+ON public.app_config FOR SELECT TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Allow admins manage app_config"
+ON public.app_config FOR ALL TO authenticated
+USING (
+    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
+)
+WITH CHECK (
+    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
+);
 
 -- Profiles: Users read own profile; Admins read/manage all
 CREATE POLICY "Allow users read own profile"
