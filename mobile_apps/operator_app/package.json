@@ -15,6 +15,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
+    "@expo/ngrok": "^4.1.0",
     "babel-preset-expo": "~57.0.15"
   },
   "private": true
