@@ -47,10 +47,13 @@ private:
     SystemStatus currentStatus;
     Preferences  preferences;
     
-    // Button debouncing state
+    // Button debouncing and edge-detection state
     unsigned long lastBtnOpenMs;
     unsigned long lastBtnCloseMs;
     unsigned long lastBtnStopMs;
+    int lastBtnOpenState;
+    int lastBtnCloseState;
+    int lastBtnStopState;
     
     void saveGateStateToNVS(int percent);
     int  loadGateStateFromNVS();

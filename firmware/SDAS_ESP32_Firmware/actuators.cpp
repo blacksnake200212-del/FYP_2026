@@ -18,8 +18,12 @@ void ActuatorManager::begin() {
     digitalWrite(PIN_BUZZER, LOW); // Transistor OFF
     
     // 3. Configure ESP32 LEDC PWM for MG996R Servo (GPIO25)
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcAttach(PIN_SERVO, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
+#else
     ledcSetup(SERVO_LEDC_CHANNEL, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
     ledcAttachPin(PIN_SERVO, SERVO_LEDC_CHANNEL);
+#endif
     
     // Initialize to closed (0 degrees)
     setTargetGatePercent(GATE_PCT_CLOSED);
@@ -32,7 +36,11 @@ void ActuatorManager::writeServoMicroseconds(uint16_t us) {
     // 16-bit resolution: 2^16 - 1 = 65,535
     // Duty cycle = (us / 20000.0) * 65535
     uint32_t duty = (uint32_t)(((float)us / 20000.0f) * 65535.0f);
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
+    ledcWrite(PIN_SERVO, duty);
+#else
     ledcWrite(SERVO_LEDC_CHANNEL, duty);
+#endif
 }
 
 void ActuatorManager::setTargetGatePercent(int percent) {

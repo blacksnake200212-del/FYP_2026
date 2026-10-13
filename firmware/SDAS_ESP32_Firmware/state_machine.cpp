@@ -1,7 +1,8 @@
 #include "state_machine.h"
 
 SDASStateMachine::SDASStateMachine()
-    : lastBtnOpenMs(0), lastBtnCloseMs(0), lastBtnStopMs(0) {
+    : lastBtnOpenMs(0), lastBtnCloseMs(0), lastBtnStopMs(0),
+      lastBtnOpenState(HIGH), lastBtnCloseState(HIGH), lastBtnStopState(HIGH) {
     memset(&currentStatus, 0, sizeof(SystemStatus));
     currentStatus.alertState = STATE_NORMAL;
     currentStatus.controlMode = MODE_AUTO;
@@ -36,38 +37,48 @@ void SDASStateMachine::saveGateStateToNVS(int percent) {
 
 void SDASStateMachine::checkPhysicalButtons() {
     unsigned long now = millis();
+    int readStop  = digitalRead(PIN_BTN_STOP);
+    int readOpen  = digitalRead(PIN_BTN_OPEN);
+    int readClose = digitalRead(PIN_BTN_CLOSE);
     
-    // Emergency STOP Button (GPIO22) - Highest priority
-    if (digitalRead(PIN_BTN_STOP) == LOW) {
-        if (now - lastBtnStopMs >= 50) { // 50ms debounce
+    // 1. Emergency STOP Button (GPIO22) - Highest priority edge transition
+    if (lastBtnStopState == HIGH && readStop == LOW) {
+        if (now - lastBtnStopMs >= 50) {
             lastBtnStopMs = now;
-            triggerEmergencyStop();
-            return;
+            if (currentStatus.controlMode == MODE_EMERGENCY) {
+                releaseEmergencyStop();
+                Serial.println("[E-STOP] Released! Resumed autonomous regulation.");
+            } else {
+                triggerEmergencyStop();
+                Serial.println("[E-STOP] Triggered! Sluice gate locked in position.");
+            }
         }
     }
+    lastBtnStopState = readStop;
     
     // If currently in hardware E-STOP, ignore other manual buttons
     if (currentStatus.controlMode == MODE_EMERGENCY) return;
     
-    // Manual OPEN Button (GPIO14)
-    if (digitalRead(PIN_BTN_OPEN) == LOW) {
-        if (now - lastBtnOpenMs >= 150) { // 150ms debounce
-            lastBtnOpenMs = now;
-            int newGate = currentStatus.targetGatePercent + 10;
-            if (newGate > 100) newGate = 100;
-            requestManualGatePercent(newGate, MANUAL_WATCHDOG_TIMEOUT_SEC);
-        }
-    }
-    
-    // Manual CLOSE Button (GPIO26)
-    if (digitalRead(PIN_BTN_CLOSE) == LOW) {
-        if (now - lastBtnCloseMs >= 150) {
+    // 2. Manual CLOSE Button (GPIO26) - Immediate Full Closure (0% / 0 deg)
+    if (lastBtnCloseState == HIGH && readClose == LOW) {
+        if (now - lastBtnCloseMs >= 100) {
             lastBtnCloseMs = now;
-            int newGate = currentStatus.targetGatePercent - 10;
-            if (newGate < 0) newGate = 0;
-            requestManualGatePercent(newGate, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            requestManualGatePercent(GATE_PCT_CLOSED, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[MANUAL] CLOSE Pressed -> Gate set to 0%% (Watchdog: %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
+    lastBtnCloseState = readClose;
+    
+    // 3. Manual OPEN Button (GPIO14) - Immediate Gate Opening (50% or 100%)
+    if (lastBtnOpenState == HIGH && readOpen == LOW) {
+        if (now - lastBtnOpenMs >= 100) {
+            lastBtnOpenMs = now;
+            int targetPct = (currentStatus.targetGatePercent < 50) ? 50 : 100;
+            requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[MANUAL] OPEN Pressed -> Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        }
+    }
+    lastBtnOpenState = readOpen;
 }
 
 void SDASStateMachine::triggerEmergencyStop() {
@@ -190,7 +201,11 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     }
     
     // --- Step 5: Update Visual and Audible Actuators ---
-    actuators.setRGBAlert(currentStatus.alertState);
+    if (sensorData.degraded_mode && currentStatus.alertState != STATE_DANGER && currentStatus.alertState != STATE_CLEAR_AREA) {
+        actuators.setRGBAlert(STATE_SENSOR_FAULT);
+    } else {
+        actuators.setRGBAlert(currentStatus.alertState);
+    }
     
     if (currentStatus.alertState == STATE_DANGER) {
         actuators.setBuzzerPattern(BUZZER_PULSE_DANGER);
