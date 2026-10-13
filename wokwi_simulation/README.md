@@ -17,9 +17,9 @@ You can run and test the complete audited circuit, sensors, actuators, disaster 
 | **Sluice Gate Servo** | `wokwi-servo` | PWM: **GPIO25** | Simulates MG996R gate arm (0° = 0%, 54° = 30%, 90° = 50%) |
 | **4-Tier Alert RGB LED** | `wokwi-rgb-led` (Common Anode) | R: **GPIO32**, G: **GPIO33**, B: **GPIO13** | Visual alert indicator (Green, Yellow, Orange, Red, Magenta) |
 | **Audio Alarm / Siren** | `wokwi-buzzer` | Signal: **GPIO27** | Audible alarm with 4 distinct cadences driven via BC547 driver |
-| **Manual OPEN Button** | `wokwi-pushbutton` (Green) | Signal: **GPIO14** $\rightarrow$ GND | Steps gate open (+10%) and switches to MANUAL mode |
-| **Manual CLOSE Button**| `wokwi-pushbutton` (Grey) | Signal: **GPIO26** $\rightarrow$ GND | Steps gate closed (-10%) and switches to MANUAL mode |
-| **Emergency STOP Button**| `wokwi-pushbutton` (Red) | Signal: **GPIO22** $\rightarrow$ GND | Hardware E-STOP button (locks gate instantly) |
+| **Manual OPEN Button** | `wokwi-pushbutton` (Green) | Signal: **GPIO14** $\rightarrow$ GND | Fully opens gate (100% / 180°) and activates MANUAL mode [Key: O] |
+| **Manual CLOSE Button**| `wokwi-pushbutton` (Grey) | Signal: **GPIO26** $\rightarrow$ GND | Fully closes gate (0% / 0°) and activates MANUAL mode [Key: C] |
+| **Emergency STOP Button**| `wokwi-pushbutton` (Red) | Signal: **GPIO22** $\rightarrow$ GND | Freezes gate position & triggers siren alarm [Key: S] |
 | **Virtual Wi-Fi** | `Wokwi-GUEST` | Internal | Connects to live Render ML Cloud API |
 
 ---
@@ -111,10 +111,11 @@ While the simulation is running, you can click on any component to adjust its va
 
 ### Scenario 7: Manual Override & Safety Watchdog
 - **How to test:**
-  1. Click the **green OPEN button** (GPIO14) $\rightarrow$ Gate steps open by +10%, switches mode from `AUTO` to `MANUAL`.
-  2. Click the **grey CLOSE button** (GPIO26) $\rightarrow$ Gate steps closed by -10%.
-  3. Leave the buttons untouched for **30 seconds** $\rightarrow$ Safety watchdog times out and automatically reverts the dam back to autonomous `AUTO` mode!
-  4. Click the **red E-STOP button** (GPIO22) $\rightarrow$ Gate locks instantly and continuous siren triggers.
+  1. Click the **green OPEN button** (GPIO14 or press keyboard key **`O`**) $\rightarrow$ Sluice gate rotates to **FULL OPEN (100% / 180°)**, switches from `AUTO` to `MANUAL` mode.
+  2. Click the **grey CLOSE button** (GPIO26 or press keyboard key **`C`**) $\rightarrow$ Sluice gate rotates to **FULL CLOSE (0% / 0°)**.
+  3. Click the **red E-STOP button** (GPIO22 or press keyboard key **`S`**) $\rightarrow$ Sluice gate locks instantly in place and continuous emergency siren sounds. Press **`S`** again to safely release E-STOP.
+  4. Leave the dam untouched for **60 seconds** $\rightarrow$ Watchdog safely expires and restores autonomous regulation (`MODE_AUTO`), setting the gate to match current water levels.
+  5. **Serial Monitor Console:** You can also type `OPEN`, `CLOSE`, `30`, `50`, `100`, `AUTO`, or `STOP` into the Serial Monitor for instant testing!
 
 ### Scenario 8: Live Render AI Backend Sync
 - **How to test:** Watch the Serial Monitor every 10 seconds.

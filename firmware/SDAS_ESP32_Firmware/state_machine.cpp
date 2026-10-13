@@ -69,13 +69,12 @@ void SDASStateMachine::checkPhysicalButtons() {
     }
     lastBtnCloseState = readClose;
     
-    // 3. Manual OPEN Button (GPIO14) - Immediate Gate Opening (50% or 100%)
+    // 3. Manual OPEN Button (GPIO14) - Immediate Full Opening (100% / 180 deg)
     if (lastBtnOpenState == HIGH && readOpen == LOW) {
         if (now - lastBtnOpenMs >= 100) {
             lastBtnOpenMs = now;
-            int targetPct = (currentStatus.targetGatePercent < 50) ? 50 : 100;
-            requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
-            Serial.printf("[MANUAL] OPEN Pressed -> Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            requestManualGatePercent(GATE_PCT_FULL_EMERGENCY, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[MANUAL] OPEN Pressed -> Sluice Gate FULLY OPENED (100%% / 180 deg) (Watchdog: %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnOpenState = readOpen;

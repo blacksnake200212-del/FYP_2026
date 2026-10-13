@@ -65,8 +65,8 @@ const int GATE_PCT_CLEAR_AREA      = 30;   // 30% release (54 deg)
 const int GATE_PCT_DANGER          = 50;   // 50% emergency release (90 deg)
 const int GATE_PCT_FULL_OPEN       = 100;  // 100% full flush (180 deg)
 
-// Watchdog Timeout (reverts to AUTO after 30s in simulation)
-const unsigned long MANUAL_WATCHDOG_MS = 30000;
+// Watchdog Timeout (reverts to AUTO after 60s in simulation)
+const unsigned long MANUAL_WATCHDOG_MS = 60000;
 
 // ----------------------------------------------------------------------------
 // ENUMS & STATE STRUCTURES
@@ -254,6 +254,31 @@ void broadcastAlertSms(AlertState state, float levelPct) {
 // ----------------------------------------------------------------------------
 // DISASTER FINITE STATE MACHINE (FSM) WITH 3% HYSTERESIS
 // ----------------------------------------------------------------------------
+void applyAutoGateForState(AlertState state) {
+    switch (state) {
+        case STATE_NORMAL:
+            applyGatePosition(GATE_PCT_CLOSED); // 0%
+            currentBuzzerCadence = BUZZ_OFF;
+            break;
+        case STATE_PRE_WARNING:
+            applyGatePosition(GATE_PCT_CLOSED); // 0% - conserve water
+            currentBuzzerCadence = BUZZ_CHIRP;
+            break;
+        case STATE_CLEAR_AREA:
+            applyGatePosition(GATE_PCT_CLEAR_AREA); // 30% release (54 deg)
+            currentBuzzerCadence = BUZZ_PULSE;
+            break;
+        case STATE_DANGER:
+            applyGatePosition(GATE_PCT_DANGER); // 50% emergency release (90 deg)
+            currentBuzzerCadence = BUZZ_SIREN;
+            break;
+        case STATE_SENSOR_FAULT:
+            applyGatePosition(GATE_PCT_CLOSED);
+            currentBuzzerCadence = BUZZ_PULSE;
+            break;
+    }
+}
+
 void evaluateStateMachine(float levelPct) {
     if (currentControlMode == MODE_EMERGENCY || currentControlMode == MODE_MANUAL) {
         // Operator manual control takes precedence!
@@ -318,40 +343,27 @@ void evaluateStateMachine(float levelPct) {
         currentAlertState  = nextState;
 
         if (currentControlMode == MODE_AUTO) {
+            applyAutoGateForState(currentAlertState);
             switch (currentAlertState) {
                 case STATE_NORMAL:
-                    applyGatePosition(GATE_PCT_CLOSED);
-                    currentBuzzerCadence = BUZZ_OFF;
                     Serial.println(">>> GATE CLOSED (0% - Normal Level) <<<");
                     break;
-
                 case STATE_PRE_WARNING:
-                    applyGatePosition(GATE_PCT_CLOSED); // Conserve water
-                    currentBuzzerCadence = BUZZ_CHIRP;
                     broadcastAlertSms(STATE_PRE_WARNING, levelPct);
                     Serial.println(">>> PRE-WARNING ACTIVE: Gate Held Closed (0%) to Conserve Water <<<");
                     break;
-
                 case STATE_CLEAR_AREA:
-                    applyGatePosition(GATE_PCT_CLEAR_AREA); // 30% gate release
-                    currentBuzzerCadence = BUZZ_PULSE;
                     Serial.println("\n*******************************************************");
                     Serial.println(">>> GATE OPENED TO 30% (CLEAR AREA WARNING - 54 deg) <<<");
                     Serial.println("*******************************************************");
                     break;
-
                 case STATE_DANGER:
-                    applyGatePosition(GATE_PCT_DANGER); // 50% emergency release
-                    currentBuzzerCadence = BUZZ_SIREN;
                     broadcastAlertSms(STATE_DANGER, levelPct);
                     Serial.println("\n*******************************************************");
                     Serial.println(">>> CRITICAL DANGER! GATE OPENED TO 50% (90 deg) <<<");
                     Serial.println("*******************************************************");
                     break;
-
                 case STATE_SENSOR_FAULT:
-                    applyGatePosition(GATE_PCT_CLOSED);
-                    currentBuzzerCadence = BUZZ_PULSE;
                     break;
             }
         }
@@ -424,9 +436,9 @@ void handleButtons() {
     if (readStop == LOW && prevStop == HIGH) {
         if (currentControlMode == MODE_EMERGENCY) {
             currentControlMode = MODE_AUTO;
-            currentBuzzerCadence = BUZZ_OFF;
+            applyAutoGateForState(currentAlertState);
+            updateAlertLED(currentAlertState);
             Serial.println("\n>>> [E-STOP CLEARED] Returning to Autonomous Control (AUTO) <<<");
-            evaluateStateMachine(currentWaterLevelPct);
         } else {
             currentControlMode = MODE_EMERGENCY;
             currentBuzzerCadence = BUZZ_SIREN;
@@ -436,39 +448,46 @@ void handleButtons() {
         }
     }
 
-    // 2. Manual CLOSE Button (GPIO26 / Key: C) -> Immediate Full Gate Closure
-    if (readClose == LOW && prevClose == HIGH) {
-        currentControlMode = MODE_MANUAL;
-        manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
-        applyGatePosition(0); // Immediately set servo to 0 deg (0%)
-        Serial.println("\n=======================================================");
-        Serial.println(">>> [MANUAL] CLOSE BUTTON PRESSED -> Sluice Gate FULLY CLOSED (0% / 0 deg) <<<");
-        Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
-        Serial.println("=======================================================");
-    }
+    // Safety Interlock: Block manual actions if Emergency Stop is active
+    if (currentControlMode == MODE_EMERGENCY) {
+        if ((readOpen == LOW && prevOpen == HIGH) || (readClose == LOW && prevClose == HIGH)) {
+            Serial.println("\n[MANUAL LOCKED] E-STOP is active! Click Red Button or press 'S' to release E-STOP first.");
+        }
+    } else {
+        // 2. Manual CLOSE Button (GPIO26 / Key: C) -> Immediate Full Gate Closure (0% / 0 deg)
+        if (readClose == LOW && prevClose == HIGH) {
+            currentControlMode = MODE_MANUAL;
+            manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+            applyGatePosition(GATE_PCT_CLOSED); // 0% / 0 deg
+            Serial.println("\n=======================================================");
+            Serial.println(">>> [MANUAL] CLOSE BUTTON PRESSED -> Sluice Gate FULLY CLOSED (0% / 0 deg) <<<");
+            Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+            Serial.println("=======================================================");
+        }
 
-    // 3. Manual OPEN Button (GPIO14 / Key: O) -> Immediate Gate Opening (50% or 100%)
-    if (readOpen == LOW && prevOpen == HIGH) {
-        currentControlMode = MODE_MANUAL;
-        manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
-        int targetPct = (actualGatePercent < 50) ? 50 : 100;
-        applyGatePosition(targetPct);
-        Serial.println("\n=======================================================");
-        Serial.printf(">>> [MANUAL] OPEN BUTTON PRESSED -> Sluice Gate OPENED TO %d%% (%d deg) <<<\n", targetPct, (int)currentServoAngle);
-        Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
-        Serial.println("=======================================================");
+        // 3. Manual OPEN Button (GPIO14 / Key: O) -> Immediate Full Gate Opening (100% / 180 deg)
+        if (readOpen == LOW && prevOpen == HIGH) {
+            currentControlMode = MODE_MANUAL;
+            manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+            applyGatePosition(GATE_PCT_FULL_OPEN); // 100% / 180 deg
+            Serial.println("\n=======================================================");
+            Serial.println(">>> [MANUAL] OPEN BUTTON PRESSED -> Sluice Gate FULLY OPENED (100% / 180 deg) <<<");
+            Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+            Serial.println("=======================================================");
+        }
     }
 
     prevStop  = readStop;
     prevOpen  = readOpen;
     prevClose = readClose;
 
-    // 4. Manual Mode Safety Watchdog - Revert to AUTO after 30s
+    // 4. Manual Mode Safety Watchdog - Revert to AUTO after 60s
     if (currentControlMode == MODE_MANUAL) {
         if (millis() > manualModeTimeoutMs) {
-            Serial.println("\n[WATCHDOG] Manual override timed out (30s). Reverting to autonomous regulation.");
+            Serial.printf("\n[WATCHDOG] Manual override timed out (%lu s). Reverting to autonomous regulation.\n", MANUAL_WATCHDOG_MS / 1000);
             currentControlMode = MODE_AUTO;
-            evaluateStateMachine(currentWaterLevelPct);
+            applyAutoGateForState(currentAlertState);
+            updateAlertLED(currentAlertState);
         }
     }
 }
@@ -515,10 +534,11 @@ void setup() {
     pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
     pinMode(PIN_BTN_STOP,  INPUT_PULLUP);
 
-    Serial.println("\n[MANUAL BUTTON CONTROLS READY]");
-    Serial.printf("  > OPEN  [GPIO%d] : Click Green Button or press 'O' key on keyboard\n", PIN_BTN_OPEN);
-    Serial.printf("  > CLOSE [GPIO%d] : Click Grey Button  or press 'C' key on keyboard\n", PIN_BTN_CLOSE);
-    Serial.printf("  > E-STOP[GPIO%d] : Click Red Button   or press 'S' key on keyboard\n\n", PIN_BTN_STOP);
+    Serial.println("\n[MANUAL CONTROLS & OPERATOR OVERRIDE READY]");
+    Serial.printf("  > OPEN  [GPIO%d] : Click Green Button or Press 'O' Key -> FULL OPEN (100%% / 180 deg)\n", PIN_BTN_OPEN);
+    Serial.printf("  > CLOSE [GPIO%d] : Click Grey Button  or Press 'C' Key -> FULL CLOSE (0%% / 0 deg)\n", PIN_BTN_CLOSE);
+    Serial.printf("  > E-STOP[GPIO%d] : Click Red Button   or Press 'S' Key -> FREEZE GATE & EMERGENCY SIREN\n", PIN_BTN_STOP);
+    Serial.println("  > SERIAL COMMANDS: Type OPEN, CLOSE, 30, 50, 100, AUTO, or STOP in Serial Monitor\n");
 
     // 4. Connect to Wokwi Simulated Wi-Fi (Non-blocking)
     Serial.println("[WIFI] Connecting to Wokwi Virtual Gateway in background...");
@@ -612,5 +632,44 @@ void loop() {
     if (now - lastTelemetrySyncMs >= 10000) {
         lastTelemetrySyncMs = now;
         syncCloudTelemetry();
+    }
+
+    // 4. Interactive Serial Console Commands
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        cmd.toUpperCase();
+        if (cmd.length() > 0) {
+            if (cmd == "OPEN" || cmd == "100") {
+                currentControlMode = MODE_MANUAL;
+                manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+                applyGatePosition(GATE_PCT_FULL_OPEN);
+                Serial.println("\n>>> [SERIAL COMMAND] Sluice Gate FULLY OPENED (100% / 180 deg) <<<");
+            } else if (cmd == "CLOSE" || cmd == "0") {
+                currentControlMode = MODE_MANUAL;
+                manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+                applyGatePosition(GATE_PCT_CLOSED);
+                Serial.println("\n>>> [SERIAL COMMAND] Sluice Gate FULLY CLOSED (0% / 0 deg) <<<");
+            } else if (cmd == "50") {
+                currentControlMode = MODE_MANUAL;
+                manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+                applyGatePosition(GATE_PCT_DANGER);
+                Serial.println("\n>>> [SERIAL COMMAND] Sluice Gate Set to 50% (90 deg) <<<");
+            } else if (cmd == "30") {
+                currentControlMode = MODE_MANUAL;
+                manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+                applyGatePosition(GATE_PCT_CLEAR_AREA);
+                Serial.println("\n>>> [SERIAL COMMAND] Sluice Gate Set to 30% (54 deg) <<<");
+            } else if (cmd == "AUTO") {
+                currentControlMode = MODE_AUTO;
+                applyAutoGateForState(currentAlertState);
+                updateAlertLED(currentAlertState);
+                Serial.println("\n>>> [SERIAL COMMAND] Reverted to Autonomous Control (AUTO) <<<");
+            } else if (cmd == "STOP" || cmd == "ESTOP") {
+                currentControlMode = MODE_EMERGENCY;
+                currentBuzzerCadence = BUZZ_SIREN;
+                Serial.println("\n>>> [SERIAL COMMAND] EMERGENCY STOP Activated! Gate Frozen. <<<");
+            }
+        }
     }
 }
