@@ -51,21 +51,21 @@
       "id": "btn_open",
       "top": 200,
       "left": -240,
-      "attrs": { "color": "green", "label": "OPEN" }
+      "attrs": { "color": "green", "label": "OPEN [Key: O]", "key": "o", "bounce": "0" }
     },
     {
       "type": "wokwi-pushbutton",
       "id": "btn_close",
       "top": 270,
       "left": -240,
-      "attrs": { "color": "grey", "label": "CLOSE" }
+      "attrs": { "color": "grey", "label": "CLOSE [Key: C]", "key": "c", "bounce": "0" }
     },
     {
       "type": "wokwi-pushbutton",
       "id": "btn_stop",
       "top": 340,
       "left": -240,
-      "attrs": { "color": "red", "label": "E-STOP" }
+      "attrs": { "color": "red", "label": "E-STOP [Key: S]", "key": "s", "bounce": "0" }
     }
   ],
   "connections": [

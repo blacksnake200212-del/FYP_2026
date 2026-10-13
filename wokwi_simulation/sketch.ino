@@ -412,68 +412,60 @@ void syncCloudTelemetry() {
 // MANUAL BUTTONS & SAFETY WATCHDOG
 // ----------------------------------------------------------------------------
 void handleButtons() {
-    unsigned long now = millis();
-    static int lastStopState  = HIGH;
-    static int lastOpenState  = HIGH;
-    static int lastCloseState = HIGH;
-    static unsigned long lastBtnTime = 0;
-
     int readStop  = digitalRead(PIN_BTN_STOP);
     int readOpen  = digitalRead(PIN_BTN_OPEN);
     int readClose = digitalRead(PIN_BTN_CLOSE);
 
-    // Debounce check
-    if (now - lastBtnTime >= 50) {
-        // 1. Emergency STOP (GPIO22)
-        if (lastStopState == HIGH && readStop == LOW) {
-            lastBtnTime = now;
-            if (currentControlMode == MODE_EMERGENCY) {
-                currentControlMode = MODE_AUTO;
-                currentBuzzerCadence = BUZZ_OFF;
-                Serial.println("\n[EMERGENCY CLEARED] Returning to Autonomous Control.");
-                evaluateStateMachine(currentWaterLevelPct);
-            } else {
-                currentControlMode = MODE_EMERGENCY;
-                currentBuzzerCadence = BUZZ_SIREN;
-                Serial.println("\n*******************************************************");
-                Serial.println(">>> [CRITICAL] EMERGENCY STOP PRESSED! Gate Locked in Position. <<<");
-                Serial.println("*******************************************************");
-            }
-        }
+    static int prevStop  = HIGH;
+    static int prevOpen  = HIGH;
+    static int prevClose = HIGH;
 
-        // 2. Manual CLOSE Button (GPIO26) - Full Immediate Gate Closure (0% / 0 deg)
-        if (lastCloseState == HIGH && readClose == LOW) {
-            lastBtnTime = now;
-            currentControlMode = MODE_MANUAL;
-            manualModeTimeoutMs = now + MANUAL_WATCHDOG_MS;
-            applyGatePosition(0); // Immediately close to 0%!
-            Serial.println("\n=======================================================");
-            Serial.println(">>> [MANUAL] CLOSE BUTTON PRESSED -> Sluice Gate FULLY CLOSED (0% / 0 deg) <<<");
-            Serial.printf("     Manual mode active. Auto-watchdog reverts to AUTO in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
-            Serial.println("=======================================================");
+    // 1. Emergency STOP (GPIO22 / Key: S)
+    if (readStop == LOW && prevStop == HIGH) {
+        if (currentControlMode == MODE_EMERGENCY) {
+            currentControlMode = MODE_AUTO;
+            currentBuzzerCadence = BUZZ_OFF;
+            Serial.println("\n>>> [E-STOP CLEARED] Returning to Autonomous Control (AUTO) <<<");
+            evaluateStateMachine(currentWaterLevelPct);
+        } else {
+            currentControlMode = MODE_EMERGENCY;
+            currentBuzzerCadence = BUZZ_SIREN;
+            Serial.println("\n*******************************************************");
+            Serial.println(">>> [CRITICAL] EMERGENCY STOP PRESSED! Gate Frozen in Position <<<");
+            Serial.println("*******************************************************");
         }
-
-        // 3. Manual OPEN Button (GPIO14) - Immediate Gate Opening (50% / 90 deg or 100%)
-        if (lastOpenState == HIGH && readOpen == LOW) {
-            lastBtnTime = now;
-            currentControlMode = MODE_MANUAL;
-            manualModeTimeoutMs = now + MANUAL_WATCHDOG_MS;
-            int targetPct = (actualGatePercent < 50) ? 50 : 100;
-            applyGatePosition(targetPct);
-            Serial.println("\n=======================================================");
-            Serial.printf(">>> [MANUAL] OPEN BUTTON PRESSED -> Sluice Gate OPENED TO %d%% (%d deg) <<<\n", targetPct, (int)currentServoAngle);
-            Serial.printf("     Manual mode active. Auto-watchdog reverts to AUTO in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
-            Serial.println("=======================================================");
-        }
-
-        lastStopState  = readStop;
-        lastOpenState  = readOpen;
-        lastCloseState = readClose;
     }
+
+    // 2. Manual CLOSE Button (GPIO26 / Key: C) -> Immediate Full Gate Closure
+    if (readClose == LOW && prevClose == HIGH) {
+        currentControlMode = MODE_MANUAL;
+        manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+        applyGatePosition(0); // Immediately set servo to 0 deg (0%)
+        Serial.println("\n=======================================================");
+        Serial.println(">>> [MANUAL] CLOSE BUTTON PRESSED -> Sluice Gate FULLY CLOSED (0% / 0 deg) <<<");
+        Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+        Serial.println("=======================================================");
+    }
+
+    // 3. Manual OPEN Button (GPIO14 / Key: O) -> Immediate Gate Opening (50% or 100%)
+    if (readOpen == LOW && prevOpen == HIGH) {
+        currentControlMode = MODE_MANUAL;
+        manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
+        int targetPct = (actualGatePercent < 50) ? 50 : 100;
+        applyGatePosition(targetPct);
+        Serial.println("\n=======================================================");
+        Serial.printf(">>> [MANUAL] OPEN BUTTON PRESSED -> Sluice Gate OPENED TO %d%% (%d deg) <<<\n", targetPct, (int)currentServoAngle);
+        Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+        Serial.println("=======================================================");
+    }
+
+    prevStop  = readStop;
+    prevOpen  = readOpen;
+    prevClose = readClose;
 
     // 4. Manual Mode Safety Watchdog - Revert to AUTO after 30s
     if (currentControlMode == MODE_MANUAL) {
-        if (now > manualModeTimeoutMs) {
+        if (millis() > manualModeTimeoutMs) {
             Serial.println("\n[WATCHDOG] Manual override timed out (30s). Reverting to autonomous regulation.");
             currentControlMode = MODE_AUTO;
             evaluateStateMachine(currentWaterLevelPct);
@@ -523,19 +515,14 @@ void setup() {
     pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
     pinMode(PIN_BTN_STOP,  INPUT_PULLUP);
 
-    // 4. Connect to Wokwi Simulated Wi-Fi
-    Serial.print("[WIFI] Connecting to Wokwi Virtual Gateway (Wokwi-GUEST)...");
+    Serial.println("\n[MANUAL BUTTON CONTROLS READY]");
+    Serial.printf("  > OPEN  [GPIO%d] : Click Green Button or press 'O' key on keyboard\n", PIN_BTN_OPEN);
+    Serial.printf("  > CLOSE [GPIO%d] : Click Grey Button  or press 'C' key on keyboard\n", PIN_BTN_CLOSE);
+    Serial.printf("  > E-STOP[GPIO%d] : Click Red Button   or press 'S' key on keyboard\n\n", PIN_BTN_STOP);
+
+    // 4. Connect to Wokwi Simulated Wi-Fi (Non-blocking)
+    Serial.println("[WIFI] Connecting to Wokwi Virtual Gateway in background...");
     WiFi.begin("Wokwi-GUEST", "");
-    unsigned long startWifi = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - startWifi < 4000) {
-        delay(200);
-        Serial.print(".");
-    }
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("\n[WIFI] Connected! Simulated IP: %s\n", WiFi.localIP().toString().c_str());
-    } else {
-        Serial.println("\n[WIFI] Running in offline telemetry mode.");
-    }
 
     Serial.println("[SDAS] Hardware initialization completed.\n");
 }
