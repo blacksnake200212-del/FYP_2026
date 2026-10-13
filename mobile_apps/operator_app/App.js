@@ -216,8 +216,8 @@ export default function OperatorApp() {
           <Text style={styles.cardSub}>Commands take effect within 1.2s. Enforces safety limits.</Text>
 
           <View style={styles.buttonGrid}>
-            <TouchableOpacity style={[styles.btn, styles.btnBlue]} onPress={() => dispatchCommand('OPEN_30', 30)}>
-              <Text style={styles.btnText}>OPEN 30% (Clear)</Text>
+            <TouchableOpacity style={[styles.btn, styles.btnBlue]} onPress={() => dispatchCommand('OPEN_20', 20)}>
+              <Text style={styles.btnText}>OPEN 20% (Advisory)</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.btn, styles.btnOrange]} onPress={() => dispatchCommand('OPEN_50', 50)}>
