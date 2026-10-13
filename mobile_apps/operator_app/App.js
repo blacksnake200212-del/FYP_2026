@@ -16,6 +16,7 @@ import { checkAppVersion, APP_VERSION } from './src/updateService';
 // Screens
 import LoginScreen from './src/components/LoginScreen';
 import DashboardScreen from './src/components/DashboardScreen';
+import HistoryInsightsScreen from './src/components/HistoryInsightsScreen';
 import GateControlScreen from './src/components/GateControlScreen';
 import AlertsSMSScreen from './src/components/AlertsSMSScreen';
 import ContactsScreen from './src/components/ContactsScreen';
@@ -133,6 +134,9 @@ export default function OperatorApp() {
         {activeTab === 'DASHBOARD' && (
           <DashboardScreen operatorUser={currentUser} />
         )}
+        {activeTab === 'ANALYTICS' && (
+          <HistoryInsightsScreen operatorUser={currentUser} />
+        )}
         {activeTab === 'GATE_CONTROL' && (
           <GateControlScreen operatorUser={currentUser} />
         )}
@@ -151,7 +155,7 @@ export default function OperatorApp() {
         )}
       </View>
 
-      {/* Bottom Navigation Bar */}
+      {/* Bottom Navigation Bar (6 Compact Industrial Tabs) */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.navTab, activeTab === 'DASHBOARD' && styles.navTabActive]}
@@ -159,7 +163,17 @@ export default function OperatorApp() {
         >
           <Text style={styles.tabIcon}>📊</Text>
           <Text style={[styles.tabLabel, activeTab === 'DASHBOARD' && styles.tabLabelActive]}>
-            Telemetry
+            Live
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.navTab, activeTab === 'ANALYTICS' && styles.navTabActive]}
+          onPress={() => setActiveTab('ANALYTICS')}
+        >
+          <Text style={styles.tabIcon}>📈</Text>
+          <Text style={[styles.tabLabel, activeTab === 'ANALYTICS' && styles.tabLabelActive]}>
+            History
           </Text>
         </TouchableOpacity>
 
@@ -169,7 +183,7 @@ export default function OperatorApp() {
         >
           <Text style={styles.tabIcon}>🕹️</Text>
           <Text style={[styles.tabLabel, activeTab === 'GATE_CONTROL' && styles.tabLabelActive]}>
-            Gate 0/20/50
+            Gate
           </Text>
         </TouchableOpacity>
 
@@ -179,7 +193,7 @@ export default function OperatorApp() {
         >
           <Text style={styles.tabIcon}>📡</Text>
           <Text style={[styles.tabLabel, activeTab === 'ALERTS_SMS' && styles.tabLabelActive]}>
-            SMS Alerts
+            Alerts
           </Text>
         </TouchableOpacity>
 
@@ -189,7 +203,7 @@ export default function OperatorApp() {
         >
           <Text style={styles.tabIcon}>👥</Text>
           <Text style={[styles.tabLabel, activeTab === 'CONTACTS' && styles.tabLabelActive]}>
-            Directory
+            Contacts
           </Text>
         </TouchableOpacity>
 
@@ -277,7 +291,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
     paddingVertical: 8,
-    paddingHorizontal: 4
+    paddingHorizontal: 2
   },
   navTab: {
     flex: 1,
@@ -289,11 +303,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1E293B'
   },
   tabIcon: {
-    fontSize: 16,
+    fontSize: 15,
     marginBottom: 2
   },
   tabLabel: {
-    fontSize: 10,
+    fontSize: 9.5,
     color: '#64748B',
     fontWeight: '700'
   },
