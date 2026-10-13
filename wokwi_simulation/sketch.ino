@@ -255,9 +255,8 @@ void broadcastAlertSms(AlertState state, float levelPct) {
 // DISASTER FINITE STATE MACHINE (FSM) WITH 3% HYSTERESIS
 // ----------------------------------------------------------------------------
 void evaluateStateMachine(float levelPct) {
-    if (currentControlMode == MODE_EMERGENCY) {
-        currentBuzzerCadence = BUZZ_SIREN;
-        updateAlertLED(STATE_DANGER);
+    if (currentControlMode == MODE_EMERGENCY || currentControlMode == MODE_MANUAL) {
+        // Operator manual control takes precedence!
         return;
     }
 
@@ -413,48 +412,68 @@ void syncCloudTelemetry() {
 // MANUAL BUTTONS & SAFETY WATCHDOG
 // ----------------------------------------------------------------------------
 void handleButtons() {
-    // 1. Emergency STOP (GPIO22)
-    if (digitalRead(PIN_BTN_STOP) == LOW) {
-        delay(30); // Software debounce
-        if (digitalRead(PIN_BTN_STOP) == LOW) {
-            currentControlMode = MODE_EMERGENCY;
-            Serial.println("\n[CRITICAL] EMERGENCY STOP BUTTON PRESSED! Gate Locked in Position.");
-            currentBuzzerCadence = BUZZ_SIREN;
-            return;
+    unsigned long now = millis();
+    static int lastStopState  = HIGH;
+    static int lastOpenState  = HIGH;
+    static int lastCloseState = HIGH;
+    static unsigned long lastBtnTime = 0;
+
+    int readStop  = digitalRead(PIN_BTN_STOP);
+    int readOpen  = digitalRead(PIN_BTN_OPEN);
+    int readClose = digitalRead(PIN_BTN_CLOSE);
+
+    // Debounce check
+    if (now - lastBtnTime >= 50) {
+        // 1. Emergency STOP (GPIO22)
+        if (lastStopState == HIGH && readStop == LOW) {
+            lastBtnTime = now;
+            if (currentControlMode == MODE_EMERGENCY) {
+                currentControlMode = MODE_AUTO;
+                currentBuzzerCadence = BUZZ_OFF;
+                Serial.println("\n[EMERGENCY CLEARED] Returning to Autonomous Control.");
+                evaluateStateMachine(currentWaterLevelPct);
+            } else {
+                currentControlMode = MODE_EMERGENCY;
+                currentBuzzerCadence = BUZZ_SIREN;
+                Serial.println("\n*******************************************************");
+                Serial.println(">>> [CRITICAL] EMERGENCY STOP PRESSED! Gate Locked in Position. <<<");
+                Serial.println("*******************************************************");
+            }
         }
-    }
 
-    if (currentControlMode == MODE_EMERGENCY) return;
-
-    // 2. Manual OPEN Button (GPIO14)
-    if (digitalRead(PIN_BTN_OPEN) == LOW) {
-        delay(30);
-        if (digitalRead(PIN_BTN_OPEN) == LOW) {
+        // 2. Manual CLOSE Button (GPIO26) - Full Immediate Gate Closure (0% / 0 deg)
+        if (lastCloseState == HIGH && readClose == LOW) {
+            lastBtnTime = now;
             currentControlMode = MODE_MANUAL;
-            manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
-            int newGate = min(100, actualGatePercent + 10);
-            applyGatePosition(newGate);
-            Serial.printf("[MANUAL] OPEN Pressed -> Target Gate: %d%% (Servo: %d deg)\n", actualGatePercent, (int)currentServoAngle);
-            delay(150);
+            manualModeTimeoutMs = now + MANUAL_WATCHDOG_MS;
+            applyGatePosition(0); // Immediately close to 0%!
+            Serial.println("\n=======================================================");
+            Serial.println(">>> [MANUAL] CLOSE BUTTON PRESSED -> Sluice Gate FULLY CLOSED (0% / 0 deg) <<<");
+            Serial.printf("     Manual mode active. Auto-watchdog reverts to AUTO in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+            Serial.println("=======================================================");
         }
-    }
 
-    // 3. Manual CLOSE Button (GPIO26)
-    if (digitalRead(PIN_BTN_CLOSE) == LOW) {
-        delay(30);
-        if (digitalRead(PIN_BTN_CLOSE) == LOW) {
+        // 3. Manual OPEN Button (GPIO14) - Immediate Gate Opening (50% / 90 deg or 100%)
+        if (lastOpenState == HIGH && readOpen == LOW) {
+            lastBtnTime = now;
             currentControlMode = MODE_MANUAL;
-            manualModeTimeoutMs = millis() + MANUAL_WATCHDOG_MS;
-            int newGate = max(0, actualGatePercent - 10);
-            applyGatePosition(newGate);
-            Serial.printf("[MANUAL] CLOSE Pressed -> Target Gate: %d%% (Servo: %d deg)\n", actualGatePercent, (int)currentServoAngle);
-            delay(150);
+            manualModeTimeoutMs = now + MANUAL_WATCHDOG_MS;
+            int targetPct = (actualGatePercent < 50) ? 50 : 100;
+            applyGatePosition(targetPct);
+            Serial.println("\n=======================================================");
+            Serial.printf(">>> [MANUAL] OPEN BUTTON PRESSED -> Sluice Gate OPENED TO %d%% (%d deg) <<<\n", targetPct, (int)currentServoAngle);
+            Serial.printf("     Manual mode active. Auto-watchdog reverts to AUTO in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+            Serial.println("=======================================================");
         }
+
+        lastStopState  = readStop;
+        lastOpenState  = readOpen;
+        lastCloseState = readClose;
     }
 
-    // 4. Manual Mode Safety Watchdog
+    // 4. Manual Mode Safety Watchdog - Revert to AUTO after 30s
     if (currentControlMode == MODE_MANUAL) {
-        if (millis() > manualModeTimeoutMs) {
+        if (now > manualModeTimeoutMs) {
             Serial.println("\n[WATCHDOG] Manual override timed out (30s). Reverting to autonomous regulation.");
             currentControlMode = MODE_AUTO;
             evaluateStateMachine(currentWaterLevelPct);
