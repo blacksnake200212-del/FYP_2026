@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 
 import { translations } from './src/i18n';
-import { SUPABASE_CONFIG } from './src/supabaseClient';
+import { SUPABASE_CONFIG, supabase } from './src/supabaseClient';
 import {
   detectUserLocation,
   fetchWeatherForLocation,
@@ -22,6 +22,7 @@ import {
 } from './src/locationService';
 import UpdateBanner from './src/UpdateBanner';
 import { checkAppVersion, APP_VERSION } from './src/updateService';
+import CircularGauge from './src/CircularGauge';
 
 // SDAS PUBLIC FLOOD ADVISORY PORTAL (React Native / Expo)
 // Trilingual (EN/SI/TA), Auto-Location Detection, Hyperlocal Weather, and Animated Alerts
@@ -215,7 +216,7 @@ export default function PublicApp() {
     setIsRefreshing(false);
   };
 
-  // On App Launch: Check for Updates & Initialize Services
+  // On App Launch: Realtime Subscription, REST Fallback, & Staleness Engine
   useEffect(() => {
     initLocationAndWeather();
     fetchLiveDamStatus();
@@ -223,21 +224,53 @@ export default function PublicApp() {
     // Version Check
     checkAppVersion('public_app', APP_VERSION).then(setUpdateInfo);
 
-    // 15-second background sync interval
+    // Supabase Realtime Subscription: Instantly receive new telemetry inserts
+    const channel = supabase
+      .channel('sdas_public_readings_stream')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'readings' },
+        (payload) => {
+          if (payload.new) {
+            const row = payload.new;
+            setWaterLevel(Number(row.level_pct) || 0);
+            setGatePercent(Number(row.gate_percent) || 0);
+
+            const stateMap = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER'];
+            setAlertKey(stateMap[row.alert_state] || 'NORMAL');
+
+            const recTime = new Date(row.created_at || Date.now());
+            setLastReadingTimestamp(recTime);
+            setIsDataStale(false);
+            setStaleElapsedSec(0);
+            setLastSyncTime(recTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+            // Refresh AI forecast trend
+            fetchLiveDamStatus();
+          }
+        }
+      )
+      .subscribe();
+
+    // 15-second background sync interval (resilient fallback)
     const syncInterval = setInterval(fetchLiveDamStatus, 15000);
 
-    // 10-second staleness watcher
+    // 5-second staleness watcher (checks if last reading is > 120s old)
     const staleInterval = setInterval(() => {
-      const diffSec = Math.floor((Date.now() - lastReadingTimestamp.getTime()) / 1000);
-      setStaleElapsedSec(diffSec);
-      setIsDataStale(diffSec > 120);
-    }, 10000);
+      setLastReadingTimestamp((prev) => {
+        const diffSec = Math.floor((Date.now() - prev.getTime()) / 1000);
+        setStaleElapsedSec(diffSec);
+        setIsDataStale(diffSec > 120);
+        return prev;
+      });
+    }, 5000);
 
     return () => {
+      supabase.removeChannel(channel);
       clearInterval(syncInterval);
       clearInterval(staleInterval);
     };
-  }, [lastReadingTimestamp]);
+  }, []);
 
   const getTheme = () => {
     switch (alertKey) {
@@ -413,59 +446,65 @@ export default function PublicApp() {
           </View>
         </Animated.View>
 
-        {/* Reservoir Capacity Gauge with Animated Fill */}
-        <View style={styles.card}>
-          <Text style={styles.cardHeader}>{t.currentCapacity}</Text>
-          <View style={styles.rowAlignCenter}>
-            <Text style={styles.metricBig}>{waterLevel.toFixed(1)}%</Text>
-            <Text style={styles.metricUnit}>CAPACITY</Text>
-          </View>
-          <Text style={styles.metricSub}>{t.capacitySubtitle}</Text>
-
-          {/* Animated Gauge Bar */}
-          <View style={styles.gaugeTrack}>
-            <Animated.View
-              style={[
-                styles.gaugeFill,
-                { width: widthInterpolation, backgroundColor: theme.bg }
-              ]}
-            />
-          </View>
-
+        {/* Reservoir Capacity Gauge with SVG Circular Ring & Realtime Indicators */}
+        <View style={[styles.card, isDataStale && styles.staleCardBorder]}>
           <View style={styles.rowBetween}>
-            <Text style={styles.gaugeLegend}>0% (Empty)</Text>
-            <Text style={styles.gaugeLegend}>60% (Pre-Warn)</Text>
-            <Text style={styles.gaugeLegend}>80% (Clear)</Text>
-            <Text style={styles.gaugeLegend}>100% (Full)</Text>
+            <Text style={styles.cardHeader}>{t.currentCapacity}</Text>
+            <View style={[styles.stageBadge, { backgroundColor: theme.bg }]}>
+              <Text style={styles.stageBadgeText}>{theme.icon} {alertKey.replace('_', ' ')}</Text>
+            </View>
+          </View>
+
+          {/* Circular SVG Capacity Gauge */}
+          <CircularGauge
+            percentage={waterLevel}
+            status={alertKey}
+            statusColor={theme.bg}
+            isStale={isDataStale}
+            trend={trend}
+            size={220}
+            strokeWidth={16}
+          />
+
+          <View style={styles.divider} />
+
+          {/* 1-Hour Inflow Forecast Trend Arrow */}
+          <View style={styles.rowBetween}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.trendTitle}>1-Hour Inflow AI Forecast:</Text>
+              <Text style={styles.trendSubtitle}>
+                {trend === 'RISING'
+                  ? 'Surge expected: Upstream catchment inflow rising'
+                  : trend === 'FALLING'
+                  ? 'Receding: Catchment inflow decelerating'
+                  : 'Stable: Minor inflow fluctuation'}
+              </Text>
+            </View>
+            <View style={[styles.trendBadge, {
+              backgroundColor: trend === 'RISING' ? '#7F1D1D' : trend === 'FALLING' ? '#064E3B' : '#1E293B',
+              borderColor: trend === 'RISING' ? '#EF4444' : trend === 'FALLING' ? '#10B981' : '#475569',
+              borderWidth: 1
+            }]}>
+              <Text style={[styles.trendText, {
+                color: trend === 'RISING' ? '#FCA5A5' : trend === 'FALLING' ? '#6EE7B7' : '#CBD5E1'
+              }]}>
+                {trend === 'RISING' ? '↗ RISING' : trend === 'FALLING' ? '↘ FALLING' : '→ STEADY'}
+              </Text>
+            </View>
           </View>
 
           <View style={styles.divider} />
 
+          {/* Sluice Gate Discharge Position */}
           <View style={styles.rowBetween}>
             <Text style={styles.subText}>{t.gateDischarge}:</Text>
             <Text style={[styles.boldText, { color: gatePercent > 0 ? '#FB923C' : '#34D399' }]}>
               {gatePercent === 50
                 ? t.gateOpen50
-                : gatePercent === 30
-                ? t.gateOpen30
+                : gatePercent === 20 || gatePercent === 30
+                ? (gatePercent === 20 ? '20% OPEN (Advisory Release)' : t.gateOpen30)
                 : t.gateClosed}
             </Text>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* 1-Hour Inflow Forecast Trend */}
-          <View style={styles.rowBetween}>
-            <Text style={styles.subText}>1-Hour Inflow Forecast:</Text>
-            <View style={[styles.trendBadge, {
-              backgroundColor: trend === 'RISING' ? '#7F1D1D' : trend === 'FALLING' ? '#064E3B' : '#1E293B'
-            }]}>
-              <Text style={[styles.trendText, {
-                color: trend === 'RISING' ? '#F87171' : trend === 'FALLING' ? '#34D399' : '#94A3B8'
-              }]}>
-                {trend === 'RISING' ? '↗ RISING (+Inflow)' : trend === 'FALLING' ? '↘ FALLING (-Inflow)' : '→ STEADY'}
-              </Text>
-            </View>
           </View>
         </View>
 
@@ -664,6 +703,32 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   subText: { color: '#94A3B8', fontSize: 13 },
   boldText: { fontSize: 13, fontWeight: '700' },
+
+  staleCardBorder: {
+    borderColor: '#F59E0B',
+    borderWidth: 1.5
+  },
+  stageBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  stageBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  trendTitle: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  trendSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 15
+  },
 
   // Weather Tabs
   weatherTabRow: { flexDirection: 'row', backgroundColor: '#0B1327', borderRadius: 8, padding: 3, marginBottom: 6 },
