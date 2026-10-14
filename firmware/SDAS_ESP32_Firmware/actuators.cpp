@@ -18,7 +18,7 @@ void ActuatorManager::begin() {
     pinMode(PIN_BUZZER, OUTPUT);
     digitalWrite(PIN_BUZZER, LOW); // Transistor OFF
     
-    // 3. Configure ESP32 LEDC PWM for MG996R Servo (GPIO25)
+    // 3. Configure ESP32 LEDC PWM for MG90S Servo (GPIO25)
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
     ledcAttach(PIN_SERVO, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
 #else

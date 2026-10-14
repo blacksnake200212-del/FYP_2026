@@ -24,7 +24,7 @@
 #define PIN_LED_GREEN        33
 #define PIN_LED_BLUE         13
 
-// --- Gate Actuator (MG996R High-Torque Metal Gear Servo) ---
+// --- Gate Actuator (MG90S Metal Gear Micro Servo) ---
 #define PIN_SERVO            25    // Servo PWM signal (with 330 Ohm series resistor)
 #define SERVO_LEDC_CHANNEL   0
 #define SERVO_LEDC_FREQ      50    // 50 Hz standard analog/digital servo PWM

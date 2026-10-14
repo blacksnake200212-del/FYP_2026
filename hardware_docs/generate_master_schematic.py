@@ -273,13 +273,13 @@ def create_schematic():
     # -------------------------------------------------------------------------
     # 5. RIGHT PERIPHERALS: SERVO, GSM, BUZZER, RGB LED
     # -------------------------------------------------------------------------
-    # ACTUATOR 1: MG996R SERVO MOTOR (EXACTLY 1 SERVO MOTOR IN THE PROJECT)
+    # ACTUATOR 1: MG90S SERVO MOTOR (EXACTLY 1 SERVO MOTOR IN THE PROJECT)
     srv_x, srv_y, srv_w, srv_h = 1660, 95, 880, 180
-    draw_box(srv_x, srv_y, srv_w, srv_h, "ACTUATOR: 1x MG996R SERVO MOTOR (SLUICE GATE)", "High-Torque Metal Gear Actuator • ONLY 1 SERVO IN PROJECT", color=(234, 88, 12))
+    draw_box(srv_x, srv_y, srv_w, srv_h, "ACTUATOR: 1x MG90S MICRO SERVO (SLUICE GATE)", "Metal Gear Micro Actuator (9g) • ONLY 1 SERVO IN PROJECT", color=(234, 88, 12))
 
     draw.rounded_rectangle([srv_x + 20, srv_y + 60, srv_x + 320, srv_y + 160], radius=8, fill=(255, 247, 237), outline=(234, 88, 12), width=2)
-    draw.text((srv_x + 35, srv_y + 70), "MG996R 3-WIRE CONNECTION", fill=(194, 65, 12), font=f_bold)
-    draw.text((srv_x + 35, srv_y + 92), "1. VCC (Red)    --> +5.0V Buck #1 Rail (C4 1000uF at plug)\n2. GND (Brown)  --> Common Ground\n3. PWM (Orange) --> ESP32 GPIO25 (via 330 Ω)", fill=TEXT_MAIN, font=f_bold)
+    draw.text((srv_x + 35, srv_y + 70), "MG90S 3-WIRE CONNECTION", fill=(194, 65, 12), font=f_bold)
+    draw.text((srv_x + 35, srv_y + 92), "1. VCC (Red)    --> +5.0V Buck #1 Rail (C4 470uF at plug)\n2. GND (Brown)  --> Common Ground\n3. PWM (Orange) --> ESP32 GPIO25 (via 330 Ω)", fill=TEXT_MAIN, font=f_bold)
 
     draw.rounded_rectangle([srv_x + 360, srv_y + 60, srv_x + 850, srv_y + 160], radius=8, fill=(248, 250, 252), outline=(148, 163, 184), width=1)
     draw.text((srv_x + 375, srv_y + 70), "MANDATORY SLUICE GATE OPERATIONAL PRESETS", fill=TEXT_MAIN, font=f_bold)
@@ -358,7 +358,7 @@ def create_schematic():
         ("DHT22 Air Temperature & Humidity", "GPIO4", "Bi-directional", "3.3V Logic Rail", "Dedicated 10 kΩ pull-up resistor to 3.3V"),
         ("SIM800L GSM Cellular Modem", "GPIO16 (RX2), GPIO17 (TX2)", "UART2 Serial", "4.0V Isolated Rail", "1 kΩ / 2.2 kΩ divider protects 2.8V RXD; C3 1000uF sink"),
         ("SIM800L Hardware Reset", "GPIO23", "Output", "3.3V Logic", "Active LOW 100ms hardware unfreeze pulse"),
-        ("MG996R Sluice Gate Servo (1 Total)", "GPIO25 (PWM)", "Output (LEDC)", "5.0V Buck #1 Rail", "330 Ω series resistor absorbs high-frequency ringing"),
+        ("MG90S Sluice Gate Micro Servo (1 Total)", "GPIO25 (PWM)", "Output (LEDC)", "5.0V Buck #1 Rail", "330 Ω series resistor absorbs high-frequency ringing"),
         ("5V Active Emergency Siren / Buzzer", "GPIO27", "Output", "5.0V Rail (Transistor)", "BC547 NPN driver + 1N4007 flyback suppression diode"),
         ("RGB Status LED (Common Anode)", "GPIO32 (R), GPIO33 (G), GPIO13 (B)", "Output (Active LOW)", "3.3V Logic Rail", "220 Ω on Red, 100 Ω on Green & Blue balance forward Vf"),
         ("3x Manual Push Buttons", "GPIO14 (Open), GPIO26 (Close), GPIO22 (Stop)", "Input (Pull-Up)", "3.3V -> GND", "20ms software debounced; GPIO22 highest priority interrupt"),
@@ -378,7 +378,7 @@ def create_schematic():
     draw_box(info_x, info_y, info_w, info_h, "FINAL YEAR PROJECT VERIFICATION SIGN-OFF", "Smart Dam Alert System (SDAS) Engineering Standard", color=(15, 23, 42))
 
     draw.text((info_x + 25, info_y + 65), "KEY AUDIT CONFIRMATIONS FOR SUBMISSION & VIVA:", fill=TEXT_MAIN, font=f_bold)
-    draw.text((info_x + 25, info_y + 95), "✓ EXACTLY 1 SERVO MOTOR: Only 1x MG996R exists on the sluice gate. No duplicate motors.\n✓ EXACTLY 1 RGB LED MODULE: 4-pin Common Anode with 220 Ω and 100 Ω balanced resistors.\n✓ POWER ISOLATION: Buck #1 (5V) and Buck #2 (4V) share Ground only. SIM800L cannot burn from 5V.\n✓ TELEMETRY SENSORS: 2x JSN-SR04T waterproof sensors cross-checked via 4-Ch level converter.\n✓ VOLTAGE DIVIDER: 1k / 2.2k divider guarantees SIM800L RX never exceeds 2.3V.\n✓ STRAPPING PIN INTEGRITY: GPIO12 is left unconnected; GPIO0/GPIO2 boots safely into flash.\n✓ E-STOP HARDWARE LATCH: Pressing STOP (GPIO22) halts servo motion and reverts to autonomous safe state.", fill=(30, 41, 59), font=f_reg)
+    draw.text((info_x + 25, info_y + 95), "✓ EXACTLY 1 SERVO MOTOR: Only 1x MG90S micro metal-gear servo on the sluice gate. No duplicate motors.\n✓ EXACTLY 1 RGB LED MODULE: 4-pin Common Anode with 220 Ω and 100 Ω balanced resistors.\n✓ POWER ISOLATION: Buck #1 (5V) and Buck #2 (4V) share Ground only. SIM800L cannot burn from 5V.\n✓ TELEMETRY SENSORS: Ultrasonic level sensors cross-checked via 4-Ch level converter.\n✓ VOLTAGE DIVIDER: 1k / 2.2k divider guarantees SIM800L RX never exceeds 2.3V.\n✓ STRAPPING PIN INTEGRITY: GPIO12 is left unconnected; GPIO0/GPIO2 boots safely into flash.\n✓ E-STOP HARDWARE LATCH: Pressing STOP (GPIO22) halts servo motion immediately.", fill=(30, 41, 59), font=f_reg)
 
     draw.rounded_rectangle([info_x + 25, info_y + 265, info_x + info_w - 25, info_y + 325], radius=6, fill=(241, 245, 249), outline=(203, 213, 225), width=1)
     draw.text((info_x + 40, info_y + 278), "Station Location: Tabbowa Dam Station #01, Puttalam District, Sri Lanka", fill=TEXT_MAIN, font=f_bold)
