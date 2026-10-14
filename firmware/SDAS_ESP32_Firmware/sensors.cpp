@@ -98,9 +98,9 @@ float SensorManager::measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, f
     digitalWrite(trigPin, LOW);
     delayMicroseconds(4);
     
-    // 10 microsecond HIGH pulse to activate JSN-SR04T transducer burst
+    // 20 microsecond HIGH pulse to activate JSN-SR04T transducer burst reliably (industrial standard)
     digitalWrite(trigPin, HIGH);
-    delayMicroseconds(10);
+    delayMicroseconds(20);
     digitalWrite(trigPin, LOW);
     
     // Measure echo pulse width (timeout 30,000 us ~= 5 meters)

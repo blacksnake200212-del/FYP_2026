@@ -15,7 +15,7 @@ This document lists every electronic, electromechanical, power, and passive comp
 | 4 | Temp & Humidity Sensor | **DHT22 (AM2302)** | 1 | S3 | Digital single-bus sensor. Operating voltage 3.3V–5V, temp range -40°C to +80°C (±0.5°C). Used for speed-of-sound acoustic compensation. |
 | 5 | DC-DC Step-Down Buck Converter | **XL4015 5A Buck Module** | 2 | BUCK1, BUCK2 | Constant Voltage / Constant Current buck. Input 8–36V, adjustable output 1.25–32V, max current 5A. (BUCK1 = 5.0V, BUCK2 = 4.0V). |
 | 6 | Logic Level Converter | **ML2029 / BSS138 4-Ch** | 1 | U3 | 4-Channel Bi-directional MOSFET converter. High side (HV) = 5.0V, Low side (LV) = 3.3V. Bridges ESP32 GPIOs and JSN-SR04T 5V I/O. |
-| 7 | High-Torque Servo Motor | **TowerPro MG996R** | 1 | M1 | Metal gear servo. Operating voltage 4.8V–6.6V, stall torque 11 kg·cm at 4.8V, PWM 50Hz (500µs–2500µs pulse width). Controls dam sluice gate. |
+| 7 | Metal Gear Micro Servo | **TowerPro / Generic MG90S** | 1 | M1 | Metal gear micro servo (9g). Operating voltage 4.8V–6.0V, stall torque ~2.2 kg·cm at 4.8V, PWM 50Hz (500µs–2500µs pulse width). Controls dam sluice gate. |
 | 8 | BJT Switching Transistor | **BC547 or 2N2222 (NPN)** | 1 | Q1 | TO-92 package, $V_{CEO} = 45\text{V}$, $I_C = 100\text{mA}$ (BC547) or $800\text{mA}$ (2N2222). Drives the 5V high-decibel alert buzzer. |
 | 9 | Rectifier / Flyback Diode | **1N4007** | 1 | D1 | 1000V 1A general purpose diode. Connected antiparallel across buzzer terminals to clamp inductive voltage spikes. |
 | 10 | Reverse Polarity Schottky Diode | **MBR1045 or SS54** | 1 | D2 | 45V 10A Schottky diode (or P-channel MOSFET). Installed at 12V DC input to block accidental reverse voltage connection. |
@@ -33,9 +33,9 @@ This document lists every electronic, electromechanical, power, and passive comp
 | 15 | Transistor Base Resistor | **1.0 kΩ, 0.25W, 5%** | 1 | R_BASE | Current limiter from ESP32 GPIO27 to Base of Q1 transistor ($I_B \approx 2.6\text{ mA}$). |
 | 16 | Serial Divider Series Resistor | **1.0 kΩ, 0.25W, 5%** | 1 | R_TX1 | Upper branch of voltage divider from ESP32 GPIO17 (TX2) to SIM800L RXD. |
 | 17 | Serial Divider Shunt Resistor | **2.2 kΩ, 0.25W, 5%** | 1 | R_TX2 | Lower branch of voltage divider from SIM800L RXD junction to GND (outputs 2.27V). |
-| 18 | Servo Ringing Suppressor | **330 Ω, 0.25W, 5%** | 1 | R_SERVO | Series damping resistor between ESP32 GPIO25 and MG996R PWM signal line. |
+| 18 | Servo Ringing Suppressor | **330 Ω, 0.25W, 5%** | 1 | R_SERVO | Series damping resistor between ESP32 GPIO25 and MG90S PWM signal line. |
 | 19 | Input Filter Capacitor | **1000 µF, 25V Electrolytic** | 1 | C1 | Low-ESR bulk decoupling capacitor placed on 12V bus after the main power switch. |
-| 20 | 5V Rail Decoupling Capacitor | **1000 µF, 16V Electrolytic** | 1 | C2 | Low-ESR buffer capacitor across Buck #1 5V output to absorb MG996R servo motor start surges. |
+| 20 | 5V Rail Decoupling Capacitor | **1000 µF, 16V Electrolytic** | 1 | C2 | Low-ESR buffer capacitor across Buck #1 5V output to absorb MG90S servo motor motion surges. |
 | 21 | GSM Burst Buffer Capacitor | **1000 µF, 16V Low-ESR** | 1 | C3 | Placed right at SIM800L VCC and GND pins. Suppresses 2A / 217Hz transmission dropouts. |
 | 22 | Active Buzzer | **5V DC Active Buzzer** | 1 | BZ1 | 85 dB @ 10cm, resonant frequency 2.3 kHz. Generates audible hazard warnings. |
 | 23 | Manual Push Buttons | **Tactile Momentary Switches**| 3 | SW1, SW2, SW3| Panel mount momentary buttons (OPEN on GPIO14, CLOSE on GPIO26, STOP on GPIO22). |
@@ -61,6 +61,6 @@ This document lists every electronic, electromechanical, power, and passive comp
 ### 4. Mechanical & Mounting Rig
 
 - Prototype water tank: Acrylic reservoir column ($60\text{ cm height} \times 25\text{ cm diameter}$).
-- Sluice gate model: Precision laser-cut 3mm acrylic slide gate connected to MG996R horn via aluminum tie rod.
+- Sluice gate model: Precision laser-cut 3mm acrylic slide gate connected to MG90S micro servo horn via aluminum tie rod.
 - Sensor mounting bracket: 3D-printed PETG bracket securing dual JSN-SR04T transducers $35\text{ cm}$ above maximum spillway waterline.
 - Standoffs, screw terminal blocks, and 22 AWG stranded silicone hookup wires.
