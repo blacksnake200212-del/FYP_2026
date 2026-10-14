@@ -77,6 +77,7 @@ void GSMManager::broadcastAlert(const char* message) {
     queueSMS(CONTACT_OPERATOR_1, message);
     queueSMS(CONTACT_OPERATOR_2, message);
     queueSMS(CONTACT_DMC_CONTROL, message);
+    queueSMS(CONTACT_COMMUNITY_LEADER, message);
 }
 
 void GSMManager::update() {

@@ -26,32 +26,32 @@ export default function ContactsScreen({ operatorUser }) {
   const [contacts, setContacts] = useState([
     {
       id: 'c-1',
-      name: 'Eng. T. Perera (Chief Irrigation Eng)',
-      phone: '+94771234567',
+      name: 'Chief Irrigation Adrian',
+      phone: '+94740099235',
       role: 'OPERATOR',
       tier: 1,
       optedIn: true
     },
     {
       id: 'c-2',
-      name: 'Duty Officer - Tabbowa Sluice Control',
-      phone: '+94719876543',
+      name: 'Duty Control Aadhil',
+      phone: '+94712833936',
       role: 'OPERATOR',
       tier: 1,
       optedIn: true
     },
     {
       id: 'c-3',
-      name: 'Disaster Management Centre (DMC) HQ',
-      phone: '+94112670002',
+      name: 'Disaster Management Centre (DMC) Call Center',
+      phone: '+94781099235',
       role: 'DMC_OFFICER',
       tier: 2,
       optedIn: true
     },
     {
       id: 'c-4',
-      name: 'Grama Niladhari - Tabbowa Lowland',
-      phone: '+94322263223',
+      name: 'Divisional Secretariat',
+      phone: '+94750434951',
       role: 'COMMUNITY_LEADER',
       tier: 3,
       optedIn: true
@@ -70,11 +70,11 @@ export default function ContactsScreen({ operatorUser }) {
         setContacts(
           data.map((c) => ({
             id: c.id,
-            name: c.name,
+            name: c.full_name || c.name || 'Emergency Contact',
             phone: c.phone_encrypted ? c.phone_encrypted.slice(0, 15) : '+94770000000',
-            role: c.role,
-            tier: c.tier,
-            optedIn: c.opted_in
+            role: c.role || 'OPERATOR',
+            tier: c.tier || 1,
+            optedIn: c.opted_in !== undefined ? c.opted_in : true
           }))
         );
       }

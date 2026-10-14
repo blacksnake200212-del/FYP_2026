@@ -122,8 +122,9 @@
 #define MQTT_CLIENT_ID           "SDAS_ESP32_NODE_01"
 
 // Staged SMS Emergency Contacts (E.164 format)
-#define CONTACT_OPERATOR_1       "+94771234567"
-#define CONTACT_OPERATOR_2       "+94719876543"
-#define CONTACT_DMC_CONTROL      "+94112670002"
+#define CONTACT_OPERATOR_1       "+94740099235" // Chief Irrigation Adrian
+#define CONTACT_OPERATOR_2       "+94712833936" // Duty Control Aadhil
+#define CONTACT_DMC_CONTROL      "+94781099235" // DMC Call Center
+#define CONTACT_COMMUNITY_LEADER "+94750434951" // Divisional Secretariat
 
 #endif // SDAS_CONFIG_H
