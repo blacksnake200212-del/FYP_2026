@@ -1,7 +1,8 @@
 #include "state_machine.h"
 
 SDASStateMachine::SDASStateMachine()
-    : lastBtnOpenMs(0), lastBtnCloseMs(0), lastBtnStopMs(0),
+    : previousFaultState(false),
+      lastBtnOpenMs(0), lastBtnCloseMs(0), lastBtnStopMs(0),
       lastBtnOpenState(HIGH), lastBtnCloseState(HIGH), lastBtnStopState(HIGH) {
     memset(&currentStatus, 0, sizeof(SystemStatus));
     currentStatus.alertState = STATE_NORMAL;
@@ -9,6 +10,7 @@ SDASStateMachine::SDASStateMachine()
     currentStatus.targetGatePercent = GATE_PCT_CLOSED;
     currentStatus.actualGatePercent = GATE_PCT_CLOSED;
     currentStatus.smsDispatchRequired = false;
+    currentStatus.smsIsPriority = false;
     currentStatus.lastAlertMessage = "NORMAL: Reservoir levels stable.";
 }
 
@@ -27,7 +29,7 @@ void SDASStateMachine::begin() {
 
 int SDASStateMachine::loadGateStateFromNVS() {
     int saved = preferences.getInt("gate_pct", 0);
-    if (saved < 0 || saved > 100) saved = 0;
+    if (saved < 0 || saved > GATE_PCT_MAX_LIMIT) saved = 0;
     return saved;
 }
 
@@ -35,7 +37,7 @@ void SDASStateMachine::saveGateStateToNVS(int percent) {
     preferences.putInt("gate_pct", percent);
 }
 
-void SDASStateMachine::checkPhysicalButtons() {
+void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
     unsigned long now = millis();
     int readStop  = digitalRead(PIN_BTN_STOP);
     int readOpen  = digitalRead(PIN_BTN_OPEN);
@@ -47,10 +49,13 @@ void SDASStateMachine::checkPhysicalButtons() {
             lastBtnStopMs = now;
             if (currentStatus.controlMode == MODE_EMERGENCY) {
                 releaseEmergencyStop();
+                if (actuators != nullptr) {
+                    actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
+                }
                 Serial.println("[E-STOP] Released! Resumed autonomous regulation.");
             } else {
-                triggerEmergencyStop();
-                Serial.println("[E-STOP] Triggered! Sluice gate locked in position.");
+                triggerEmergencyStop(actuators);
+                Serial.println("[E-STOP] Triggered! Sluice gate locked immediately in position.");
             }
         }
     }
@@ -63,8 +68,11 @@ void SDASStateMachine::checkPhysicalButtons() {
     if (lastBtnCloseState == HIGH && readClose == LOW) {
         if (now - lastBtnCloseMs >= 100) {
             lastBtnCloseMs = now;
-            int targetPct = (currentStatus.targetGatePercent > 20) ? 20 : 0;
+            int targetPct = (currentStatus.targetGatePercent > GATE_PCT_CLEAR_AREA) ? GATE_PCT_CLEAR_AREA : GATE_PCT_CLOSED;
             requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            if (actuators != nullptr) {
+                actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
+            }
             Serial.printf("[MANUAL] CLOSE Pressed -> Sluice Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
@@ -74,17 +82,23 @@ void SDASStateMachine::checkPhysicalButtons() {
     if (lastBtnOpenState == HIGH && readOpen == LOW) {
         if (now - lastBtnOpenMs >= 100) {
             lastBtnOpenMs = now;
-            int targetPct = (currentStatus.targetGatePercent < 20) ? 20 : 50;
+            int targetPct = (currentStatus.targetGatePercent < GATE_PCT_CLEAR_AREA) ? GATE_PCT_CLEAR_AREA : GATE_PCT_DANGER;
             requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            if (actuators != nullptr) {
+                actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
+            }
             Serial.printf("[MANUAL] OPEN Pressed -> Sluice Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnOpenState = readOpen;
 }
 
-void SDASStateMachine::triggerEmergencyStop() {
+void SDASStateMachine::triggerEmergencyStop(ActuatorManager* actuators) {
     currentStatus.controlMode = MODE_EMERGENCY;
     currentStatus.lastAlertMessage = "EMERGENCY: Hardware E-STOP triggered! Gate immobilized.";
+    if (actuators != nullptr) {
+        actuators->emergencyStop();
+    }
 }
 
 void SDASStateMachine::releaseEmergencyStop() {
@@ -96,7 +110,8 @@ void SDASStateMachine::requestManualGatePercent(int targetPercent, uint32_t dura
     if (currentStatus.controlMode == MODE_EMERGENCY) return; // Emergency takes precedence
     
     currentStatus.controlMode = MODE_MANUAL;
-    currentStatus.targetGatePercent = constrain(targetPercent, 0, 100);
+    // Hard clamp to safety limit (never exceed 50% max limit)
+    currentStatus.targetGatePercent = constrain(targetPercent, 0, GATE_PCT_MAX_LIMIT);
     currentStatus.manualModeExpiryMs = millis() + (durationSec * 1000UL);
     saveGateStateToNVS(currentStatus.targetGatePercent);
 }
@@ -106,9 +121,12 @@ void SDASStateMachine::revertToAuto() {
     currentStatus.manualModeExpiryMs = 0;
 }
 
-bool SDASStateMachine::checkAndClearSmsTrigger() {
+bool SDASStateMachine::checkAndClearSmsTrigger(bool* isPriorityOut) {
     if (currentStatus.smsDispatchRequired) {
         currentStatus.smsDispatchRequired = false;
+        if (isPriorityOut != nullptr) {
+            *isPriorityOut = currentStatus.smsIsPriority;
+        }
         return true;
     }
     return false;
@@ -117,8 +135,8 @@ bool SDASStateMachine::checkAndClearSmsTrigger() {
 void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& actuators) {
     unsigned long now = millis();
     
-    // Check hardware push buttons first
-    checkPhysicalButtons();
+    // Check hardware push buttons first with direct actuator reference
+    checkPhysicalButtons(&actuators);
     
     // --- Step 1: Watchdog Auto-Revert for Manual Mode ---
     if (currentStatus.controlMode == MODE_MANUAL) {
@@ -138,13 +156,29 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
         currentStatus.alertState = STATE_SENSOR_FAULT;
         actuators.setRGBAlert(STATE_SENSOR_FAULT);
         actuators.setBuzzerPattern(BUZZER_PULSE_DANGER);
+        
+        // Dispatch emergency SMS on initial failure transition
+        if (!previousFaultState) {
+            previousFaultState = true;
+            currentStatus.smsDispatchRequired = true;
+            currentStatus.smsIsPriority = true;
+            currentStatus.lastAlertMessage = "[SDAS CRITICAL FAULT] Dual water level sensors offline. Automated gate holds position. Urgent inspection required.";
+        }
         return;
+    } else {
+        previousFaultState = false;
     }
     
     // --- Step 4: Evaluate 4-Tier State Machine with 3% Hysteresis ---
     float level = sensorData.water_level_pct;
     AlertState previousAlert = currentStatus.alertState;
     AlertState nextAlert = previousAlert;
+    
+    // SAFETY OVERRIDE: If water reaches Danger (>= 85%), override Manual mode immediately
+    if (currentStatus.controlMode == MODE_MANUAL && level >= THRESH_DANGER_PCT) {
+        revertToAuto();
+        Serial.println("[SAFETY] DANGER threshold (85%) reached! Overriding MANUAL mode to AUTO for flood protection.");
+    }
     
     switch (previousAlert) {
         case STATE_NORMAL:
@@ -188,17 +222,21 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
             break;
     }
     
-    // Check if alert state stepped UP to trigger automatic SMS
+    // Check if alert state stepped UP (escalation only) to trigger automatic SMS
     if (nextAlert != previousAlert) {
-        currentStatus.alertState = nextAlert;
-        
-        if (nextAlert == STATE_CLEAR_AREA) {
-            currentStatus.smsDispatchRequired = true;
-            currentStatus.lastAlertMessage = "CLEAR AREA ALERT: Reservoir at 80%+. Sluice gate opening 30%. Evacuate spillway zones.";
-        } else if (nextAlert == STATE_DANGER) {
-            currentStatus.smsDispatchRequired = true;
-            currentStatus.lastAlertMessage = "CRITICAL DANGER: Reservoir at 85%+. Sluice gate opening 50%. High flood risk imminent!";
+        if (nextAlert > previousAlert) {
+            // Escalation: Send SMS broadcast
+            if (nextAlert == STATE_CLEAR_AREA) {
+                currentStatus.smsDispatchRequired = true;
+                currentStatus.smsIsPriority = false;
+                currentStatus.lastAlertMessage = "CLEAR AREA ALERT: Reservoir at 80%+. Sluice gate opening 20%. Evacuate spillway zones.";
+            } else if (nextAlert == STATE_DANGER) {
+                currentStatus.smsDispatchRequired = true;
+                currentStatus.smsIsPriority = true;
+                currentStatus.lastAlertMessage = "CRITICAL DANGER: Reservoir at 85%+. Sluice gate opening 50%. High flood risk imminent!";
+            }
         }
+        currentStatus.alertState = nextAlert;
     }
     
     // --- Step 5: Update Visual and Audible Actuators ---
@@ -210,10 +248,10 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     
     if (currentStatus.alertState == STATE_DANGER) {
         actuators.setBuzzerPattern(BUZZER_PULSE_DANGER);
-    } else {
+    } else if (!actuators.isBeeping()) {
+        // Preserve short confirmation beeps from being prematurely silenced
         actuators.setBuzzerPattern(BUZZER_OFF);
     }
-    actuators.updateBuzzer(now);
     
     // --- Step 6: Determine Gate Position (If in AUTO Mode) ---
     if (currentStatus.controlMode == MODE_AUTO) {
@@ -225,12 +263,12 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
                 break;
                 
             case STATE_CLEAR_AREA:
-                // Pre-emptive discharge: Gate 30% open
+                // Pre-emptive discharge: Gate 20% open (Advisory)
                 currentStatus.targetGatePercent = GATE_PCT_CLEAR_AREA;
                 break;
                 
             case STATE_DANGER:
-                // Major emergency discharge: Gate 50% open
+                // Major emergency discharge: Gate 50% open (Danger limit)
                 currentStatus.targetGatePercent = GATE_PCT_DANGER;
                 break;
                 

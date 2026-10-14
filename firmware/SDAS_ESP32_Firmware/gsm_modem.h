@@ -8,6 +8,7 @@ struct SMSJob {
     char recipient[20];
     char message[140];
     bool inUse;
+    bool isPriority;
 };
 
 class GSMManager {
@@ -19,12 +20,13 @@ public:
     void update();
     
     // Enqueue staged SMS broadcast
-    bool queueSMS(const char* recipient, const char* message);
-    void broadcastAlert(const char* message);
+    bool queueSMS(const char* recipient, const char* message, bool isPriority = false);
+    void broadcastAlert(const char* message, bool isPriority = false);
     
     // Modem Health & Diagnostics
     bool isRegistered() const { return modemReady; }
     int  getSignalQuality() const { return signalQuality; }
+    int  getPendingCount() const { return queueCount; }
     void hardResetModem();
 
 private:
@@ -33,8 +35,8 @@ private:
     int  signalQuality;
     unsigned long lastHeartbeatMs;
     
-    // SMS Queue (up to 6 staged messages)
-    SMSJob queue[6];
+    // SMS Queue (expanded buffer up to SMS_QUEUE_SIZE = 16)
+    SMSJob queue[SMS_QUEUE_SIZE];
     int queueHead;
     int queueTail;
     int queueCount;
@@ -50,6 +52,7 @@ private:
     
     unsigned long txStepTimeoutMs;
     int currentJobIndex;
+    String rxBuffer;
     
     bool sendATCommand(const char* cmd, const char* expectedReply, uint32_t timeoutMs);
     void readIncomingSerial();

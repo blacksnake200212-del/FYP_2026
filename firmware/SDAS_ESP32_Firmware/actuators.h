@@ -28,6 +28,7 @@ public:
     void setTargetGatePercent(int percent);
     void updateServoMotion();
     int  getCurrentGatePercent() const { return currentPercent; }
+    int  getTargetGatePercent() const { return targetPercent; }
     int  getCurrentAngleDeg() const { return (int)currentAngle; }
     bool isMoving() const { return (fabsf(currentAngle - targetAngle) > 0.5f); }
     
@@ -35,6 +36,8 @@ public:
     void setRGBAlert(AlertState state);
     void setBuzzerPattern(BuzzerPattern pattern);
     void updateBuzzer(unsigned long millisNow);
+    void updateIndicators(unsigned long millisNow);
+    bool isBeeping() const { return currentBuzzerPattern == BUZZER_SHORT_BEEP; }
     
     // Direct actuator override for failsafe
     void emergencyStop();
@@ -43,11 +46,15 @@ private:
     float currentAngle;
     float targetAngle;
     int   currentPercent;
+    int   targetPercent;
     unsigned long lastServoStepMs;
     
     BuzzerPattern currentBuzzerPattern;
     unsigned long lastBuzzerToggleMs;
     bool buzzerState;
+    
+    AlertState currentAlertState;
+    uint8_t orangePwmCounter;
     
     void writeServoMicroseconds(uint16_t us);
     void writeRGB(bool r_on, bool g_on, bool b_on);

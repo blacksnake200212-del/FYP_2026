@@ -108,7 +108,8 @@ All pins have been selected to avoid ESP32 boot strapping pins (specifically avo
 
 ### 4.1 Ultrasonic Water Level Sensing (Dual JSN-SR04T)
 - **Sensor Selection:** The JSN-SR04T waterproof industrial transducer replaces standard indoor HC-SR04 modules to prevent moisture corrosion in dam spillway chambers.
-- **Blind Zone Mitigation:** JSN-SR04T has an intrinsic physical deadband of 20 to 25 cm. The sensor bracket must be physically positioned **at least 30 cm above the 100% full reservoir capacity mark**.
+- **Blind Zone Mitigation:** JSN-SR04T has an intrinsic physical deadband of 20 to 25 cm. The sensor bracket must be physically mounted **at 75.0 cm above tank floor (leaving 35.0 cm clearance over the 40.0 cm full crest line)**.
+- **Extreme Flood Failsafe:** If water rises closer than 20 cm ($d < 20\text{ cm}$), the firmware clamps the reading to 100% full capacity (DANGER) rather than flagging a sensor fault, ensuring the automated spillway gate opens to 50% immediately.
 - **Alternating Pulse Schedule:** To prevent acoustic cross-talk (multipath echo confusion), the ESP32 triggers Sensor 1 and Sensor 2 sequentially with a minimum **60 ms blanking interval** between bursts.
 - **Speed-of-Sound Compensation:**
   $$\text{Speed of Sound } v(T) = 331.4 + (0.606 \times T_{\text{DHT22}}) \quad [\text{m/s}]$$

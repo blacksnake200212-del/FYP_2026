@@ -1,9 +1,10 @@
 #include "actuators.h"
 
 ActuatorManager::ActuatorManager()
-    : currentAngle(0.0f), targetAngle(0.0f), currentPercent(0),
+    : currentAngle(0.0f), targetAngle(0.0f), currentPercent(0), targetPercent(0),
       lastServoStepMs(0), currentBuzzerPattern(BUZZER_OFF),
-      lastBuzzerToggleMs(0), buzzerState(false) {}
+      lastBuzzerToggleMs(0), buzzerState(false),
+      currentAlertState(STATE_NORMAL), orangePwmCounter(0) {}
 
 void ActuatorManager::begin() {
     // 1. Configure RGB Pins (Common Anode, Active LOW)
@@ -25,9 +26,11 @@ void ActuatorManager::begin() {
     ledcAttachPin(PIN_SERVO, SERVO_LEDC_CHANNEL);
 #endif
     
-    // Initialize to closed (0 degrees)
-    setTargetGatePercent(GATE_PCT_CLOSED);
+    // Initialize to closed (0 degrees) without slamming
+    targetPercent = GATE_PCT_CLOSED;
+    currentPercent = GATE_PCT_CLOSED;
     currentAngle = 0.0f;
+    targetAngle = 0.0f;
     writeServoMicroseconds(SERVO_MIN_US);
 }
 
@@ -44,10 +47,10 @@ void ActuatorManager::writeServoMicroseconds(uint16_t us) {
 }
 
 void ActuatorManager::setTargetGatePercent(int percent) {
-    if (percent < 0) percent = 0;
-    if (percent > 100) percent = 100;
+    // Hard clamp to safety limit (never exceed 50% max limit)
+    percent = constrain(percent, 0, GATE_PCT_MAX_LIMIT);
+    targetPercent = percent;
     
-    currentPercent = percent;
     // Map 0 - 100% to 0 - 180 degrees
     targetAngle = ((float)percent / 100.0f) * 180.0f;
 }
@@ -70,6 +73,12 @@ void ActuatorManager::updateServoMotion() {
             // Map angle (0-180) to microseconds (500us - 2500us)
             uint16_t pulseUs = SERVO_MIN_US + (uint16_t)((currentAngle / 180.0f) * (SERVO_MAX_US - SERVO_MIN_US));
             writeServoMicroseconds(pulseUs);
+            
+            // Calculate actual physical gate percentage dynamically from real angle
+            currentPercent = (int)roundf((currentAngle / 180.0f) * 100.0f);
+        } else {
+            currentAngle = targetAngle;
+            currentPercent = targetPercent;
         }
     }
 }
@@ -82,32 +91,45 @@ void ActuatorManager::writeRGB(bool r_on, bool g_on, bool b_on) {
 }
 
 void ActuatorManager::setRGBAlert(AlertState state) {
+    currentAlertState = state;
     switch (state) {
         case STATE_NORMAL:
             // Pure Green
             writeRGB(false, true, false);
             break;
         case STATE_PRE_WARNING:
-            // Yellow (Red + Green)
+            // Yellow: 100% Red + 100% Green
             writeRGB(true, true, false);
             break;
         case STATE_CLEAR_AREA:
-            // Orange (Red dominant with partial Green)
-            // On digital lines: pulse Red + Green
-            writeRGB(true, true, false);
+            // Orange: 100% Red + 25% Green duty cycle (handled in updateIndicators)
+            writeRGB(true, false, false);
             break;
         case STATE_DANGER:
             // Pure Red
             writeRGB(true, false, false);
             break;
         case STATE_SENSOR_FAULT:
-            // Magenta / Purple (Red + Blue)
+            // Magenta / Purple: Red + Blue
             writeRGB(true, false, true);
             break;
         default:
             writeRGB(false, false, false);
             break;
     }
+}
+
+void ActuatorManager::updateIndicators(unsigned long millisNow) {
+    // Update Orange color modulation for CLEAR_AREA stage
+    if (currentAlertState == STATE_CLEAR_AREA) {
+        orangePwmCounter = (orangePwmCounter + 1) % 4;
+        // Red is continuously ON (LOW); Green is ON (LOW) 25% of the time (1 out of 4 cycles)
+        digitalWrite(PIN_LED_RED, LOW);
+        digitalWrite(PIN_LED_GREEN, (orangePwmCounter == 0) ? LOW : HIGH);
+        digitalWrite(PIN_LED_BLUE, HIGH);
+    }
+    
+    updateBuzzer(millisNow);
 }
 
 void ActuatorManager::setBuzzerPattern(BuzzerPattern pattern) {
@@ -118,6 +140,10 @@ void ActuatorManager::setBuzzerPattern(BuzzerPattern pattern) {
     } else if (pattern == BUZZER_CONTINUOUS_ESTOP) {
         digitalWrite(PIN_BUZZER, HIGH);
         buzzerState = true;
+    } else if (pattern == BUZZER_SHORT_BEEP) {
+        digitalWrite(PIN_BUZZER, HIGH);
+        buzzerState = true;
+        lastBuzzerToggleMs = millis();
     }
 }
 
@@ -137,13 +163,15 @@ void ActuatorManager::updateBuzzer(unsigned long millisNow) {
         // Confirmation beep: 100ms then auto-off
         if (millisNow - lastBuzzerToggleMs >= 100) {
             digitalWrite(PIN_BUZZER, LOW);
+            buzzerState = false;
             currentBuzzerPattern = BUZZER_OFF;
         }
     }
 }
 
 void ActuatorManager::emergencyStop() {
-    targetAngle = currentAngle; // Lock current physical angle
+    targetAngle = currentAngle; // Lock current physical angle immediately
+    targetPercent = currentPercent;
     setBuzzerPattern(BUZZER_CONTINUOUS_ESTOP);
-    writeRGB(true, false, true); // Visual hazard warning
+    writeRGB(true, false, true); // Visual hazard warning (Purple/Magenta)
 }

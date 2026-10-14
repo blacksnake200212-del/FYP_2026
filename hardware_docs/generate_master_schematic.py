@@ -78,67 +78,73 @@ def create_schematic():
     # 2. POWER SUPPLY SECTION (Top Left)
     # -------------------------------------------------------------------------
     p_x, p_y, p_w, p_h = 36, 95, 780, 310
-    draw_box(p_x, p_y, p_w, p_h, "1. DUAL-STAGE POWER SUPPLY & ISOLATED RAILS", "12V 5A Input with Dedicated Buck Regulation", color=(185, 28, 28))
+    draw_box(p_x, p_y, p_w, p_h, "1. DUAL-STAGE POWER SUPPLY & ISOLATED RAILS", "12V 5A Input with Dedicated Buck Regulation & TVS Protection", color=(185, 28, 28))
 
     # 12V Input Jack & Protection
-    draw.rounded_rectangle([p_x + 20, p_y + 60, p_x + 160, p_y + 130], radius=8, fill=(241, 245, 249), outline=(148, 163, 184), width=1)
-    draw.text((p_x + 30, p_y + 70), "12V 5A DC INPUT", fill=TEXT_MAIN, font=f_bold)
-    draw.text((p_x + 30, p_y + 88), "Adapter / 3S Battery", fill=TEXT_MUTED, font=f_small)
-    draw.text((p_x + 30, p_y + 104), "(11.1V - 12.6V BMS)", fill=TEXT_MUTED, font=f_small)
+    draw.rounded_rectangle([p_x + 20, p_y + 60, p_x + 155, p_y + 130], radius=8, fill=(241, 245, 249), outline=(148, 163, 184), width=1)
+    draw.text((p_x + 28, p_y + 70), "12V 5A DC INPUT", fill=TEXT_MAIN, font=f_bold)
+    draw.text((p_x + 28, p_y + 88), "Adapter / 3S Battery", fill=TEXT_MUTED, font=f_small)
+    draw.text((p_x + 28, p_y + 104), "(11.1V - 12.6V BMS)", fill=TEXT_MUTED, font=f_small)
 
     # Fuse, Diode, Switch blocks
-    draw.rectangle([p_x + 185, p_y + 80, p_x + 245, p_y + 110], fill=(254, 243, 199), outline=(217, 119, 6), width=1)
-    draw.text((p_x + 192, p_y + 88), "FUSE 5A", fill=(180, 83, 9), font=f_small_bold)
+    draw.rectangle([p_x + 175, p_y + 80, p_x + 235, p_y + 110], fill=(254, 243, 199), outline=(217, 119, 6), width=1)
+    draw.text((p_x + 182, p_y + 88), "FUSE 5A", fill=(180, 83, 9), font=f_small_bold)
 
-    draw.rectangle([p_x + 265, p_y + 80, p_x + 335, p_y + 110], fill=(241, 245, 249), outline=(100, 116, 139), width=1)
-    draw.text((p_x + 272, p_y + 88), "1N5408", fill=TEXT_MAIN, font=f_small_bold)
+    draw.rectangle([p_x + 250, p_y + 80, p_x + 315, p_y + 110], fill=(241, 245, 249), outline=(100, 116, 139), width=1)
+    draw.text((p_x + 257, p_y + 88), "1N5408", fill=TEXT_MAIN, font=f_small_bold)
 
-    draw.rectangle([p_x + 355, p_y + 80, p_x + 435, p_y + 110], fill=(241, 245, 249), outline=(100, 116, 139), width=1)
-    draw.text((p_x + 365, p_y + 88), "SPST SW", fill=TEXT_MAIN, font=f_small_bold)
+    draw.rectangle([p_x + 330, p_y + 80, p_x + 400, p_y + 110], fill=(241, 245, 249), outline=(100, 116, 139), width=1)
+    draw.text((p_x + 337, p_y + 88), "SMBJ15A", fill=TEXT_MAIN, font=f_small_bold)
+
+    draw.rectangle([p_x + 415, p_y + 80, p_x + 485, p_y + 110], fill=(241, 245, 249), outline=(100, 116, 139), width=1)
+    draw.text((p_x + 423, p_y + 88), "SPST SW", fill=TEXT_MAIN, font=f_small_bold)
 
     # 12V wires
-    draw.line([(p_x + 160, p_y + 95), (p_x + 185, p_y + 95)], fill=COLOR_12V, width=3)
-    draw.line([(p_x + 245, p_y + 95), (p_x + 265, p_y + 95)], fill=COLOR_12V, width=3)
-    draw.line([(p_x + 335, p_y + 95), (p_x + 355, p_y + 95)], fill=COLOR_12V, width=3)
-    draw.line([(p_x + 435, p_y + 95), (p_x + 475, p_y + 95)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 155, p_y + 95), (p_x + 175, p_y + 95)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 235, p_y + 95), (p_x + 250, p_y + 95)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 315, p_y + 95), (p_x + 330, p_y + 95)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 400, p_y + 95), (p_x + 415, p_y + 95)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 485, p_y + 95), (p_x + 510, p_y + 95)], fill=COLOR_12V, width=3)
 
     # Filter Cap C1
-    draw.line([(p_x + 475, p_y + 95), (p_x + 475, p_y + 155)], fill=COLOR_12V, width=2)
-    draw.rectangle([p_x + 455, p_y + 120, p_x + 495, p_y + 155], fill=(224, 242, 254), outline=(2, 132, 199), width=1)
-    draw.text((p_x + 460, p_y + 126), "C1", fill=TEXT_MAIN, font=f_small_bold)
-    draw.text((p_x + 460, p_y + 138), "1000uF", fill=TEXT_MUTED, font=f_small)
+    draw.line([(p_x + 510, p_y + 95), (p_x + 510, p_y + 155)], fill=COLOR_12V, width=2)
+    draw.rectangle([p_x + 490, p_y + 120, p_x + 530, p_y + 155], fill=(224, 242, 254), outline=(2, 132, 199), width=1)
+    draw.text((p_x + 495, p_y + 126), "C1", fill=TEXT_MAIN, font=f_small_bold)
+    draw.text((p_x + 493, p_y + 138), "1000uF", fill=TEXT_MUTED, font=f_small)
 
-    # Split 12V to Buck #1 and Buck #2
-    draw.line([(p_x + 475, p_y + 95), (p_x + 530, p_y + 95)], fill=COLOR_12V, width=3)
-    draw.line([(p_x + 530, p_y + 95), (p_x + 530, p_y + 70)], fill=COLOR_12V, width=3)
-    draw.line([(p_x + 530, p_y + 70), (p_x + 550, p_y + 70)], fill=COLOR_12V, width=3)
+    # Parallel Split 12V to Buck #1 and Buck #2 (BOTH fed from 12V Raw Bus)
+    draw.line([(p_x + 510, p_y + 95), (p_x + 540, p_y + 95)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 540, p_y + 95), (p_x + 540, p_y + 70)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 540, p_y + 70), (p_x + 555, p_y + 70)], fill=COLOR_12V, width=3)
 
-    draw.line([(p_x + 530, p_y + 95), (p_x + 530, p_y + 200)], fill=COLOR_12V, width=3)
-    draw.line([(p_x + 530, p_y + 200), (p_x + 550, p_y + 200)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 540, p_y + 95), (p_x + 540, p_y + 200)], fill=COLOR_12V, width=3)
+    draw.line([(p_x + 540, p_y + 200), (p_x + 555, p_y + 200)], fill=COLOR_12V, width=3)
 
-    # Buck #1 Box: XL4015 5.0V
-    b1_x, b1_y = p_x + 550, p_y + 50
-    draw.rounded_rectangle([b1_x, b1_y, b1_x + 200, b1_y + 95], radius=6, fill=(255, 247, 237), outline=(234, 88, 12), width=2)
-    draw.text((b1_x + 10, b1_y + 10), "BUCK #1: XL4015 (5.0V)", fill=(194, 65, 12), font=f_bold)
-    draw.text((b1_x + 10, b1_y + 30), "V_IN: 12V  -->  V_OUT: +5.0V", fill=TEXT_MAIN, font=f_small_bold)
-    draw.text((b1_x + 10, b1_y + 48), "Decoupling: C2 1000uF / 16V", fill=TEXT_MUTED, font=f_small)
-    draw.text((b1_x + 10, b1_y + 64), "Powers: ESP32 VIN, Servo, Sensors, Buzzer", fill=(194, 65, 12), font=f_small)
+    # Buck #1 Box: XL4015 5.0V (Powers System Core & Servo)
+    b1_x, b1_y = p_x + 555, p_y + 50
+    draw.rounded_rectangle([b1_x, b1_y, b1_x + 205, b1_y + 95], radius=6, fill=(255, 247, 237), outline=(234, 88, 12), width=2)
+    draw.text((b1_x + 8, b1_y + 8), "BUCK #1: XL4015 (5.0V)", fill=(194, 65, 12), font=f_bold)
+    draw.text((b1_x + 8, b1_y + 26), "12V IN -> +5.0V OUT (3A Continuous)", fill=TEXT_MAIN, font=f_small_bold)
+    draw.text((b1_x + 8, b1_y + 42), "ESP32 VIN via 1N5819 Schottky Diode", fill=(2, 132, 199), font=f_small_bold)
+    draw.text((b1_x + 8, b1_y + 58), "Decoupling: C2 1000uF / 16V Rail Cap", fill=TEXT_MUTED, font=f_small)
+    draw.text((b1_x + 8, b1_y + 74), "Powers: Servo, ESP32, Buzzer, Sensors", fill=(194, 65, 12), font=f_small)
 
-    # Buck #2 Box: XL4015 4.0V
-    b2_x, b2_y = p_x + 550, p_y + 175
-    draw.rounded_rectangle([b2_x, b2_y, b2_x + 200, b2_y + 95], radius=6, fill=(250, 245, 255), outline=(147, 51, 234), width=2)
-    draw.text((b2_x + 10, b2_y + 10), "BUCK #2: XL4015 (4.0V)", fill=(126, 34, 206), font=f_bold)
-    draw.text((b2_x + 10, b2_y + 30), "V_IN: 12V  -->  V_OUT: +4.0V", fill=TEXT_MAIN, font=f_bold)
-    draw.text((b2_x + 10, b2_y + 48), "Decoupling: C3 1000uF Low-ESR", fill=TEXT_MUTED, font=f_small)
-    draw.text((b2_x + 10, b2_y + 64), "Dedicated EXCLUSIVELY to SIM800L", fill=(126, 34, 206), font=f_small_bold)
+    # Buck #2 Box: XL4015 4.0V (DEDICATED EXCLUSIVELY to SIM800L)
+    b2_x, b2_y = p_x + 555, p_y + 175
+    draw.rounded_rectangle([b2_x, b2_y, b2_x + 205, b2_y + 95], radius=6, fill=(250, 245, 255), outline=(147, 51, 234), width=2)
+    draw.text((b2_x + 8, b2_y + 8), "BUCK #2: XL4015 (4.0V)", fill=(126, 34, 206), font=f_bold)
+    draw.text((b2_x + 8, b2_y + 26), "12V IN -> +4.0V OUT (4A Peak Capable)", fill=TEXT_MAIN, font=f_bold)
+    draw.text((b2_x + 8, b2_y + 44), "Decoupling: C3 1000uF Low-ESR", fill=TEXT_MUTED, font=f_small)
+    draw.text((b2_x + 8, b2_y + 60), "Dedicated EXCLUSIVELY to SIM800L", fill=(126, 34, 206), font=f_small_bold)
+    draw.text((b2_x + 8, b2_y + 76), "Prevents 2A GSM burst brownouts", fill=TEXT_MUTED, font=f_small)
 
     # Outputs of Bucks
     # Buck 1 -> 5V bus
-    draw.line([(b1_x + 200, b1_y + 40), (p_x + p_w, b1_y + 40)], fill=COLOR_5V, width=4)
+    draw.line([(b1_x + 205, b1_y + 40), (p_x + p_w, b1_y + 40)], fill=COLOR_5V, width=4)
     draw.text((p_x + p_w - 75, b1_y + 22), "+5.0V Rail", fill=COLOR_5V, font=f_bold)
 
     # Buck 2 -> 4V bus
-    draw.line([(b2_x + 200, b2_y + 40), (p_x + p_w, b2_y + 40)], fill=COLOR_4V, width=4)
+    draw.line([(b2_x + 205, b2_y + 40), (p_x + p_w, b2_y + 40)], fill=COLOR_4V, width=4)
     draw.text((p_x + p_w - 75, b2_y + 22), "+4.0V Rail", fill=COLOR_4V, font=f_bold)
 
     # -------------------------------------------------------------------------
@@ -241,15 +247,15 @@ def create_schematic():
 
     # Ultrasonic Sensor 1: JSN-SR04T #1
     s1_x, s1_y = 36, 440
-    draw_box(s1_x, s1_y, 480, 140, "SENSOR 1: JSN-SR04T (PRIMARY)", "Waterproof Transducer • Tabbowa Reservoir Crest", color=(2, 132, 199))
-    draw.text((s1_x + 20, s1_y + 65), "VCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV1 (5V In)\nECHO --> Level Shifter HV2 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
+    draw_box(s1_x, s1_y, 480, 140, "SENSOR 1: JSN-SR04T (PRIMARY)", "Waterproof Transducer • Tabbowa Reservoir Crest (75cm Height)", color=(2, 132, 199))
+    draw.text((s1_x + 20, s1_y + 65), "Mount: 75.0 cm above floor (35cm clearance over 40cm crest)\nVCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV1 (5V In)\nECHO --> Level Shifter HV2 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
     draw.line([(s1_x + 480, s1_y + 85), (llc_x + 20, llc_y + 130)], fill=COLOR_SIG, width=2)
     draw.line([(s1_x + 480, s1_y + 105), (llc_x + 20, llc_y + 155)], fill=COLOR_SIG, width=2)
 
     # Ultrasonic Sensor 2: JSN-SR04T #2
     s2_x, s2_y = 36, 610
-    draw_box(s2_x, s2_y, 480, 140, "SENSOR 2: JSN-SR04T (REDUNDANT)", "Waterproof Transducer • Cross-Validation (Δ <= 5cm)", color=(2, 132, 199))
-    draw.text((s2_x + 20, s2_y + 65), "VCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV3 (5V In)\nECHO --> Level Shifter HV4 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
+    draw_box(s2_x, s2_y, 480, 140, "SENSOR 2: JSN-SR04T (REDUNDANT)", "Waterproof Transducer • Cross-Validation (Δ <= 5cm, 75cm Height)", color=(2, 132, 199))
+    draw.text((s2_x + 20, s2_y + 65), "Mount: 75.0 cm above floor (35cm clearance over 40cm crest)\nVCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV3 (5V In)\nECHO --> Level Shifter HV4 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
     draw.line([(s2_x + 480, s2_y + 85), (llc_x + 20, llc_y + 205)], fill=COLOR_SIG, width=2)
     draw.line([(s2_x + 480, s2_y + 105), (llc_x + 20, llc_y + 230)], fill=COLOR_SIG, width=2)
 
@@ -273,7 +279,7 @@ def create_schematic():
 
     draw.rounded_rectangle([srv_x + 20, srv_y + 60, srv_x + 320, srv_y + 160], radius=8, fill=(255, 247, 237), outline=(234, 88, 12), width=2)
     draw.text((srv_x + 35, srv_y + 70), "MG996R 3-WIRE CONNECTION", fill=(194, 65, 12), font=f_bold)
-    draw.text((srv_x + 35, srv_y + 92), "1. VCC (Red)    --> +5.0V Buck #1 Rail\n2. GND (Brown)  --> Common Ground\n3. PWM (Orange) --> ESP32 GPIO25 (via 330 Ω)", fill=TEXT_MAIN, font=f_bold)
+    draw.text((srv_x + 35, srv_y + 92), "1. VCC (Red)    --> +5.0V Buck #1 Rail (C4 1000uF at plug)\n2. GND (Brown)  --> Common Ground\n3. PWM (Orange) --> ESP32 GPIO25 (via 330 Ω)", fill=TEXT_MAIN, font=f_bold)
 
     draw.rounded_rectangle([srv_x + 360, srv_y + 60, srv_x + 850, srv_y + 160], radius=8, fill=(248, 250, 252), outline=(148, 163, 184), width=1)
     draw.text((srv_x + 375, srv_y + 70), "MANDATORY SLUICE GATE OPERATIONAL PRESETS", fill=TEXT_MAIN, font=f_bold)

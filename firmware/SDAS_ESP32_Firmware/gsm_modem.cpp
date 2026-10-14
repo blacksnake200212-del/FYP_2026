@@ -3,9 +3,10 @@
 GSMManager::GSMManager()
     : simSerial(2), modemReady(false), signalQuality(0), lastHeartbeatMs(0),
       queueHead(0), queueTail(0), queueCount(0), txState(TX_IDLE),
-      txStepTimeoutMs(0), currentJobIndex(-1) {
-    for (int i = 0; i < 6; i++) {
+      txStepTimeoutMs(0), currentJobIndex(-1), rxBuffer("") {
+    for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
         queue[i].inUse = false;
+        queue[i].isPriority = false;
     }
 }
 
@@ -58,38 +59,53 @@ bool GSMManager::sendATCommand(const char* cmd, const char* expectedReply, uint3
     return false;
 }
 
-bool GSMManager::queueSMS(const char* recipient, const char* message) {
-    if (queueCount >= 6) return false; // Queue full
+bool GSMManager::queueSMS(const char* recipient, const char* message, bool isPriority) {
+    if (queueCount >= SMS_QUEUE_SIZE) {
+        // Queue full: if priority message, replace an existing non-priority message
+        if (isPriority) {
+            for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
+                int idx = (queueHead + i) % SMS_QUEUE_SIZE;
+                if (!queue[idx].isPriority && idx != currentJobIndex) {
+                    strncpy(queue[idx].recipient, recipient, 19);
+                    queue[idx].recipient[19] = '\0';
+                    strncpy(queue[idx].message, message, 139);
+                    queue[idx].message[139] = '\0';
+                    queue[idx].isPriority = true;
+                    queue[idx].inUse = true;
+                    return true;
+                }
+            }
+        }
+        return false; // Queue full
+    }
     
     strncpy(queue[queueTail].recipient, recipient, 19);
     queue[queueTail].recipient[19] = '\0';
     strncpy(queue[queueTail].message, message, 139);
     queue[queueTail].message[139] = '\0';
     queue[queueTail].inUse = true;
+    queue[queueTail].isPriority = isPriority;
     
-    queueTail = (queueTail + 1) % 6;
+    queueTail = (queueTail + 1) % SMS_QUEUE_SIZE;
     queueCount++;
     return true;
 }
 
-void GSMManager::broadcastAlert(const char* message) {
+void GSMManager::broadcastAlert(const char* message, bool isPriority) {
     // Staged delivery targeting primary emergency personnel within 30 seconds
-    queueSMS(CONTACT_OPERATOR_1, message);
-    queueSMS(CONTACT_OPERATOR_2, message);
-    queueSMS(CONTACT_DMC_CONTROL, message);
-    queueSMS(CONTACT_COMMUNITY_LEADER, message);
+    queueSMS(CONTACT_OPERATOR_1, message, isPriority);
+    queueSMS(CONTACT_OPERATOR_2, message, isPriority);
+    queueSMS(CONTACT_DMC_CONTROL, message, isPriority);
+    queueSMS(CONTACT_COMMUNITY_LEADER, message, isPriority);
 }
 
 void GSMManager::update() {
     unsigned long now = millis();
     
-    // Drain background UART bytes
-    while (simSerial.available()) {
-        char c = simSerial.read();
-        // Discard or log unsolicited result codes (URCs)
-    }
+    // Note: Do NOT drain simSerial unconditionally here, as that would discard
+    // the '>' prompt and 'OK' responses from the modem before the state machine reads them!
     
-    // Periodic modem heartbeat check every 60 seconds
+    // Periodic modem heartbeat check every 60 seconds (only when IDLE)
     if (txState == TX_IDLE && (now - lastHeartbeatMs >= 60000)) {
         lastHeartbeatMs = now;
         simSerial.println("AT");
@@ -98,8 +114,14 @@ void GSMManager::update() {
     // Asynchronous non-blocking SMS Transmission State Machine
     switch (txState) {
         case TX_IDLE:
+            // Safely drain background unsolicited result codes (e.g. +CMTI, RING) strictly while idle
+            while (simSerial.available()) {
+                simSerial.read();
+            }
+            
             if (queueCount > 0) {
                 currentJobIndex = queueHead;
+                rxBuffer = "";
                 simSerial.print("AT+CMGS=\"");
                 simSerial.print(queue[currentJobIndex].recipient);
                 simSerial.println("\"");
@@ -112,48 +134,69 @@ void GSMManager::update() {
             while (simSerial.available()) {
                 char c = simSerial.read();
                 if (c == '>') {
-                    // Send message body + Ctrl+Z (ASCII 26)
+                    // Prompt received: Send message body + Ctrl+Z (ASCII 26)
                     simSerial.print(queue[currentJobIndex].message);
                     simSerial.write(26);
-                    txStepTimeoutMs = now + 10000; // 10s timeout waiting for OK
+                    rxBuffer = "";
+                    txStepTimeoutMs = now + 15000; // 15s timeout waiting for network delivery OK
                     txState = TX_WAIT_OK;
                     return;
+                } else if (c == 'E') {
+                    // Check if modem sent ERROR
+                    rxBuffer += c;
+                    if (rxBuffer.indexOf("ERROR") != -1) {
+                        // Abort this message
+                        queue[currentJobIndex].inUse = false;
+                        queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
+                        queueCount--;
+                        rxBuffer = "";
+                        txState = TX_IDLE;
+                        return;
+                    }
+                } else {
+                    rxBuffer += c;
                 }
             }
             if (now > txStepTimeoutMs) {
-                // Timeout on prompt - cancel and discard
-                simSerial.write(27); // Escape
+                // Timeout on prompt - send ESC (27) to cancel and discard
+                simSerial.write(27);
                 queue[currentJobIndex].inUse = false;
-                queueHead = (queueHead + 1) % 6;
+                queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                 queueCount--;
+                rxBuffer = "";
                 txState = TX_IDLE;
             }
             break;
             
         case TX_WAIT_OK:
             while (simSerial.available()) {
-                String resp = simSerial.readStringUntil('\n');
-                if (resp.indexOf("OK") != -1 || resp.indexOf("+CMGS:") != -1) {
+                char c = simSerial.read();
+                rxBuffer += c;
+                if (rxBuffer.indexOf("OK") != -1 || rxBuffer.indexOf("+CMGS:") != -1) {
                     // SMS successfully sent
                     queue[currentJobIndex].inUse = false;
-                    queueHead = (queueHead + 1) % 6;
+                    queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                     queueCount--;
+                    rxBuffer = "";
                     txState = TX_IDLE;
                     return;
-                } else if (resp.indexOf("ERROR") != -1) {
+                } else if (rxBuffer.indexOf("ERROR") != -1 || rxBuffer.indexOf("+CMS ERROR") != -1) {
                     // Delivery failed
                     queue[currentJobIndex].inUse = false;
-                    queueHead = (queueHead + 1) % 6;
+                    queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                     queueCount--;
+                    rxBuffer = "";
                     txState = TX_IDLE;
                     return;
                 }
             }
             if (now > txStepTimeoutMs) {
-                // Timeout waiting for OK
+                // Timeout waiting for OK - send ESC to clear modem state
+                simSerial.write(27);
                 queue[currentJobIndex].inUse = false;
-                queueHead = (queueHead + 1) % 6;
+                queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                 queueCount--;
+                rxBuffer = "";
                 txState = TX_IDLE;
             }
             break;

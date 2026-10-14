@@ -19,6 +19,7 @@ struct SystemStatus {
     int         targetGatePercent;
     int         actualGatePercent;
     bool        smsDispatchRequired;
+    bool        smsIsPriority;
     const char* lastAlertMessage;
     unsigned long manualModeExpiryMs;
 };
@@ -33,19 +34,20 @@ public:
     
     // Manual & Emergency overrides
     void requestManualGatePercent(int targetPercent, uint32_t durationSec);
-    void triggerEmergencyStop();
+    void triggerEmergencyStop(ActuatorManager* actuators = nullptr);
     void releaseEmergencyStop();
     void revertToAuto();
     
-    // Hardware button polling (with 20ms debounce)
-    void checkPhysicalButtons();
+    // Hardware button polling (with 20ms debounce and optional direct actuator trigger)
+    void checkPhysicalButtons(ActuatorManager* actuators = nullptr);
     
     const SystemStatus& getStatus() const { return currentStatus; }
-    bool checkAndClearSmsTrigger();
+    bool checkAndClearSmsTrigger(bool* isPriorityOut = nullptr);
 
 private:
     SystemStatus currentStatus;
     Preferences  preferences;
+    bool         previousFaultState;
     
     // Button debouncing and edge-detection state
     unsigned long lastBtnOpenMs;

@@ -53,22 +53,30 @@ void SensorManager::readDHTSensors() {
         if (micros() > timeout) return;
     }
     
-    // Read 40 bits (5 bytes)
+    // Read 40 bits (5 bytes) with interrupt protection
+    noInterrupts();
     for (int i = 0; i < 40; i++) {
         timeout = micros() + 100;
         while (digitalRead(PIN_DHT) == LOW) {
-            if (micros() > timeout) return;
+            if (micros() > timeout) {
+                interrupts();
+                return;
+            }
         }
         unsigned long tStart = micros();
         timeout = micros() + 150;
         while (digitalRead(PIN_DHT) == HIGH) {
-            if (micros() > timeout) return;
+            if (micros() > timeout) {
+                interrupts();
+                return;
+            }
         }
         // If pulse width > 40 us, bit is 1, else 0
         if ((micros() - tStart) > 40) {
             data[i / 8] |= (1 << (7 - (i % 8)));
         }
     }
+    interrupts();
     
     // Checksum verification
     if (data[4] == ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {
@@ -113,13 +121,13 @@ SensorData SensorManager::sampleAndVerify() {
     readDHTSensors();
     
     // --- Step 1: Alternating Ultrasonic Ping Sequence ---
-    // Trigger Sensor 1
+    // Trigger Sensor 1 (Primary)
     float d1 = measureSingleUltrasonic(PIN_TRIG_1, PIN_ECHO_1, currentData.speed_of_sound_mps);
     
     // 60 ms acoustic blanking interval: allows reverberations to completely attenuate
     delay(60);
     
-    // Trigger Sensor 2
+    // Trigger Sensor 2 (Redundant)
     float d2 = measureSingleUltrasonic(PIN_TRIG_2, PIN_ECHO_2, currentData.speed_of_sound_mps);
     
     currentData.raw_dist_1_cm = d1;
@@ -127,8 +135,26 @@ SensorData SensorManager::sampleAndVerify() {
     currentData.timestamp_ms = now;
     
     // --- Step 2: Physical Limit & Range Verification ---
-    currentData.sensor_1_valid = (d1 >= SENSOR_MIN_VALID_DIST_CM && d1 <= SENSOR_MAX_VALID_DIST_CM);
-    currentData.sensor_2_valid = (d2 >= SENSOR_MIN_VALID_DIST_CM && d2 <= SENSOR_MAX_VALID_DIST_CM);
+    // CRITICAL FIX: If distance is closer than the 20 cm blind zone (d > 0 and d < 20cm),
+    // water is at or exceeding 100% capacity (extreme flood danger). This is NOT a sensor fault!
+    float minBlindZoneDist = SENSOR_MOUNT_HEIGHT_CM - TANK_MAX_DEPTH_CM; // Distance at 100% full
+    
+    bool d1_blindzone = (d1 >= 0.0f && d1 < SENSOR_MIN_VALID_DIST_CM);
+    bool d2_blindzone = (d2 >= 0.0f && d2 < SENSOR_MIN_VALID_DIST_CM);
+    
+    if (d1_blindzone) {
+        d1 = minBlindZoneDist; // Clamp to 100% capacity
+        currentData.sensor_1_valid = true;
+    } else {
+        currentData.sensor_1_valid = (d1 >= SENSOR_MIN_VALID_DIST_CM && d1 <= SENSOR_MAX_VALID_DIST_CM);
+    }
+    
+    if (d2_blindzone) {
+        d2 = minBlindZoneDist; // Clamp to 100% capacity
+        currentData.sensor_2_valid = true;
+    } else {
+        currentData.sensor_2_valid = (d2 >= SENSOR_MIN_VALID_DIST_CM && d2 <= SENSOR_MAX_VALID_DIST_CM);
+    }
     
     float fusedDistanceCm = 0.0f;
     
@@ -170,7 +196,7 @@ SensorData SensorManager::sampleAndVerify() {
         currentData.degraded_mode = true;
         currentData.critical_sensor_fault = false;
     } else {
-        // Critical: Both sensors failed
+        // Genuine Critical Failure: Both sensors offline/disconnected (e.g. echo timeout)
         currentData.critical_sensor_fault = true;
         currentData.degraded_mode = true;
         currentData.sensors_in_agreement = false;

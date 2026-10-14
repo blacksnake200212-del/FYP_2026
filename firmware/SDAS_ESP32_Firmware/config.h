@@ -59,16 +59,20 @@
 // RESERVOIR / PROTOTYPE TANK GEOMETRY SPECIFICATIONS
 // ============================================================================
 // JSN-SR04T has a 20-25 cm acoustic blind zone.
-// Mounting height must be at least 30-35 cm above maximum waterline.
-#define SENSOR_MOUNT_HEIGHT_CM   65.0f // Distance from tank floor to sensor face
+// Mounting height is set to 75.0 cm above tank floor (providing 35.0 cm
+// clearance over 40.0 cm full crest, safely outside the 20-25 cm blind zone).
+#define SENSOR_MOUNT_HEIGHT_CM   75.0f // Distance from tank floor to sensor face
 #define TANK_MAX_DEPTH_CM        40.0f // Maximum usable water depth (100% capacity)
-#define SENSOR_BLIND_MARGIN_CM   25.0f // Deadband margin (65cm - 40cm = 25cm clearance)
+#define SENSOR_BLIND_MARGIN_CM   35.0f // Clearance margin at 100% capacity (75cm - 40cm = 35cm)
 
 // Plausibility Verification Limits
 #define SENSOR_MAX_DELTA_CM      5.0f  // Max tolerable difference between dual sensors
 #define SENSOR_MAX_RATE_CM_PER_S 15.0f // Physically impossible surge threshold (splashing)
-#define SENSOR_MIN_VALID_DIST_CM 20.0f // Less than this indicates blind zone fault
+#define SENSOR_MIN_VALID_DIST_CM 20.0f // Distances closer than 20cm are clamped to 100% / DANGER
 #define SENSOR_MAX_VALID_DIST_CM 450.0f// Greater than this indicates echo loss
+
+// SMS Queue Capacity
+#define SMS_QUEUE_SIZE           16    // Expanded buffer for staged multi-recipient alert broadcasts
 
 // ============================================================================
 // AUTOMATED GATE & ALERT THRESHOLDS (3% HYSTERESIS LOGIC)
@@ -89,7 +93,7 @@
 #define GATE_PCT_CLOSED          0
 #define GATE_PCT_CLEAR_AREA      20    // 20% open (Advisory release)
 #define GATE_PCT_DANGER          50    // 50% open (Emergency flood release)
-#define GATE_PCT_MAX_LIMIT       50    // 50% maximum allowed gate opening
+#define GATE_PCT_MAX_LIMIT       50    // 50% maximum allowed gate opening (HARD LIMIT)
 
 #define GATE_DEG_CLOSED          0
 #define GATE_DEG_CLEAR_AREA      36    // 20% of 180 degrees
@@ -113,9 +117,19 @@
   #define SUPABASE_ANON_KEY        "YOUR_SUPABASE_ANON_KEY"
 #endif
 
-// MQTT Broker Configuration (HiveMQ / EMQX Cloud for sub-2s operator commands)
-#define MQTT_BROKER              "broker.hivemq.com"
-#define MQTT_PORT                1883
+// MQTT Broker Configuration (EMQX / HiveMQ TLS & Auth capable)
+#ifndef MQTT_BROKER
+  #define MQTT_BROKER              "broker.hivemq.com"
+#endif
+#ifndef MQTT_PORT
+  #define MQTT_PORT                1883
+#endif
+#ifndef MQTT_USER
+  #define MQTT_USER                ""    // Optional authenticated user
+#endif
+#ifndef MQTT_PASS
+  #define MQTT_PASS                ""    // Optional authenticated password
+#endif
 #define MQTT_TOPIC_TELEMETRY     "dam/puttalam/telemetry"
 #define MQTT_TOPIC_COMMANDS      "dam/puttalam/commands"
 #define MQTT_TOPIC_ALERTS        "dam/puttalam/alerts"
