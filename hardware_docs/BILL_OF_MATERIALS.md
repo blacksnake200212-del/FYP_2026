@@ -11,10 +11,10 @@ This document lists every electronic, electromechanical, power, and passive comp
 |:---:|:---|:---|:---:|:---:|:---|
 | 1 | Microcontroller | **ESP32 DevKit V1 (30-pin)** | 1 | U1 | Dual-core Tensilica Xtensa 32-bit LX6 @ 240MHz, 520KB SRAM, Wi-Fi 802.11 b/g/n, BLE, 3x UARTs. Runs local control loop and telemetry. |
 | 2 | Cellular GSM Modem | **SIM800L Module** | 1 | U2 | Quad-band 850/900/1800/1900 MHz GSM/GPRS. Used exclusively for staged SMS emergency broadcasting. 2.8V UART, 3.4V–4.4V supply. |
-| 3 | Waterproof Ultrasonic Sensor | **JSN-SR04T-2.0** | 2 | S1, S2 | Waterproof ultrasonic transducer + board. Operating voltage 5V, range 25cm–450cm, resolution 0.5cm. Primary water level sensing. |
+| 3 | Ultrasonic Distance Sensor | **HC-SR04 (Standard 4-pin)** | 2 | S1, S2 | 4-pin ultrasonic distance sensor (VCC, TRIG, ECHO, GND). Operating voltage 5V, range 2cm–400cm, resolution 0.3cm, blind zone 2cm. Primary and redundant water level sensing. |
 | 4 | Temp & Humidity Sensor | **DHT22 (AM2302)** | 1 | S3 | Digital single-bus sensor. Operating voltage 3.3V–5V, temp range -40°C to +80°C (±0.5°C). Used for speed-of-sound acoustic compensation. |
 | 5 | DC-DC Step-Down Buck Converter | **XL4015 5A Buck Module** | 2 | BUCK1, BUCK2 | Constant Voltage / Constant Current buck. Input 8–36V, adjustable output 1.25–32V, max current 5A. (BUCK1 = 5.0V, BUCK2 = 4.0V). |
-| 6 | Logic Level Converter | **ML2029 / BSS138 4-Ch** | 1 | U3 | 4-Channel Bi-directional MOSFET converter. High side (HV) = 5.0V, Low side (LV) = 3.3V. Bridges ESP32 GPIOs and JSN-SR04T 5V I/O. |
+| 6 | Logic Level Converter | **ML2029 / BSS138 4-Ch** | 1 | U3 | 4-Channel Bi-directional MOSFET converter. High side (HV) = 5.0V, Low side (LV) = 3.3V. Bridges ESP32 GPIOs and HC-SR04 5V I/O (TRIG 3.3V->5V, ECHO 5V->3.3V). |
 | 7 | Metal Gear Micro Servo | **TowerPro / Generic MG90S** | 1 | M1 | Metal gear micro servo (9g). Operating voltage 4.8V–6.0V, stall torque ~2.2 kg·cm at 4.8V, PWM 50Hz (500µs–2500µs pulse width). Controls dam sluice gate. |
 | 8 | BJT Switching Transistor | **BC547 or 2N2222 (NPN)** | 1 | Q1 | TO-92 package, $V_{CEO} = 45\text{V}$, $I_C = 100\text{mA}$ (BC547) or $800\text{mA}$ (2N2222). Drives the 5V high-decibel alert buzzer. |
 | 9 | Rectifier / Flyback Diode | **1N4007** | 1 | D1 | 1000V 1A general purpose diode. Connected antiparallel across buzzer terminals to clamp inductive voltage spikes. |
@@ -62,5 +62,5 @@ This document lists every electronic, electromechanical, power, and passive comp
 
 - Prototype water tank: Acrylic reservoir column ($60\text{ cm height} \times 25\text{ cm diameter}$).
 - Sluice gate model: Precision laser-cut 3mm acrylic slide gate connected to MG90S micro servo horn via aluminum tie rod.
-- Sensor mounting bracket: 3D-printed PETG bracket securing dual JSN-SR04T transducers $35\text{ cm}$ above maximum spillway waterline.
+- Sensor mounting bracket: 3D-printed PETG bracket securing dual HC-SR04 modules $10\text{ cm}$ above maximum spillway waterline ($50\text{ cm}$ total height from tank floor).
 - Standoffs, screw terminal blocks, and 22 AWG stranded silicone hookup wires.

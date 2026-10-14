@@ -7,12 +7,12 @@
 // SDAS FIRMWARE HARDWARE CONFIGURATION & PIN MAPPING (AUDITED BLUEPRINT V2.0)
 // ============================================================================
 
-// --- Ultrasonic Sensors (JSN-SR04T Waterproof Transducers) ---
-// Note: Level converter HV=5V, LV=3.3V
-#define PIN_TRIG_1           5     // JSN-SR04T #1 Trigger (via Level Shifter Ch1)
-#define PIN_ECHO_1           19    // JSN-SR04T #1 Echo    (via Level Shifter Ch2)
-#define PIN_TRIG_2           18    // JSN-SR04T #2 Trigger (via Level Shifter Ch3)
-#define PIN_ECHO_2           21    // JSN-SR04T #2 Echo    (via Level Shifter Ch4)
+// --- Ultrasonic Sensors (HC-SR04 Dual Ultrasonic Modules) ---
+// Note: Level converter HV=5V, LV=3.3V protects ESP32 GPIOs from 5V Echo
+#define PIN_TRIG_1           5     // HC-SR04 #1 Trigger (via Level Shifter Ch1)
+#define PIN_ECHO_1           19    // HC-SR04 #1 Echo    (via Level Shifter Ch2)
+#define PIN_TRIG_2           18    // HC-SR04 #2 Trigger (via Level Shifter Ch3)
+#define PIN_ECHO_2           21    // HC-SR04 #2 Echo    (via Level Shifter Ch4)
 
 // --- Environmental Sensing ---
 #define PIN_DHT              4     // DHT22 Data line (with 10k pull-up to 3.3V)
@@ -58,18 +58,18 @@
 // ============================================================================
 // RESERVOIR / PROTOTYPE TANK GEOMETRY SPECIFICATIONS
 // ============================================================================
-// JSN-SR04T has a 20-25 cm acoustic blind zone.
-// Mounting height is set to 75.0 cm above tank floor (providing 35.0 cm
-// clearance over 40.0 cm full crest, safely outside the 20-25 cm blind zone).
-#define SENSOR_MOUNT_HEIGHT_CM   75.0f // Distance from tank floor to sensor face
+// HC-SR04 has a 2.0 cm acoustic blind zone (effective range: 2.0 cm to 400.0 cm).
+// Prototype tank mounting: 50.0 cm above tank floor (providing 10.0 cm clearance
+// over 40.0 cm full crest line, safely outside the 2.0 cm blind zone).
+#define SENSOR_MOUNT_HEIGHT_CM   50.0f // Distance from tank floor to sensor face (configurable)
 #define TANK_MAX_DEPTH_CM        40.0f // Maximum usable water depth (100% capacity)
-#define SENSOR_BLIND_MARGIN_CM   35.0f // Clearance margin at 100% capacity (75cm - 40cm = 35cm)
+#define SENSOR_BLIND_MARGIN_CM   10.0f // Clearance margin at 100% capacity (50cm - 40cm = 10cm)
 
 // Plausibility Verification Limits
 #define SENSOR_MAX_DELTA_CM      5.0f  // Max tolerable difference between dual sensors
 #define SENSOR_MAX_RATE_CM_PER_S 15.0f // Physically impossible surge threshold (splashing)
-#define SENSOR_MIN_VALID_DIST_CM 20.0f // Distances closer than 20cm are clamped to 100% / DANGER
-#define SENSOR_MAX_VALID_DIST_CM 450.0f// Greater than this indicates echo loss
+#define SENSOR_MIN_VALID_DIST_CM 2.0f  // HC-SR04 blind zone limit (closer than 2cm clamped to 100% / DANGER)
+#define SENSOR_MAX_VALID_DIST_CM 400.0f// Greater than 400cm indicates echo loss / out-of-range
 
 // SMS Queue Capacity
 #define SMS_QUEUE_SIZE           16    // Expanded buffer for staged multi-recipient alert broadcasts

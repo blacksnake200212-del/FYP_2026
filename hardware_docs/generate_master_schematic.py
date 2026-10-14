@@ -245,17 +245,17 @@ def create_schematic():
     draw.line([(esp_x - 30, pin_start_y + 8 * pin_step_y), (llc_x + 330, llc_y + 210)], fill=COLOR_SIG, width=2) # GPIO18
     draw.line([(esp_x - 30, pin_start_y + 10 * pin_step_y), (llc_x + 330, llc_y + 235)], fill=COLOR_SIG, width=2) # GPIO21
 
-    # Ultrasonic Sensor 1: JSN-SR04T #1
+    # Ultrasonic Sensor 1: HC-SR04 #1
     s1_x, s1_y = 36, 440
-    draw_box(s1_x, s1_y, 480, 140, "SENSOR 1: JSN-SR04T (PRIMARY)", "Waterproof Transducer • Tabbowa Reservoir Crest (75cm Height)", color=(2, 132, 199))
-    draw.text((s1_x + 20, s1_y + 65), "Mount: 75.0 cm above floor (35cm clearance over 40cm crest)\nVCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV1 (5V In)\nECHO --> Level Shifter HV2 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
+    draw_box(s1_x, s1_y, 480, 140, "SENSOR 1: HC-SR04 (PRIMARY)", "Ultrasonic Module (4-Pin) • Tabbowa Reservoir Crest", color=(2, 132, 199))
+    draw.text((s1_x + 20, s1_y + 65), "Range: 2cm - 400cm • Precision: 0.3cm\nVCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV1 (5V In)\nECHO --> Level Shifter HV2 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
     draw.line([(s1_x + 480, s1_y + 85), (llc_x + 20, llc_y + 130)], fill=COLOR_SIG, width=2)
     draw.line([(s1_x + 480, s1_y + 105), (llc_x + 20, llc_y + 155)], fill=COLOR_SIG, width=2)
 
-    # Ultrasonic Sensor 2: JSN-SR04T #2
+    # Ultrasonic Sensor 2: HC-SR04 #2
     s2_x, s2_y = 36, 610
-    draw_box(s2_x, s2_y, 480, 140, "SENSOR 2: JSN-SR04T (REDUNDANT)", "Waterproof Transducer • Cross-Validation (Δ <= 5cm, 75cm Height)", color=(2, 132, 199))
-    draw.text((s2_x + 20, s2_y + 65), "Mount: 75.0 cm above floor (35cm clearance over 40cm crest)\nVCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV3 (5V In)\nECHO --> Level Shifter HV4 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
+    draw_box(s2_x, s2_y, 480, 140, "SENSOR 2: HC-SR04 (REDUNDANT)", "Ultrasonic Module (4-Pin) • Cross-Validation (Δ <= 5cm)", color=(2, 132, 199))
+    draw.text((s2_x + 20, s2_y + 65), "Range: 2cm - 400cm • Precision: 0.3cm\nVCC  --> +5.0V Main Rail\nTRIG --> Level Shifter HV3 (5V In)\nECHO --> Level Shifter HV4 (5V Out -> 3.3V)\nGND  --> Common Ground", fill=TEXT_MAIN, font=f_reg)
     draw.line([(s2_x + 480, s2_y + 85), (llc_x + 20, llc_y + 205)], fill=COLOR_SIG, width=2)
     draw.line([(s2_x + 480, s2_y + 105), (llc_x + 20, llc_y + 230)], fill=COLOR_SIG, width=2)
 
@@ -353,8 +353,8 @@ def create_schematic():
         draw.text((col_x[c_i], t_y + 62), h_txt, fill=TEXT_MAIN, font=f_small_bold)
 
     table_rows = [
-        ("JSN-SR04T #1 (Primary Ultrasonic)", "GPIO5 (TRIG), GPIO19 (ECHO)", "Output / Input", "5V (HV Level Shifter)", "LV1/LV2 <-> HV1/HV2 bi-directional level conversion"),
-        ("JSN-SR04T #2 (Redundant Ultrasonic)", "GPIO18 (TRIG), GPIO21 (ECHO)", "Output / Input", "5V (HV Level Shifter)", "LV3/LV4 <-> HV3/HV4 cross-validation redundancy"),
+        ("HC-SR04 #1 (Primary Ultrasonic)", "GPIO5 (TRIG), GPIO19 (ECHO)", "Output / Input", "5V (HV Level Shifter)", "LV1/LV2 <-> HV1/HV2 bi-directional level conversion"),
+        ("HC-SR04 #2 (Redundant Ultrasonic)", "GPIO18 (TRIG), GPIO21 (ECHO)", "Output / Input", "5V (HV Level Shifter)", "LV3/LV4 <-> HV3/HV4 cross-validation redundancy"),
         ("DHT22 Air Temperature & Humidity", "GPIO4", "Bi-directional", "3.3V Logic Rail", "Dedicated 10 kΩ pull-up resistor to 3.3V"),
         ("SIM800L GSM Cellular Modem", "GPIO16 (RX2), GPIO17 (TX2)", "UART2 Serial", "4.0V Isolated Rail", "1 kΩ / 2.2 kΩ divider protects 2.8V RXD; C3 1000uF sink"),
         ("SIM800L Hardware Reset", "GPIO23", "Output", "3.3V Logic", "Active LOW 100ms hardware unfreeze pulse"),
@@ -378,7 +378,7 @@ def create_schematic():
     draw_box(info_x, info_y, info_w, info_h, "FINAL YEAR PROJECT VERIFICATION SIGN-OFF", "Smart Dam Alert System (SDAS) Engineering Standard", color=(15, 23, 42))
 
     draw.text((info_x + 25, info_y + 65), "KEY AUDIT CONFIRMATIONS FOR SUBMISSION & VIVA:", fill=TEXT_MAIN, font=f_bold)
-    draw.text((info_x + 25, info_y + 95), "✓ EXACTLY 1 SERVO MOTOR: Only 1x MG90S micro metal-gear servo on the sluice gate. No duplicate motors.\n✓ EXACTLY 1 RGB LED MODULE: 4-pin Common Anode with 220 Ω and 100 Ω balanced resistors.\n✓ POWER ISOLATION: Buck #1 (5V) and Buck #2 (4V) share Ground only. SIM800L cannot burn from 5V.\n✓ TELEMETRY SENSORS: Ultrasonic level sensors cross-checked via 4-Ch level converter.\n✓ VOLTAGE DIVIDER: 1k / 2.2k divider guarantees SIM800L RX never exceeds 2.3V.\n✓ STRAPPING PIN INTEGRITY: GPIO12 is left unconnected; GPIO0/GPIO2 boots safely into flash.\n✓ E-STOP HARDWARE LATCH: Pressing STOP (GPIO22) halts servo motion immediately.", fill=(30, 41, 59), font=f_reg)
+    draw.text((info_x + 25, info_y + 95), "✓ EXACTLY 1 SERVO MOTOR: Only 1x MG90S micro metal-gear servo on the sluice gate. No duplicate motors.\n✓ EXACTLY 1 RGB LED MODULE: 4-pin Common Anode with 220 Ω and 100 Ω balanced resistors.\n✓ POWER ISOLATION: Buck #1 (5V) and Buck #2 (4V) share Ground only. SIM800L cannot burn from 5V.\n✓ TELEMETRY SENSORS: 2x HC-SR04 ultrasonic modules cross-checked via 4-Ch level converter.\n✓ VOLTAGE DIVIDER: 1k / 2.2k divider guarantees SIM800L RX never exceeds 2.3V.\n✓ STRAPPING PIN INTEGRITY: GPIO12 is left unconnected; GPIO0/GPIO2 boots safely into flash.\n✓ E-STOP HARDWARE LATCH: Pressing STOP (GPIO22) halts servo motion immediately.", fill=(30, 41, 59), font=f_reg)
 
     draw.rounded_rectangle([info_x + 25, info_y + 265, info_x + info_w - 25, info_y + 325], radius=6, fill=(241, 245, 249), outline=(203, 213, 225), width=1)
     draw.text((info_x + 40, info_y + 278), "Station Location: Tabbowa Dam Station #01, Puttalam District, Sri Lanka", fill=TEXT_MAIN, font=f_bold)

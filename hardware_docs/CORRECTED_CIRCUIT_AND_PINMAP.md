@@ -1,8 +1,8 @@
 # SDAS Corrected Hardware Blueprint & Engineering Specification
 ## Smart Dam Alert System with Automated Gate Control
 
-**Document Revision:** 2.0 (Post-Circuit Review & Hardware Audit)  
-**Target Hardware:** ESP32-WROOM-32 (30-pin DevKit V1), Dual JSN-SR04T Waterproof Sensors, MG996R High-Torque Servo, SIM800L GSM/GPRS, DHT22 Sensor, 3S 18650 UPS.
+**Document Revision:** 2.1 (HC-SR04 & MG90S Integration • RNT Standard)  
+**Target Hardware:** ESP32-WROOM-32 (30-pin DevKit V1), Dual HC-SR04 Ultrasonic Sensors, MG90S Micro Metal-Gear Servo, SIM800L GSM/GPRS, DHT22 Sensor, 3S 18650 UPS.
 
 ---
 
@@ -19,7 +19,7 @@ The original circuit diagram and proposal contained critical electronic and arch
 | **5** | **ESP32 3V3 Pin Not Drawn Connected** | DHT22, level shifter LV side, and RGB LED lacked an explicit, regulated 3.3V power feed. | Tie the ESP32 on-board LDO **3V3 pin** to: (1) DHT22 $V_{CC}$, (2) 10 kΩ pull-up $R_1$, (3) RGB LED common anode, and (4) 4-Channel Logic Level Converter **LV** reference pin. |
 | **6** | **Pin Conflict on Manual Override Buttons** | Earlier diagrams placed manual push buttons on GPIO32 and GPIO33, which conflict with the RGB LED Red & Green channels. | Retain GPIO32 and GPIO33 for RGB LED. Relocate manual buttons: **OPEN $\rightarrow$ GPIO14**, **CLOSE $\rightarrow$ GPIO26**, **STOP $\rightarrow$ GPIO22**. Wire to GND using internal pull-up resistors and 20 ms software debounce. |
 | **7** | **Lack of Input Protection** | Power transients, reverse battery hookup, or short circuits would instantly destroy both XL4015 buck converters and the ESP32. | Place a **5A fast-acting cartridge fuse**, a **10A Schottky diode (MBR1045)** or P-MOSFET reverse-polarity circuit, and a 1000 µF 25V low-ESR electrolytic capacitor ($C_1$) immediately after the 12V 5A adapter / switch. |
-| **8** | **Power Supply Undersizing & High Surge Demands** | A 12V 3A supply cannot withstand simultaneous MG996R servo stall surges (2.5A at 5V) and SIM800L 217 Hz GSM transmission bursts (2.0A at 4V). | Upgrade to **12V / 5A (60W) regulated DC adapter**. Add heatsinks to both XL4015 buck converters. Add battery backup (3S 18650 pack with BMS) with an automatic diode-OR switchover stage. |
+| **8** | **Power Supply Undersizing & High Surge Demands** | A 12V supply must withstand simultaneous MG90S servo stall surges (~750mA at 5V) and SIM800L 217 Hz GSM transmission bursts (2.0A at 4V). | Upgrade to **12V / 5A (60W) regulated DC adapter**. Add heatsinks to both XL4015 buck converters. Add battery backup (3S 18650 pack with BMS) with an automatic diode-OR switchover stage. |
 | **9** | **Simultaneous USB and VIN Power Risk** | Plugging USB into the PC while the 12V buck feeds 5V into DevKit VIN creates diode back-feeding and ground loops that can destroy PC USB host controllers. | Operational rule: **Never connect USB and VIN simultaneously**. Provide a disconnect jumper on VIN or disconnect the 5V line before connecting USB programming cable. |
 | **10** | **RGB LED Current Limiting Imbalance** | Equal 220 Ω resistors make Green and Blue dim because their forward voltage ($V_f \approx 3.0\text{V}$) is higher than Red ($V_f \approx 1.9\text{V}$). | Use **220 Ω for Red** ($I \approx 6.4\text{ mA}$) and **100 Ω for Green and Blue** ($I \approx 3.0\text{ mA}$ each), ensuring balanced luminosity across all 4 operational alert colors. |
 | **11** | **SIM800L Hangs Unrecoverable** | In remote field deployments, GSM modems frequently latch up due to cell tower registration failures or brownouts. | Connect **ESP32 GPIO23 $\rightarrow$ SIM800L RST pin**. The firmware monitors modem heartbeat and executes a hard active-LOW 100 ms reset pulse if AT commands timeout. |
@@ -32,15 +32,15 @@ All pins have been selected to avoid ESP32 boot strapping pins (specifically avo
 
 | Function / Peripheral | ESP32 Pin | I/O Mode | Signal Level | Circuit Notes / Protection |
 |-----------------------|-----------|----------|--------------|----------------------------|
-| **Ultrasonic 1 TRIG** | **GPIO5** | OUTPUT | 3.3V $\rightarrow$ 5.0V | Routed via Level Converter Ch1 (LV1 $\rightarrow$ HV1) to JSN-SR04T #1 |
-| **Ultrasonic 1 ECHO** | **GPIO19** | INPUT | 5.0V $\rightarrow$ 3.3V | Routed via Level Converter Ch2 (HV2 $\rightarrow$ LV2) from JSN-SR04T #1 |
-| **Ultrasonic 2 TRIG** | **GPIO18** | OUTPUT | 3.3V $\rightarrow$ 5.0V | Routed via Level Converter Ch3 (LV3 $\rightarrow$ HV3) to JSN-SR04T #2 |
-| **Ultrasonic 2 ECHO** | **GPIO21** | INPUT | 5.0V $\rightarrow$ 3.3V | Routed via Level Converter Ch4 (HV4 $\rightarrow$ LV4) from JSN-SR04T #2 |
+| **Ultrasonic 1 TRIG** | **GPIO5** | OUTPUT | 3.3V $\rightarrow$ 5.0V | Routed via Level Converter Ch1 (LV1 $\rightarrow$ HV1) to HC-SR04 #1 |
+| **Ultrasonic 1 ECHO** | **GPIO19** | INPUT | 5.0V $\rightarrow$ 3.3V | Routed via Level Converter Ch2 (HV2 $\rightarrow$ LV2) from HC-SR04 #1 |
+| **Ultrasonic 2 TRIG** | **GPIO18** | OUTPUT | 3.3V $\rightarrow$ 5.0V | Routed via Level Converter Ch3 (LV3 $\rightarrow$ HV3) to HC-SR04 #2 |
+| **Ultrasonic 2 ECHO** | **GPIO21** | INPUT | 5.0V $\rightarrow$ 3.3V | Routed via Level Converter Ch4 (HV4 $\rightarrow$ LV4) from HC-SR04 #2 |
 | **DHT22 Data Line** | **GPIO4** | INPUT/OUTPUT | 3.3V | Dedicated 10 kΩ pull-up resistor $R_1$ to ESP32 3V3 rail |
 | **RGB LED - Red** | **GPIO32** | OUTPUT | 3.3V (Active LOW) | Connected through 220 Ω resistor to Red cathode |
 | **RGB LED - Green** | **GPIO33** | OUTPUT | 3.3V (Active LOW) | Connected through 100 Ω resistor to Green cathode |
 | **RGB LED - Blue** | **GPIO13** | OUTPUT | 3.3V (Active LOW) | Connected through 100 Ω resistor to Blue cathode |
-| **Servo PWM Signal** | **GPIO25** | OUTPUT (LEDC) | 3.3V PWM (50 Hz) | 330 Ω series resistor to MG996R signal line (absorbs ringing) |
+| **Servo PWM Signal** | **GPIO25** | OUTPUT (LEDC) | 3.3V PWM (50 Hz) | 330 Ω series resistor to MG90S signal line (absorbs ringing) |
 | **Buzzer Driver** | **GPIO27** | OUTPUT | 3.3V | 1 kΩ to Base of BC547/2N2222; Emitter=GND, Collector=Buzzer (−) |
 | **SIM800L RX2 (Receive)** | **GPIO16** | INPUT (UART2) | 2.8V $\rightarrow$ 3.3V | Connected directly to SIM800L TXD (reads 2.8V as valid logic HIGH) |
 | **SIM800L TX2 (Transmit)**| **GPIO17** | OUTPUT (UART2) | 3.3V $\rightarrow$ 2.27V | 1 kΩ series + 2.2 kΩ shunt divider to GND before SIM800L RXD |
@@ -79,10 +79,10 @@ All pins have been selected to avoid ESP32 boot strapping pins (specifically avo
          +---> C2: 1000uF/16V (Low ESR)                    +---> C3: 1000uF/16V (Low ESR)
          |                                                 |
          +--> ESP32 VIN (Pin 19)                           +--> SIM800L VCC Pin ONLY
-         +--> MG996R Servo Power (+5V)                     |    (Peak 2A GSM burst sink)
+         +--> MG90S Servo Power (+5V)                      |    (Peak 2A GSM burst sink)
          +--> 5V Active Buzzer (+)                         |
-         +--> JSN-SR04T Sensor #1 VCC                      |
-         +--> JSN-SR04T Sensor #2 VCC                      |
+         +--> HC-SR04 Sensor #1 VCC                        |
+         +--> HC-SR04 Sensor #2 VCC                        |
          +--> Level Converter HV Pin (5.0V)                |
                                                            |
   [ ESP32 On-Board 3.3V LDO ]                              |
@@ -98,7 +98,7 @@ All pins have been selected to avoid ESP32 boot strapping pins (specifically avo
 
 ### Power Rails Summary
 1. **12.0 V Raw Bus:** Feeds Buck #1 and Buck #2 inputs through fuse and switch.
-2. **5.0 V Actuator & Sensor Rail (Buck #1):** Sized for 5A peak current. Powers MG996R servo motor, both JSN-SR04T waterproof transducer modules, the active buzzer, and level converter high side.
+2. **5.0 V Actuator & Sensor Rail (Buck #1):** Sized for 5A peak current. Powers MG90S micro servo motor, both HC-SR04 ultrasonic distance sensors, the active buzzer, and level converter high side.
 3. **4.0 V Dedicated GSM Rail (Buck #2):** Trimmed precisely to 4.00V. Connected **only** to SIM800L VCC with a 1000 µF low-ESR electrolytic capacitor physically mounted within 15 mm of the GSM module header.
 4. **3.3 V Logic Rail (ESP32 On-board LDO):** Used solely for low-power digital logic: DHT22, level shifter low-side reference, RGB LED common anode, and pull-up resistors.
 
@@ -106,10 +106,11 @@ All pins have been selected to avoid ESP32 boot strapping pins (specifically avo
 
 ## 4. Subsystem Interfacing Details
 
-### 4.1 Ultrasonic Water Level Sensing (Dual JSN-SR04T)
-- **Sensor Selection:** The JSN-SR04T waterproof industrial transducer replaces standard indoor HC-SR04 modules to prevent moisture corrosion in dam spillway chambers.
-- **Blind Zone Mitigation:** JSN-SR04T has an intrinsic physical deadband of 20 to 25 cm. The sensor bracket must be physically mounted **at 75.0 cm above tank floor (leaving 35.0 cm clearance over the 40.0 cm full crest line)**.
-- **Extreme Flood Failsafe:** If water rises closer than 20 cm ($d < 20\text{ cm}$), the firmware clamps the reading to 100% full capacity (DANGER) rather than flagging a sensor fault, ensuring the automated spillway gate opens to 50% immediately.
+### 4.1 Ultrasonic Water Level Sensing (Dual HC-SR04)
+- **Sensor Selection:** The HC-SR04 4-pin ultrasonic distance sensor (VCC, TRIG, ECHO, GND) operates over a range of 2.0 cm to 400.0 cm with 0.3 cm resolution.
+- **Blind Zone Mitigation:** Unlike industrial sensors that require 20–25 cm deadbands, the HC-SR04 has a tight physical blind zone of only **2.0 cm**. The sensor bracket is physically mounted **at 50.0 cm above the tank floor (providing 10.0 cm safety clearance over the 40.0 cm full crest line)**.
+- **Extreme Flood Failsafe:** If water rises closer than 2.0 cm ($d < 2.0\text{ cm}$), the firmware clamps the reading to 100% full capacity (DANGER) rather than flagging a sensor fault, ensuring the automated spillway gate opens to 50% immediately.
+- **Pulse Timing:** Uses standard 10 µs HIGH trigger pulse followed by echo pulse width measurement (timeout 30,000 µs $\approx$ 5 m).
 - **Alternating Pulse Schedule:** To prevent acoustic cross-talk (multipath echo confusion), the ESP32 triggers Sensor 1 and Sensor 2 sequentially with a minimum **60 ms blanking interval** between bursts.
 - **Speed-of-Sound Compensation:**
   $$\text{Speed of Sound } v(T) = 331.4 + (0.606 \times T_{\text{DHT22}}) \quad [\text{m/s}]$$
