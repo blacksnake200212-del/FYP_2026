@@ -135,10 +135,10 @@
 #define MQTT_TOPIC_ALERTS        "dam/puttalam/alerts"
 #define MQTT_CLIENT_ID           "SDAS_ESP32_NODE_01"
 
-// Staged SMS Emergency Contacts (E.164 format)
-#define CONTACT_OPERATOR_1       "+94740099235" // Chief Irrigation Adrian
-#define CONTACT_OPERATOR_2       "+94712833936" // Duty Control Aadhil
-#define CONTACT_DMC_CONTROL      "+94781099235" // DMC Call Center
-#define CONTACT_COMMUNITY_LEADER "+94750434951" // Divisional Secretariat
+// Staged SMS Emergency Contacts (E.164 format) - Configured with 3 User Testing Numbers
+#define CONTACT_OPERATOR_1       "+94740099235" // Testing Contact 1 (Adrian)
+#define CONTACT_OPERATOR_2       "+94712833936" // Testing Contact 2 (Aadhil)
+#define CONTACT_DMC_CONTROL      "+94781099235" // Testing Contact 3 (Dilshan)
+#define CONTACT_COMMUNITY_LEADER "+94740099235" // Re-mapped to Contact 1 for testing (no external numbers)
 
 #endif // SDAS_CONFIG_H

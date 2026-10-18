@@ -122,10 +122,10 @@ unsigned long lastBuzzerToggleMs   = 0;
 unsigned long manualModeTimeoutMs  = 0;
 bool          buzzerOutputState    = false;
 
-// Emergency Contacts for SMS Dispatch
-const char* CONTACT_OPERATOR = "+94771234567";
-const char* CONTACT_DMC      = "+94112670002";
-const char* CONTACT_DS       = "+94322263223";
+// Emergency Contacts for SMS Dispatch (Configured with User Testing Numbers)
+const char* CONTACT_OPERATOR = "+94740099235"; // Testing Number 1 (Adrian)
+const char* CONTACT_DMC      = "+94712833936"; // Testing Number 2 (Aadhil)
+const char* CONTACT_DS       = "+94781099235"; // Testing Number 3 (Dilshan)
 
 // Live Render ML Backend
 const char* CLOUD_TELEMETRY_URL = "https://sdas-ml-backend.onrender.com/api/v1/telemetry-hook";

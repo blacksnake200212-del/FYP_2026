@@ -25,14 +25,13 @@ VALUES
 (NOW() - INTERVAL '5 minutes', 'CLEAR_AREA', 'AUTO', 'Water breached 80% threshold. Automated 20% gate release initiated.', 81.2, 20),
 (NOW() - INTERVAL '1 minute', 'DANGER', 'AUTO', 'Water breached 85% critical threshold. Automated 50% gate release and local siren active.', 85.5, 50);
 
--- 4. Insert emergency contacts (Encrypted representation)
+-- 4. Insert emergency contacts (Configured with User Testing Numbers)
 INSERT INTO public.contacts
 (name, phone_encrypted, role, recipient_group, tier, opted_in)
 VALUES
-('Chief Irrigation Engineer - Puttalam', 'enc_aes256_0771234567', 'OPERATOR', 'ENGINEERS', 1, true),
-('Duty Control Officer - Tabbowa Dam', 'enc_aes256_0719876543', 'OPERATOR', 'ENGINEERS', 1, true),
-('Disaster Management Centre (DMC) Call Center', 'enc_aes256_0112670002', 'DMC_OFFICER', 'DMC', 2, true),
-('Anamaduwa Divisional Secretariat', 'enc_aes256_0322263223', 'COMMUNITY_LEADER', 'PUBLIC', 3, true);
+('Testing Number 1 (Adrian)', 'enc_aes256_+94740099235', 'OPERATOR', 'ENGINEERS', 1, true),
+('Testing Number 2 (Aadhil)', 'enc_aes256_+94712833936', 'OPERATOR', 'ENGINEERS', 1, true),
+('Testing Number 3 (Dilshan / DMC)', 'enc_aes256_+94781099235', 'DMC_OFFICER', 'DMC', 2, true);
 
 -- 5. Insert App Config version metadata (OTA & Store Update Control)
 INSERT INTO public.app_config

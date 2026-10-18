@@ -26,7 +26,7 @@ export default function ContactsScreen({ operatorUser }) {
   const [contacts, setContacts] = useState([
     {
       id: 'c-1',
-      name: 'Chief Irrigation Adrian',
+      name: 'Testing Number 1 (Adrian)',
       phone: '+94740099235',
       role: 'OPERATOR',
       tier: 1,
@@ -34,7 +34,7 @@ export default function ContactsScreen({ operatorUser }) {
     },
     {
       id: 'c-2',
-      name: 'Duty Control Aadhil',
+      name: 'Testing Number 2 (Aadhil)',
       phone: '+94712833936',
       role: 'OPERATOR',
       tier: 1,
@@ -42,18 +42,10 @@ export default function ContactsScreen({ operatorUser }) {
     },
     {
       id: 'c-3',
-      name: 'Disaster Management Centre (DMC) Call Center',
+      name: 'Testing Number 3 (Dilshan)',
       phone: '+94781099235',
       role: 'DMC_OFFICER',
       tier: 2,
-      optedIn: true
-    },
-    {
-      id: 'c-4',
-      name: 'Divisional Secretariat',
-      phone: '+94750434951',
-      role: 'COMMUNITY_LEADER',
-      tier: 3,
       optedIn: true
     }
   ]);
