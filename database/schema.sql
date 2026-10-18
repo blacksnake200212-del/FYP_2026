@@ -201,6 +201,42 @@ SELECT
     false AS degraded_mode
 FROM public.readings;
 
+-- Enable direct HTTP POST inserts to /sensor_telemetry via Supabase REST API
+CREATE OR REPLACE FUNCTION public.insert_sensor_telemetry()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.readings (
+        device_id,
+        distance_1,
+        distance_2,
+        level_pct,
+        temperature,
+        humidity,
+        alert_state,
+        control_mode,
+        gate_percent,
+        sensors_agreed
+    ) VALUES (
+        'SDAS-NODE-01',
+        COALESCE(NEW.sensor_1_dist, 0),
+        COALESCE(NEW.sensor_2_dist, 0),
+        COALESCE(NEW.water_level_pct, 0),
+        COALESCE(NEW.temperature_c, 0),
+        COALESCE(NEW.humidity_pct, 0),
+        COALESCE(NEW.alert_state, 0),
+        COALESCE(NEW.control_mode, 0),
+        COALESCE(NEW.gate_percent, 0),
+        COALESCE(NEW.sensors_agreed, true)
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_insert_sensor_telemetry ON public.sensor_telemetry;
+CREATE TRIGGER trg_insert_sensor_telemetry
+INSTEAD OF INSERT ON public.sensor_telemetry
+FOR EACH ROW EXECUTE FUNCTION public.insert_sensor_telemetry();
+
 CREATE OR REPLACE VIEW public.dam_alerts AS
 SELECT
     id,
