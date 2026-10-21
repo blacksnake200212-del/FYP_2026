@@ -19,6 +19,7 @@ import DashboardScreen from './src/components/DashboardScreen';
 import HistoryInsightsScreen from './src/components/HistoryInsightsScreen';
 import GateControlScreen from './src/components/GateControlScreen';
 import AlertsSMSScreen from './src/components/AlertsSMSScreen';
+import FloodReportsScreen from './src/components/FloodReportsScreen';
 import ContactsScreen from './src/components/ContactsScreen';
 import SettingsScreen from './src/components/SettingsScreen';
 
@@ -134,11 +135,14 @@ export default function OperatorApp() {
         {activeTab === 'DASHBOARD' && (
           <DashboardScreen operatorUser={currentUser} />
         )}
-        {activeTab === 'ANALYTICS' && (
-          <HistoryInsightsScreen operatorUser={currentUser} />
-        )}
         {activeTab === 'GATE_CONTROL' && (
           <GateControlScreen operatorUser={currentUser} />
+        )}
+        {activeTab === 'FLOOD_REPORTS' && (
+          <FloodReportsScreen operatorUser={currentUser} />
+        )}
+        {activeTab === 'ANALYTICS' && (
+          <HistoryInsightsScreen operatorUser={currentUser} />
         )}
         {activeTab === 'ALERTS_SMS' && (
           <AlertsSMSScreen operatorUser={currentUser} />
@@ -155,7 +159,7 @@ export default function OperatorApp() {
         )}
       </View>
 
-      {/* Bottom Navigation Bar (6 Compact Industrial Tabs) */}
+      {/* Bottom Navigation Bar (Matching UI Design Mockup) */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.navTab, activeTab === 'DASHBOARD' && styles.navTabActive]}
@@ -163,17 +167,7 @@ export default function OperatorApp() {
         >
           <Text style={styles.tabIcon}>📊</Text>
           <Text style={[styles.tabLabel, activeTab === 'DASHBOARD' && styles.tabLabelActive]}>
-            Live
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.navTab, activeTab === 'ANALYTICS' && styles.navTabActive]}
-          onPress={() => setActiveTab('ANALYTICS')}
-        >
-          <Text style={styles.tabIcon}>📈</Text>
-          <Text style={[styles.tabLabel, activeTab === 'ANALYTICS' && styles.tabLabelActive]}>
-            History
+            Dashboard
           </Text>
         </TouchableOpacity>
 
@@ -181,9 +175,19 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'GATE_CONTROL' && styles.navTabActive]}
           onPress={() => setActiveTab('GATE_CONTROL')}
         >
-          <Text style={styles.tabIcon}>🕹️</Text>
+          <Text style={styles.tabIcon}>🚪</Text>
           <Text style={[styles.tabLabel, activeTab === 'GATE_CONTROL' && styles.tabLabelActive]}>
-            Gate
+            Control
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.navTab, activeTab === 'FLOOD_REPORTS' && styles.navTabActive]}
+          onPress={() => setActiveTab('FLOOD_REPORTS')}
+        >
+          <Text style={styles.tabIcon}>📋</Text>
+          <Text style={[styles.tabLabel, activeTab === 'FLOOD_REPORTS' && styles.tabLabelActive]}>
+            Reports
           </Text>
         </TouchableOpacity>
 
@@ -191,19 +195,9 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'ALERTS_SMS' && styles.navTabActive]}
           onPress={() => setActiveTab('ALERTS_SMS')}
         >
-          <Text style={styles.tabIcon}>📡</Text>
+          <Text style={styles.tabIcon}>🚨</Text>
           <Text style={[styles.tabLabel, activeTab === 'ALERTS_SMS' && styles.tabLabelActive]}>
             Alerts
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.navTab, activeTab === 'CONTACTS' && styles.navTabActive]}
-          onPress={() => setActiveTab('CONTACTS')}
-        >
-          <Text style={styles.tabIcon}>👥</Text>
-          <Text style={[styles.tabLabel, activeTab === 'CONTACTS' && styles.tabLabelActive]}>
-            Contacts
           </Text>
         </TouchableOpacity>
 

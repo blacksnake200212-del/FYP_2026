@@ -14,6 +14,10 @@ import {
 } from 'react-native';
 
 import { translations } from './src/i18n';
+import ReportFloodScreen from './src/ReportFloodScreen';
+import CommunityUpdatesScreen from './src/CommunityUpdatesScreen';
+import NotificationsScreen from './src/NotificationsScreen';
+import CommunityChatScreen from './src/CommunityChatScreen';
 import { SUPABASE_CONFIG, supabase } from './src/supabaseClient';
 import {
   detectUserLocation,
@@ -419,10 +423,116 @@ export default function PublicApp() {
         </View>
 
         {/* ============================================================ */}
-        {/* TAB 1: LIVE STATUS DASHBOARD                                 */}
+        {/* TAB 1: LIVE STATUS DASHBOARD (Matching Design Screen 1)      */}
         {/* ============================================================ */}
         {activeTab === 'HOME' && (
           <View>
+            {/* Screen 1: Hero Scenic Dam Card with Brand Emblem */}
+            <View style={styles.heroScenicCard}>
+              <Image
+                source={{ uri: 'https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=800' }}
+                style={styles.heroScenicImage}
+              />
+              <View style={styles.heroScenicOverlay}>
+                <Image
+                  source={require('./assets/logo.png')}
+                  style={styles.heroLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.heroTitle}>Smart Dam</Text>
+                <Text style={styles.heroSubtitle}>Alerting System • Kantalai Node</Text>
+              </View>
+            </View>
+
+            {/* Screen 1: Water Level Metric Card (Dual Units: m & cm) */}
+            <View style={styles.mockupWaterLevelCard}>
+              <View style={styles.mwLeft}>
+                <View style={styles.mwIconCircle}>
+                  <Text style={styles.mwIconText}>💧</Text>
+                </View>
+                <View>
+                  <Text style={styles.mwLabel}>{t.waterLevel || 'Water Level'}</Text>
+                  <Text style={styles.mwValue}>
+                    {((waterLevel / 100.0) * 3.00).toFixed(2)} m
+                  </Text>
+                  <Text style={styles.mwSubValue}>
+                    ({Math.round((waterLevel / 100.0) * 300)} cm)
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.mwStatusPill,
+                  {
+                    backgroundColor:
+                      alertKey === 'DANGER'
+                        ? '#EF4444'
+                        : alertKey === 'CLEAR_AREA'
+                        ? '#F97316'
+                        : alertKey === 'PRE_WARNING'
+                        ? '#F59E0B'
+                        : '#10B981'
+                  }
+                ]}
+              >
+                <Text style={styles.mwStatusPillText}>
+                  ● {alertKey === 'NORMAL' ? 'Normal' : alertKey.replace('_', ' ')}
+                </Text>
+              </View>
+            </View>
+
+            {/* Screen 1: Today\'s Weather Card */}
+            <View style={styles.mockupWeatherCard}>
+              <View style={styles.mWeatherLeft}>
+                <Text style={styles.mWeatherIcon}>⛅</Text>
+                <View>
+                  <Text style={styles.mWeatherLabel}>Today\'s Weather</Text>
+                  <Text style={styles.mWeatherTemp}>28°C Partly Cloudy</Text>
+                </View>
+              </View>
+              <Text style={styles.mWeatherRainChance}>Rain: 12%</Text>
+            </View>
+
+            {/* Screen 1: Quick Action Grid (4 Buttons with Highlighted Red Report Flood) */}
+            <View style={styles.quickActionGrid}>
+              <TouchableOpacity
+                style={styles.quickActionBtn}
+                onPress={() => setActiveTab('HOME')}
+              >
+                <Text style={styles.qaIcon}>💧</Text>
+                <Text style={styles.qaLabel}>{t.waterLevel || 'Water Level'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickActionBtn}
+                onPress={() => setActiveTab('HOME')}
+              >
+                <Text style={styles.qaIcon}>🌤️</Text>
+                <Text style={styles.qaLabel}>{t.weather || 'Weather'}</Text>
+              </TouchableOpacity>
+
+              {/* REPORT FLOOD (Highlighted in Red Border & Warning Icon) */}
+              <TouchableOpacity
+                style={styles.quickActionReportBtn}
+                onPress={() => setActiveTab('REPORT')}
+              >
+                <View style={styles.qaRedBadge}>
+                  <Text style={styles.qaRedBadgeText}>NEW</Text>
+                </View>
+                <Text style={styles.qaReportIcon}>⚠️</Text>
+                <Text style={styles.qaReportLabel}>{t.reportFlood || 'Report Flood'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.quickActionBtn}
+                onPress={() => setActiveTab('UPDATES')}
+              >
+                <Text style={styles.qaIcon}>👥</Text>
+                <Text style={styles.qaLabel}>{t.community || 'Community'}</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* 2-Minute Staleness Alert Banner */}
             {isDataStale && (
               <View style={styles.staleBanner}>
@@ -637,6 +747,48 @@ export default function PublicApp() {
         )}
 
         {/* ============================================================ */}
+                {/* ============================================================ */}
+        {/* TAB: REPORT FLOOD (Screen 2 from Mockup)                     */}
+        {/* ============================================================ */}
+        {activeTab === 'REPORT' && (
+          <ReportFloodScreen
+            t={t}
+            userLocation={userLocation}
+            onReportSubmitted={() => setActiveTab('UPDATES')}
+            onBack={() => setActiveTab('HOME')}
+          />
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB: COMMUNITY UPDATES (Screen 3 from Mockup)                */}
+        {/* ============================================================ */}
+        {activeTab === 'UPDATES' && (
+          <CommunityUpdatesScreen
+            t={t}
+            onBack={() => setActiveTab('HOME')}
+          />
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB: NOTIFICATIONS (Screen 4 from Mockup)                    */}
+        {/* ============================================================ */}
+        {activeTab === 'NOTIFICATIONS' && (
+          <NotificationsScreen
+            t={t}
+            onBack={() => setActiveTab('HOME')}
+          />
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB: COMMUNITY CHAT (Screen 5 from Mockup)                   */}
+        {/* ============================================================ */}
+        {activeTab === 'CHAT' && (
+          <CommunityChatScreen
+            t={t}
+            onBack={() => setActiveTab('HOME')}
+          />
+        )}
+
         {/* TAB 2: ALERTS TIMELINE & PUSH NOTIFICATIONS                  */}
         {/* ============================================================ */}
         {activeTab === 'TIMELINE' && (
@@ -747,7 +899,59 @@ export default function PublicApp() {
         </View>
 
       </ScrollView>
-    </SafeAreaView>
+          {/* Screen Mockup Bottom Navigation Bar (Home, Report, Updates, Notifications, Chat) */}
+      <View style={styles.mockupBottomNav}>
+        <TouchableOpacity
+          style={[styles.mNavTab, activeTab === 'HOME' && styles.mNavTabActive]}
+          onPress={() => setActiveTab('HOME')}
+        >
+          <Text style={styles.mNavIcon}>🏠</Text>
+          <Text style={[styles.mNavLabel, activeTab === 'HOME' && styles.mNavLabelActive]}>
+            {t.home || 'Home'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mNavTab, styles.mNavTabReport, activeTab === 'REPORT' && styles.mNavTabReportActive]}
+          onPress={() => setActiveTab('REPORT')}
+        >
+          <Text style={styles.mNavIcon}>⚠️</Text>
+          <Text style={[styles.mNavLabel, styles.mNavLabelReport, activeTab === 'REPORT' && styles.mNavLabelActive]}>
+            {t.reportFlood || 'Report'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mNavTab, activeTab === 'UPDATES' && styles.mNavTabActive]}
+          onPress={() => setActiveTab('UPDATES')}
+        >
+          <Text style={styles.mNavIcon}>📋</Text>
+          <Text style={[styles.mNavLabel, activeTab === 'UPDATES' && styles.mNavLabelActive]}>
+            Updates
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mNavTab, activeTab === 'NOTIFICATIONS' && styles.mNavTabActive]}
+          onPress={() => setActiveTab('NOTIFICATIONS')}
+        >
+          <Text style={styles.mNavIcon}>🔔</Text>
+          <Text style={[styles.mNavLabel, activeTab === 'NOTIFICATIONS' && styles.mNavLabelActive]}>
+            Alerts
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.mNavTab, activeTab === 'CHAT' && styles.mNavTabActive]}
+          onPress={() => setActiveTab('CHAT')}
+        >
+          <Text style={styles.mNavIcon}>💬</Text>
+          <Text style={[styles.mNavLabel, activeTab === 'CHAT' && styles.mNavLabelActive]}>
+            Chat
+          </Text>
+        </TouchableOpacity>
+      </View>
+</SafeAreaView>
   );
 }
 
@@ -943,5 +1147,129 @@ const styles = StyleSheet.create({
   navTabTextActive: {
     color: '#FFFFFF',
     fontWeight: '800'
-  }
+  },
+
+  // Screen 1 Mockup Hero Card & Water Level Card Styles
+  heroScenicCard: {
+    height: 140,
+    borderRadius: 16,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#1E2F54'
+  },
+  heroScenicImage: { width: '100%', height: '100%' },
+  heroScenicOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(7, 13, 30, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 10
+  },
+  heroLogo: { width: 44, height: 44, marginBottom: 4 },
+  heroTitle: { fontSize: 20, fontWeight: '900', color: '#FFFFFF', letterSpacing: 0.5 },
+  heroSubtitle: { fontSize: 11, color: '#93C5FD', fontWeight: '600', marginTop: 2 },
+
+  mockupWaterLevelCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#111C36',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1E2F54',
+    marginBottom: 12
+  },
+  mwLeft: { flexDirection: 'row', alignItems: 'center' },
+  mwIconCircle: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#1E2F54',
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 12
+  },
+  mwIconText: { fontSize: 22 },
+  mwLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '700' },
+  mwValue: { fontSize: 22, fontWeight: '900', color: '#F8FAFC', marginTop: 2 },
+  mwSubValue: { fontSize: 12, color: '#38BDF8', fontWeight: '700' },
+  mwStatusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  mwStatusPillText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+
+  mockupWeatherCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#111C36',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1E2F54',
+    marginBottom: 14
+  },
+  mWeatherLeft: { flexDirection: 'row', alignItems: 'center' },
+  mWeatherIcon: { fontSize: 26, marginRight: 12 },
+  mWeatherLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+  mWeatherTemp: { fontSize: 15, fontWeight: '800', color: '#F8FAFC', marginTop: 2 },
+  mWeatherRainChance: { fontSize: 12, color: '#38BDF8', fontWeight: '700' },
+
+  quickActionGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 8
+  },
+  quickActionBtn: {
+    flex: 1,
+    backgroundColor: '#111C36',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1E2F54'
+  },
+  quickActionReportBtn: {
+    flex: 1,
+    backgroundColor: '#1A1425',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1.8,
+    borderColor: '#EF4444',
+    position: 'relative'
+  },
+  qaRedBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -4,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6
+  },
+  qaRedBadgeText: { color: '#FFFFFF', fontSize: 8, fontWeight: '900' },
+  qaIcon: { fontSize: 20, marginBottom: 4 },
+  qaReportIcon: { fontSize: 20, marginBottom: 4 },
+  qaLabel: { fontSize: 10, color: '#CBD5E1', fontWeight: '700' },
+  qaReportLabel: { fontSize: 10, color: '#FCA5A5', fontWeight: '800', textAlign: 'center' },
+
+  mockupBottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#0B1327',
+    borderTopWidth: 1,
+    borderTopColor: '#1E2F54',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    justifyContent: 'space-around'
+  },
+  mNavTab: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  mNavTabActive: { borderTopWidth: 2, borderTopColor: '#38BDF8' },
+  mNavTabReport: { backgroundColor: '#1C1917', borderRadius: 8, marginHorizontal: 2 },
+  mNavTabReportActive: { borderTopColor: '#EF4444' },
+  mNavIcon: { fontSize: 18, marginBottom: 2 },
+  mNavLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
+  mNavLabelActive: { color: '#38BDF8', fontWeight: '800' },
+  mNavLabelReport: { color: '#FCA5A5' },
+
 });

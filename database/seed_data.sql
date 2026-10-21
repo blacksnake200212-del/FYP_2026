@@ -46,3 +46,35 @@ SET min_supported_version = EXCLUDED.min_supported_version,
     store_url = EXCLUDED.store_url,
     apk_url = EXCLUDED.apk_url;
 
+-- ============================================================================
+-- 6. Insert Primary Dam Reservoir Profile (Kantalai Dam)
+-- ============================================================================
+INSERT INTO public.dams
+(id, name, location, total_height_m, current_level_m, warning_level_m, danger_level_m, latitude, longitude, is_online)
+VALUES
+('KANTALAI-01', 'Kantalai Dam', 'Kantalai, Trincomalee', 3.00, 2.04, 2.40, 2.70, 8.528400, 80.992200, true)
+ON CONFLICT (id) DO UPDATE
+SET current_level_m = EXCLUDED.current_level_m,
+    is_online = EXCLUDED.is_online;
+
+-- ============================================================================
+-- 7. Insert Crowdsourced Community Flood Reports (Aligned with Mobile UI Mockup)
+-- ============================================================================
+INSERT INTO public.flood_reports
+(dam_id, reporter_name, location_name, latitude, longitude, distance_km, description, photo_url, water_depth_est, status, created_at)
+VALUES
+('KANTALAI-01', 'Tharindu Perera', 'Kantalai, 2.4 km away', 8.531200, 80.998500, 2.4, 'Water is covering the road near the bridge.', 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500', '0.6 m', 'VERIFIED', NOW() - INTERVAL '2 hours'),
+('KANTALAI-01', 'Saman Bandara', 'Mahaweli Rd, 5.1 km', 8.512000, 80.975000, 5.1, 'Moderate water level on the road near agricultural canal.', 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=500', '0.4 m', 'PENDING', NOW() - INTERVAL '45 minutes'),
+('KANTALAI-01', 'Kamal Silva', 'Paddithidal, 8.7 km', 8.485000, 80.940000, 8.7, 'Water entering low-lying village pathways. Drain overflow.', NULL, '0.3 m', 'PENDING', NOW() - INTERVAL '1 hour 15 minutes');
+
+-- ============================================================================
+-- 8. Insert Community Chat Channel Messages (Kantalai Community)
+-- ============================================================================
+INSERT INTO public.community_messages
+(dam_id, sender_name, sender_role, message, photo_url, is_system, created_at)
+VALUES
+('KANTALAI-01', 'Tharindu', 'CITIZEN', 'Water is flowing near the old bridge.', 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500', false, NOW() - INTERVAL '40 minutes'),
+('KANTALAI-01', 'Saman', 'CITIZEN', 'Be careful everyone. Avoid this area.', NULL, false, NOW() - INTERVAL '35 minutes'),
+('KANTALAI-01', 'System Operator', 'SYSTEM', 'This report is under verification by the operator.', NULL, true, NOW() - INTERVAL '30 minutes');
+
+

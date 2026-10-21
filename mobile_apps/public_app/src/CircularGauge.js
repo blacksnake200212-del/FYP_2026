@@ -36,8 +36,13 @@ export default function CircularGauge({
     outputRange: [circumference, 0]
   });
 
-  // Calculate calibrated water column depth (40.0 cm max spillway depth)
+  // Calculate calibrated water column depth (40.0 cm / 0.40 m max prototype spillway depth)
   const depthCm = ((clampedPct / 100.0) * 40.0).toFixed(1);
+  const depthM = (parseFloat(depthCm) / 100.0).toFixed(2);
+
+  // Scaled real dam height (3.00 m full supply level)
+  const realDamM = ((clampedPct / 100.0) * 3.00).toFixed(2);
+  const realDamCm = Math.round((clampedPct / 100.0) * 300);
 
   // Gradient colors based on alert state
   const getGradientColors = () => {
@@ -121,7 +126,10 @@ export default function CircularGauge({
         <Text style={styles.capacityLabel}>RESERVOIR CAPACITY</Text>
 
         <Text style={styles.depthText}>
-          Depth: <Text style={styles.depthNumber}>{depthCm} cm</Text> / 40.0 cm
+          Level: <Text style={styles.depthNumber}>{realDamM} m ({realDamCm} cm)</Text> / 3.00 m
+        </Text>
+        <Text style={styles.subDepthText}>
+          Scale: {depthM} m ({depthCm} cm) / 0.40 m
         </Text>
       </View>
     </View>
@@ -186,6 +194,11 @@ const styles = StyleSheet.create({
     color: '#64748B',
     fontSize: 11,
     marginTop: 4
+  },
+  subDepthText: {
+    color: '#475569',
+    fontSize: 9,
+    marginTop: 2
   },
   depthNumber: {
     color: '#38BDF8',

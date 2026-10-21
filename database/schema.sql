@@ -178,6 +178,63 @@ LEFT JOIN LATERAL (
 ORDER BY r.created_at DESC
 LIMIT 1;
 
+-- ============================================================================
+-- 11. DAMS TABLE (Metadata and operational limits per reservoir node)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.dams (
+    id VARCHAR(50) PRIMARY KEY DEFAULT 'KANTALAI-01',
+    name VARCHAR(120) NOT NULL,
+    location VARCHAR(150) NOT NULL,
+    total_height_m NUMERIC(4, 2) DEFAULT 3.00 NOT NULL,
+    current_level_m NUMERIC(4, 2) DEFAULT 2.04 NOT NULL,
+    warning_level_m NUMERIC(4, 2) DEFAULT 2.40 NOT NULL,
+    danger_level_m NUMERIC(4, 2) DEFAULT 2.70 NOT NULL,
+    latitude NUMERIC(9, 6) DEFAULT 8.5284 NOT NULL,
+    longitude NUMERIC(9, 6) DEFAULT 80.9922 NOT NULL,
+    is_online BOOLEAN DEFAULT TRUE NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- ============================================================================
+-- 12. FLOOD_REPORTS TABLE (Crowdsourced Citizen Flood Reports & Operator Verification)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.flood_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dam_id VARCHAR(50) DEFAULT 'KANTALAI-01' REFERENCES public.dams(id) ON DELETE SET NULL,
+    reporter_name VARCHAR(120) DEFAULT 'Anonymous Citizen' NOT NULL,
+    phone VARCHAR(30),
+    location_name VARCHAR(200) NOT NULL,
+    latitude NUMERIC(9, 6) NOT NULL,
+    longitude NUMERIC(9, 6) NOT NULL,
+    distance_km NUMERIC(5, 2) DEFAULT 2.4,
+    description TEXT NOT NULL,
+    photo_url TEXT,
+    water_depth_est VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'VERIFIED', 'REJECTED', 'RESOLVED')),
+    verified_by UUID REFERENCES auth.users(id),
+    verified_at TIMESTAMPTZ,
+    radius_km NUMERIC(5, 2) DEFAULT 5.0,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_flood_reports_status ON public.flood_reports (status, created_at DESC);
+
+-- ============================================================================
+-- 13. COMMUNITY_MESSAGES TABLE (Interactive Community Discussion & Verification Channel)
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.community_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    dam_id VARCHAR(50) DEFAULT 'KANTALAI-01' REFERENCES public.dams(id) ON DELETE SET NULL,
+    sender_name VARCHAR(120) NOT NULL,
+    sender_role VARCHAR(30) DEFAULT 'CITIZEN' CHECK (sender_role IN ('CITIZEN', 'OPERATOR', 'SYSTEM')),
+    message TEXT NOT NULL,
+    photo_url TEXT,
+    is_system BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_community_messages_created_at ON public.community_messages (created_at ASC);
+
 -- Versioned Public Contract View (Guarantees backward compatibility for older apps)
 CREATE OR REPLACE VIEW public.public_status_v1 AS
 SELECT * FROM public.public_status;
@@ -400,3 +457,44 @@ ON public.audit_log FOR SELECT TO authenticated
 USING (
     EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
 );
+
+-- ============================================================================
+-- COMMUNITY & DAM EXTENSION RLS POLICIES
+-- ============================================================================
+ALTER TABLE public.dams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.flood_reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.community_messages ENABLE ROW LEVEL SECURITY;
+
+-- Dams: Public read-only; Operators/Admins update
+CREATE POLICY "Allow public read dams"
+ON public.dams FOR SELECT TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Allow operators manage dams"
+ON public.dams FOR ALL TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- Flood Reports: Public can insert and read verified; Operators can view all and verify/update
+CREATE POLICY "Allow public insert flood_reports"
+ON public.flood_reports FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+CREATE POLICY "Allow public read verified flood_reports"
+ON public.flood_reports FOR SELECT TO anon, authenticated
+USING (status = 'VERIFIED' OR auth.role() = 'authenticated');
+
+CREATE POLICY "Allow operators update flood_reports"
+ON public.flood_reports FOR UPDATE TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- Community Messages: Public can read all and send messages
+CREATE POLICY "Allow public read community_messages"
+ON public.community_messages FOR SELECT TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Allow public insert community_messages"
+ON public.community_messages FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+

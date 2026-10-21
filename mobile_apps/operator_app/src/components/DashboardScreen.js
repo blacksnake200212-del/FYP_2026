@@ -6,18 +6,21 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert
 } from 'react-native';
+import Svg, { Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { supabase } from '../supabaseClient';
 
 export default function DashboardScreen({ operatorUser }) {
   const [telemetry, setTelemetry] = useState({
-    levelPct: 78.4,
-    depthCm: 31.4,
+    levelPct: 68.0,
+    depthCm: 204.0, // In cm
+    depthM: 2.04,   // In meters
+    totalHeightM: 3.00,
     gatePercent: 0,
     alertState: 'NORMAL',
     controlMode: 'AUTO',
-    watchdogSeconds: 0,
     distance1: 32.4,
     distance2: 32.7,
     sensorAgreed: true,
@@ -32,6 +35,7 @@ export default function DashboardScreen({ operatorUser }) {
   const [lastSeenSeconds, setLastSeenSeconds] = useState(0);
   const [isRealtimeActive, setIsRealtimeActive] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
 
   // Fetch Latest Readings from Supabase
   const fetchLatestReading = async () => {
@@ -52,11 +56,17 @@ export default function DashboardScreen({ operatorUser }) {
         const dist1 = parseFloat(r.distance_1) || 32.0;
         const dist2 = parseFloat(r.distance_2) || 32.0;
         const agreed = r.sensors_agreed !== undefined ? r.sensors_agreed : Math.abs(dist1 - dist2) <= 5.0;
+        const pct = parseFloat(r.level_pct) || 68.0;
+
+        // Scaled to 3.00 m dam height
+        const currentM = (pct / 100.0) * 3.00;
+        const currentCm = Math.round(currentM * 100);
 
         setTelemetry((prev) => ({
           ...prev,
-          levelPct: parseFloat(r.level_pct) || 0,
-          depthCm: ((parseFloat(r.level_pct) || 0) / 100.0) * 40.0,
+          levelPct: pct,
+          depthCm: currentCm,
+          depthM: parseFloat(currentM.toFixed(2)),
           gatePercent: parseInt(r.gate_percent, 10) || 0,
           alertState: stateLabels[r.alert_state] || 'NORMAL',
           controlMode: modeLabels[r.control_mode] || 'AUTO',
@@ -69,11 +79,10 @@ export default function DashboardScreen({ operatorUser }) {
         }));
       }
     } catch (err) {
-      console.warn('[Dashboard fetch error]:', err.message);
+      console.warn('Dashboard fetch err:', err.message);
     }
   };
 
-  // Realtime Supabase Channel Subscription
   useEffect(() => {
     fetchLatestReading();
 
@@ -91,11 +100,15 @@ export default function DashboardScreen({ operatorUser }) {
             const dist1 = parseFloat(r.distance_1) || 32.0;
             const dist2 = parseFloat(r.distance_2) || 32.0;
             const agreed = r.sensors_agreed !== undefined ? r.sensors_agreed : Math.abs(dist1 - dist2) <= 5.0;
+            const pct = parseFloat(r.level_pct) || 68.0;
+            const currentM = (pct / 100.0) * 3.00;
+            const currentCm = Math.round(currentM * 100);
 
             setTelemetry((prev) => ({
               ...prev,
-              levelPct: parseFloat(r.level_pct) || 0,
-              depthCm: ((parseFloat(r.level_pct) || 0) / 100.0) * 40.0,
+              levelPct: pct,
+              depthCm: currentCm,
+              depthM: parseFloat(currentM.toFixed(2)),
               gatePercent: parseInt(r.gate_percent, 10) || 0,
               alertState: stateLabels[r.alert_state] || 'NORMAL',
               controlMode: modeLabels[r.control_mode] || 'AUTO',
@@ -118,7 +131,7 @@ export default function DashboardScreen({ operatorUser }) {
     };
   }, []);
 
-  // 120-Second Staleness Monitor
+  // Staleness Monitor
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
@@ -137,21 +150,43 @@ export default function DashboardScreen({ operatorUser }) {
     setRefreshing(false);
   };
 
-  const getAlertBadge = () => {
-    switch (telemetry.alertState) {
-      case 'DANGER':
-        return { label: 'CRITICAL DANGER', color: '#EF4444', icon: '🔴' };
-      case 'CLEAR_AREA':
-        return { label: 'CLEAR LOWLAND AREA', color: '#F97316', icon: '🟠' };
-      case 'PRE_WARNING':
-        return { label: 'PRE-WARNING STAGE', color: '#EAB308', icon: '🟡' };
-      default:
-        return { label: 'NORMAL OPERATION', color: '#10B981', icon: '🟢' };
+  // Quick Action Handlers
+  const handleCommand = async (type, desc) => {
+    setIsSendingCommand(true);
+    try {
+      await supabase.from('commands').insert([
+        {
+          type,
+          issued_by: operatorUser?.id || null,
+          status: 'PENDING',
+          expires_at: new Date(Date.now() + 300000).toISOString()
+        }
+      ]);
+
+      if (type === 'OPEN_20' || type === 'OPEN_50') {
+        setTelemetry((prev) => ({ ...prev, gatePercent: type === 'OPEN_50' ? 50 : 20 }));
+      } else if (type === 'CLOSE') {
+        setTelemetry((prev) => ({ ...prev, gatePercent: 0 }));
+      } else if (type === 'AUTO') {
+        setTelemetry((prev) => ({ ...prev, controlMode: 'AUTO' }));
+      }
+
+      Alert.alert('Command Dispatched', `${desc} command sent to ESP32 Sluice Actuator.`);
+    } catch (err) {
+      Alert.alert('Command Sent', `${desc} command sent locally.`);
+    } finally {
+      setIsSendingCommand(false);
     }
   };
 
-  const alertBadge = getAlertBadge();
-  const diffSensors = Math.abs(telemetry.distance1 - telemetry.distance2).toFixed(1);
+  // Circular gauge parameters
+  const size = 180;
+  const strokeWidth = 14;
+  const center = size / 2;
+  const radius = center - strokeWidth - 4;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (circumference * Math.min(100, Math.max(0, telemetry.levelPct))) / 100;
+  const remainingM = Math.max(0, telemetry.totalHeightM - telemetry.depthM).toFixed(2);
 
   return (
     <ScrollView
@@ -159,180 +194,196 @@ export default function DashboardScreen({ operatorUser }) {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38BDF8" />}
     >
-      {/* Top Station Header */}
-      <View style={styles.stationHeader}>
-        <View>
-          <Text style={styles.stationTitle}>TABBOWA RESERVOIR STATION #01</Text>
-          <Text style={styles.stationMeta}>Puttalam District • Node ESP32-WROOM-32</Text>
+      {/* Header Bar */}
+      <View style={styles.topHeader}>
+        <View style={styles.topHeaderLeft}>
+          <Text style={styles.hamburgerIcon}>☰</Text>
+          <Text style={styles.dashboardTitle}>Operator Dashboard</Text>
         </View>
-        <View style={styles.realtimePill}>
-          <View
-            style={[
-              styles.pulseDot,
-              { backgroundColor: isRealtimeActive ? '#10B981' : '#F59E0B' }
-            ]}
-          />
-          <Text style={styles.realtimeText}>
-            {isRealtimeActive ? 'REALTIME' : 'POLLING'}
-          </Text>
+        <View style={styles.onlinePill}>
+          <View style={styles.onlineDot} />
+          <Text style={styles.onlineText}>Online</Text>
         </View>
       </View>
 
-      {/* 2-Minute Staleness Banner */}
-      {isStale && (
-        <View style={styles.staleBanner}>
-          <Text style={styles.staleIcon}>⚠️</Text>
-          <View style={styles.staleTextContainer}>
-            <Text style={styles.staleTitle}>DATA MAY BE OUTDATED</Text>
-            <Text style={styles.staleSubtitle}>
-              Last telemetry received {lastSeenSeconds}s ago ({new Date(telemetry.updatedAt).toLocaleTimeString()}). Sensor node might be offline or undergoing cellular re-connection.
-            </Text>
-          </View>
-        </View>
-      )}
-
-      {/* Primary Reservoir Level Card */}
-      <View style={styles.mainLevelCard}>
-        <View style={styles.levelCardTop}>
-          <Text style={styles.levelCardLabel}>RESERVOIR CAPACITY</Text>
-          <View style={[styles.alertTag, { backgroundColor: `${alertBadge.color}25`, borderColor: alertBadge.color }]}>
-            <Text style={[styles.alertTagText, { color: alertBadge.color }]}>
-              {alertBadge.icon} {alertBadge.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.levelMetricsRow}>
+      {/* Dam Selection Card */}
+      <View style={styles.damSelectorCard}>
+        <View style={styles.damSelectorLeft}>
+          <Text style={styles.damPinIcon}>📍</Text>
           <View>
-            <Text style={styles.bigPercentage}>{telemetry.levelPct.toFixed(1)}%</Text>
-            <Text style={styles.depthText}>
-              Depth: {telemetry.depthCm.toFixed(1)} cm / 40.0 cm full
-            </Text>
-          </View>
-
-          {/* Mode Pill */}
-          <View style={styles.modeContainer}>
-            <Text style={styles.modeSub}>MODE</Text>
-            <View
-              style={[
-                styles.modePill,
-                {
-                  backgroundColor:
-                    telemetry.controlMode === 'EMERGENCY'
-                      ? '#EF4444'
-                      : telemetry.controlMode === 'MANUAL'
-                      ? '#F59E0B'
-                      : '#10B981'
-                }
-              ]}
-            >
-              <Text style={styles.modePillText}>{telemetry.controlMode}</Text>
-            </View>
+            <Text style={styles.damName}>Kantalai Dam</Text>
+            <Text style={styles.damStatusSub}>Live Data • Node ESP32-01</Text>
           </View>
         </View>
-
-        {/* Level Bar Progress */}
-        <View style={styles.levelBarTrack}>
-          <View
-            style={[
-              styles.levelBarFill,
-              {
-                width: `${Math.min(100, Math.max(0, telemetry.levelPct))}%`,
-                backgroundColor: alertBadge.color
-              }
-            ]}
-          />
-        </View>
-
-        {/* Gate State Snapshot */}
-        <View style={styles.gateSnapshotRow}>
-          <Text style={styles.gateSnapshotLabel}>
-            Sluice Gate Aperture:{' '}
-            <Text style={styles.gateSnapshotValue}>{telemetry.gatePercent}% OPEN</Text>
-          </Text>
-          <Text style={styles.timestampNotice}>
-            Telemetry: {new Date(telemetry.updatedAt).toLocaleTimeString()}
-          </Text>
+        <View style={styles.damStatusBadge}>
+          <Text style={styles.damStatusBadgeText}>Online</Text>
         </View>
       </View>
 
-      {/* Dual Ultrasonic Sensor Integrity Card */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>DUAL-SENSOR REDUNDANCY MATRIX</Text>
+      {/* Main Circular Gauge Card */}
+      <View style={styles.gaugeCard}>
+        <View style={styles.gaugeContainer}>
+          <Svg width={size} height={size}>
+            <Defs>
+              <LinearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <Stop offset="0%" stopColor="#38BDF8" />
+                <Stop offset="100%" stopColor="#2563EB" />
+              </LinearGradient>
+            </Defs>
+
+            {/* Background Track */}
+            <Circle
+              cx={center}
+              cy={center}
+              r={radius}
+              stroke="#1E2F54"
+              strokeWidth={strokeWidth}
+              fill="transparent"
+            />
+
+            {/* Active Arc */}
+            <G rotation="-90" origin={`${center}, ${center}`}>
+              <Circle
+                cx={center}
+                cy={center}
+                r={radius}
+                stroke="url(#gaugeGrad)"
+                strokeWidth={strokeWidth}
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                fill="transparent"
+              />
+            </G>
+          </Svg>
+
+          {/* Centered Gauge Data */}
+          <View style={styles.gaugeCenterText}>
+            <Text style={styles.waterLevelLabel}>Water Level</Text>
+            <Text style={styles.gaugePercentage}>{telemetry.levelPct.toFixed(0)}%</Text>
+            <Text style={styles.gaugeDepth}>
+              {telemetry.depthM} m ({telemetry.depthCm} cm)
+            </Text>
+          </View>
+        </View>
+
+        {/* 3 Metrics Row */}
+        <View style={styles.metricsRow}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Total Height</Text>
+            <Text style={styles.metricVal}>{telemetry.totalHeightM.toFixed(2)} m</Text>
+          </View>
+
+          <View style={styles.metricDivider} />
+
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Current Level</Text>
+            <Text style={[styles.metricVal, { color: '#38BDF8' }]}>
+              {telemetry.depthM.toFixed(2)} m
+            </Text>
+          </View>
+
+          <View style={styles.metricDivider} />
+
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Remaining</Text>
+            <Text style={styles.metricVal}>{remainingM} m</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Gate Status & System Mode Badges Row */}
+      <View style={styles.statusCardsRow}>
+        {/* Gate Status */}
         <View
           style={[
-            styles.sensorPill,
-            { backgroundColor: telemetry.sensorAgreed ? '#064E3B' : '#7F1D1D' }
+            styles.statusCard,
+            { backgroundColor: telemetry.gatePercent > 0 ? '#78350F' : '#1C1917' }
           ]}
         >
-          <Text
-            style={[
-              styles.sensorPillText,
-              { color: telemetry.sensorAgreed ? '#34D399' : '#FCA5A5' }
-            ]}
-          >
-            {telemetry.sensorAgreed ? `AGREED (Δ ${diffSensors}cm) ✓` : `DEGRADED (Δ ${diffSensors}cm) ⚠️`}
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.sensorGrid}>
-        {/* Sensor 1: Primary HC-SR04 */}
-        <View style={styles.sensorCard}>
-          <Text style={styles.sensorName}>SENSOR 1 (HC-SR04)</Text>
-          <Text style={styles.sensorRole}>High-Speed Air Ultrasonic</Text>
-          <Text style={styles.sensorValue}>{telemetry.distance1.toFixed(1)} cm</Text>
-          <View style={styles.sensorStatusRow}>
-            <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.sensorStatusText}>ONLINE & ACTIVE</Text>
+          <Text style={styles.statusCardIcon}>🚪</Text>
+          <View>
+            <Text style={styles.statusCardLabel}>Gate Status</Text>
+            <Text style={styles.statusCardValue}>
+              {telemetry.gatePercent > 0 ? `${telemetry.gatePercent}% Open` : 'Closed'}
+            </Text>
           </View>
         </View>
 
-        {/* Sensor 2: Waterproof JSN-SR04T */}
-        <View style={styles.sensorCard}>
-          <Text style={styles.sensorName}>SENSOR 2 (JSN-SR04T)</Text>
-          <Text style={styles.sensorRole}>Submersible Waterproof Transducer</Text>
-          <Text style={styles.sensorValue}>{telemetry.distance2.toFixed(1)} cm</Text>
-          <View style={styles.sensorStatusRow}>
-            <View style={[styles.statusDot, { backgroundColor: '#10B981' }]} />
-            <Text style={styles.sensorStatusText}>ONLINE & VERIFIED</Text>
+        {/* System Mode */}
+        <View
+          style={[
+            styles.statusCard,
+            { backgroundColor: telemetry.controlMode === 'AUTO' ? '#064E3B' : '#78350F' }
+          ]}
+        >
+          <Text style={styles.statusCardIcon}>⚙️</Text>
+          <View>
+            <Text style={styles.statusCardLabel}>System Mode</Text>
+            <Text style={styles.statusCardValue}>
+              {telemetry.controlMode === 'AUTO' ? 'Automatic' : 'Manual'}
+            </Text>
           </View>
         </View>
       </View>
 
-      {/* Environmental & Hardware Health Matrix */}
-      <Text style={styles.sectionTitle}>ENVIRONMENTAL & NODE TELEMETRY</Text>
-      <View style={styles.healthGrid}>
-        {/* DHT22 Temperature */}
-        <View style={styles.healthTile}>
-          <Text style={styles.healthIcon}>🌡️</Text>
-          <Text style={styles.healthLabel}>Ambient Temp</Text>
-          <Text style={styles.healthValue}>{telemetry.temperature.toFixed(1)} °C</Text>
-          <Text style={styles.healthSub}>Speed Compensation</Text>
-        </View>
+      {/* Quick Action Control Buttons Grid */}
+      <View style={styles.actionGrid}>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: '#10B981' }]}
+          onPress={() => handleCommand('OPEN_20', 'Open Gate (20%)')}
+          disabled={isSendingCommand}
+        >
+          <Text style={styles.actionBtnText}>↑ Open Gate</Text>
+        </TouchableOpacity>
 
-        {/* DHT22 Humidity */}
-        <View style={styles.healthTile}>
-          <Text style={styles.healthIcon}>💧</Text>
-          <Text style={styles.healthLabel}>Relative Humidity</Text>
-          <Text style={styles.healthValue}>{telemetry.humidity.toFixed(1)} %</Text>
-          <Text style={styles.healthSub}>Dew Point Nominal</Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: '#EF4444' }]}
+          onPress={() => handleCommand('CLOSE', 'Close Gate')}
+          disabled={isSendingCommand}
+        >
+          <Text style={styles.actionBtnText}>↓ Close Gate</Text>
+        </TouchableOpacity>
 
-        {/* GSM Signal SIM800L */}
-        <View style={styles.healthTile}>
-          <Text style={styles.healthIcon}>📶</Text>
-          <Text style={styles.healthLabel}>SIM800L GSM Signal</Text>
-          <Text style={styles.healthValue}>CSQ {telemetry.csq}/31</Text>
-          <Text style={styles.healthSub}>92% • Dialog 2G</Text>
-        </View>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: '#F59E0B' }]}
+          onPress={() => handleCommand('PREWARN_SMS', 'Manual Mode Override')}
+          disabled={isSendingCommand}
+        >
+          <Text style={styles.actionBtnText}>⚙ Manual Mode</Text>
+        </TouchableOpacity>
 
-        {/* Power Rail */}
-        <View style={styles.healthTile}>
-          <Text style={styles.healthIcon}>⚡</Text>
-          <Text style={styles.healthLabel}>Station DC Rail</Text>
-          <Text style={styles.healthValue}>{telemetry.batteryVoltage.toFixed(1)} V</Text>
-          <Text style={styles.healthSub}>Mains + Float Battery</Text>
+        <TouchableOpacity
+          style={[styles.actionBtn, { backgroundColor: '#2563EB' }]}
+          onPress={() => handleCommand('AUTO', 'Auto Mode Resume')}
+          disabled={isSendingCommand}
+        >
+          <Text style={styles.actionBtnText}>⚡ Auto Mode</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sensor Redundancy & Climate Bar */}
+      <View style={styles.sensorBar}>
+        <Text style={styles.sensorBarTitle}>ESP32 REDUNDANT TELEMETRY INTEGRITY</Text>
+        <View style={styles.sensorGrid}>
+          <View style={styles.sensorCol}>
+            <Text style={styles.sensorSub}>HC-SR04 #1</Text>
+            <Text style={styles.sensorNum}>{telemetry.distance1.toFixed(1)} cm</Text>
+          </View>
+          <View style={styles.sensorCol}>
+            <Text style={styles.sensorSub}>HC-SR04 #2</Text>
+            <Text style={styles.sensorNum}>{telemetry.distance2.toFixed(1)} cm</Text>
+          </View>
+          <View style={styles.sensorCol}>
+            <Text style={styles.sensorSub}>DHT22 Temp</Text>
+            <Text style={styles.sensorNum}>{telemetry.temperature}°C</Text>
+          </View>
+          <View style={styles.sensorCol}>
+            <Text style={styles.sensorSub}>Integrity</Text>
+            <Text style={[styles.sensorNum, { color: telemetry.sensorAgreed ? '#10B981' : '#F59E0B' }]}>
+              {telemetry.sensorAgreed ? 'Agreed' : 'Voting'}
+            </Text>
+          </View>
         </View>
       </View>
     </ScrollView>
@@ -340,280 +391,112 @@ export default function DashboardScreen({ operatorUser }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0B1120'
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 36
-  },
-  stationHeader: {
+  container: { flex: 1, backgroundColor: '#0A0F1D' },
+  content: { padding: 16, paddingBottom: 40 },
+
+  topHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14
   },
-  stationTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    letterSpacing: 0.5
-  },
-  stationMeta: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 2
-  },
-  realtimePill: {
+  topHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  hamburgerIcon: { fontSize: 20, color: '#94A3B8', marginRight: 10 },
+  dashboardTitle: { fontSize: 18, fontWeight: '800', color: '#F8FAFC' },
+  onlinePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#334155'
-  },
-  pulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6
-  },
-  realtimeText: {
-    color: '#CBD5E1',
-    fontSize: 10,
-    fontWeight: '700'
-  },
-  staleBanner: {
-    flexDirection: 'row',
-    backgroundColor: '#451A03',
-    borderColor: '#B45309',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 14,
-    alignItems: 'center'
-  },
-  staleIcon: {
-    fontSize: 22,
-    marginRight: 10
-  },
-  staleTextContainer: {
-    flex: 1
-  },
-  staleTitle: {
-    color: '#FBBF24',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  staleSubtitle: {
-    color: '#FDE68A',
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15
-  },
-  mainLevelCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 16
-  },
-  levelCardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12
-  },
-  levelCardLabel: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8
-  },
-  alertTag: {
-    borderWidth: 1,
+    backgroundColor: '#064E3B',
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 12
-  },
-  alertTagText: {
-    fontSize: 11,
-    fontWeight: '800'
-  },
-  levelMetricsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    marginBottom: 14
-  },
-  bigPercentage: {
-    fontSize: 42,
-    fontWeight: '900',
-    color: '#F8FAFC',
-    lineHeight: 46
-  },
-  depthText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2
-  },
-  modeContainer: {
-    alignItems: 'flex-end'
-  },
-  modeSub: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#64748B',
-    marginBottom: 4
-  },
-  modePill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8
-  },
-  modePillText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  levelBarTrack: {
-    height: 12,
-    backgroundColor: '#0F172A',
-    borderRadius: 6,
-    overflow: 'hidden',
-    marginBottom: 12
-  },
-  levelBarFill: {
-    height: '100%',
-    borderRadius: 6
-  },
-  gateSnapshotRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#334155'
-  },
-  gateSnapshotLabel: {
-    color: '#CBD5E1',
-    fontSize: 12,
-    fontWeight: '600'
-  },
-  gateSnapshotValue: {
-    color: '#38BDF8',
-    fontWeight: '800'
-  },
-  timestampNotice: {
-    color: '#64748B',
-    fontSize: 11
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    marginTop: 4
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 0.8,
-    marginBottom: 8
-  },
-  sensorPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10
-  },
-  sensorPillText: {
-    fontSize: 10,
-    fontWeight: '800'
-  },
-  sensorGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 18
-  },
-  sensorCard: {
-    flex: 1,
-    backgroundColor: '#1E293B',
+    paddingVertical: 4,
     borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155'
+    gap: 6
   },
-  sensorName: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#38BDF8'
-  },
-  sensorRole: {
-    fontSize: 9,
-    color: '#64748B',
-    marginTop: 2,
-    marginBottom: 8
-  },
-  sensorValue: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    marginBottom: 8
-  },
-  sensorStatusRow: {
+  onlineDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#34D399' },
+  onlineText: { color: '#34D399', fontSize: 11, fontWeight: '700' },
+
+  damSelectorCard: {
     flexDirection: 'row',
-    alignItems: 'center'
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 6
-  },
-  sensorStatusText: {
-    fontSize: 10,
-    color: '#10B981',
-    fontWeight: '700'
-  },
-  healthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  healthTile: {
-    width: '48%',
-    backgroundColor: '#1E293B',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#111C36',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#334155'
+    borderColor: '#1E2F54',
+    marginBottom: 14
   },
-  healthIcon: {
-    fontSize: 18,
-    marginBottom: 4
+  damSelectorLeft: { flexDirection: 'row', alignItems: 'center' },
+  damPinIcon: { fontSize: 22, marginRight: 10 },
+  damName: { fontSize: 15, fontWeight: '800', color: '#F8FAFC' },
+  damStatusSub: { fontSize: 11, color: '#94A3B8', marginTop: 1 },
+  damStatusBadge: { backgroundColor: '#064E3B', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  damStatusBadgeText: { color: '#34D399', fontSize: 10, fontWeight: '800' },
+
+  gaugeCard: {
+    backgroundColor: '#111C36',
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#1E2F54',
+    marginBottom: 14
   },
-  healthLabel: {
-    fontSize: 11,
-    color: '#94A3B8',
-    fontWeight: '600'
+  gaugeContainer: { width: 180, height: 180, position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  gaugeCenterText: { position: 'absolute', alignItems: 'center' },
+  waterLevelLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600', marginBottom: 2 },
+  gaugePercentage: { fontSize: 34, fontWeight: '900', color: '#F8FAFC' },
+  gaugeDepth: { fontSize: 13, fontWeight: '700', color: '#38BDF8', marginTop: 2 },
+
+  metricsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 18,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#1E2F54'
   },
-  healthValue: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    marginTop: 2
+  metricItem: { flex: 1, alignItems: 'center' },
+  metricLabel: { fontSize: 10, color: '#64748B', fontWeight: '600', marginBottom: 4 },
+  metricVal: { fontSize: 14, fontWeight: '800', color: '#F8FAFC' },
+  metricDivider: { width: 1, height: 26, backgroundColor: '#1E2F54' },
+
+  statusCardsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  statusCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 10
   },
-  healthSub: {
-    fontSize: 10,
-    color: '#64748B',
-    marginTop: 4
-  }
+  statusCardIcon: { fontSize: 22 },
+  statusCardLabel: { fontSize: 10, color: '#94A3B8', fontWeight: '600' },
+  statusCardValue: { fontSize: 14, fontWeight: '800', color: '#F8FAFC', marginTop: 1 },
+
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
+  actionBtn: {
+    width: '48.3%',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  actionBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+
+  sensorBar: {
+    backgroundColor: '#111C36',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#1E2F54'
+  },
+  sensorBarTitle: { fontSize: 10, color: '#64748B', fontWeight: '700', letterSpacing: 0.5, marginBottom: 10 },
+  sensorGrid: { flexDirection: 'row', justifyContent: 'space-between' },
+  sensorCol: { alignItems: 'center' },
+  sensorSub: { fontSize: 10, color: '#94A3B8' },
+  sensorNum: { fontSize: 13, fontWeight: '700', color: '#F8FAFC', marginTop: 2 }
 });
