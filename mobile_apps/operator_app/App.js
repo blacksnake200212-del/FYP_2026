@@ -1,3 +1,4 @@
+import { DashboardGaugeIcon, SluiceGateIcon, ClipboardReportIcon, BellAlertIcon, GearSettingsIcon } from './src/Icons';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -165,7 +166,7 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'DASHBOARD' && styles.navTabActive]}
           onPress={() => setActiveTab('DASHBOARD')}
         >
-          <Text style={styles.tabIcon}>📊</Text>
+          <DashboardGaugeIcon size={20} color={activeTab === "DASHBOARD" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.tabLabel, activeTab === 'DASHBOARD' && styles.tabLabelActive]}>
             Dashboard
           </Text>
@@ -175,7 +176,7 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'GATE_CONTROL' && styles.navTabActive]}
           onPress={() => setActiveTab('GATE_CONTROL')}
         >
-          <Text style={styles.tabIcon}>🚪</Text>
+          <SluiceGateIcon size={20} color={activeTab === "GATE_CONTROL" ? "#F59E0B" : "#64748B"} />
           <Text style={[styles.tabLabel, activeTab === 'GATE_CONTROL' && styles.tabLabelActive]}>
             Control
           </Text>
@@ -185,7 +186,7 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'FLOOD_REPORTS' && styles.navTabActive]}
           onPress={() => setActiveTab('FLOOD_REPORTS')}
         >
-          <Text style={styles.tabIcon}>📋</Text>
+          <ClipboardReportIcon size={20} color={activeTab === "FLOOD_REPORTS" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.tabLabel, activeTab === 'FLOOD_REPORTS' && styles.tabLabelActive]}>
             Reports
           </Text>
@@ -195,7 +196,7 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'ALERTS_SMS' && styles.navTabActive]}
           onPress={() => setActiveTab('ALERTS_SMS')}
         >
-          <Text style={styles.tabIcon}>🚨</Text>
+          <BellAlertIcon size={20} color={activeTab === "ALERTS_SMS" ? "#EF4444" : "#64748B"} />
           <Text style={[styles.tabLabel, activeTab === 'ALERTS_SMS' && styles.tabLabelActive]}>
             Alerts
           </Text>
@@ -205,7 +206,7 @@ export default function OperatorApp() {
           style={[styles.navTab, activeTab === 'SETTINGS' && styles.navTabActive]}
           onPress={() => setActiveTab('SETTINGS')}
         >
-          <Text style={styles.tabIcon}>⚙️</Text>
+          <GearSettingsIcon size={20} color={activeTab === "SETTINGS" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.tabLabel, activeTab === 'SETTINGS' && styles.tabLabelActive]}>
             Settings
           </Text>

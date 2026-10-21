@@ -1,3 +1,4 @@
+import { SluiceGateIcon, GearSettingsIcon, MapPinIcon } from '../Icons';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -209,7 +210,7 @@ export default function DashboardScreen({ operatorUser }) {
       {/* Dam Selection Card */}
       <View style={styles.damSelectorCard}>
         <View style={styles.damSelectorLeft}>
-          <Text style={styles.damPinIcon}>📍</Text>
+          <MapPinIcon size={22} color="#EF4444" />
           <View>
             <Text style={styles.damName}>Kantalai Dam</Text>
             <Text style={styles.damStatusSub}>Live Data • Node ESP32-01</Text>
@@ -301,7 +302,7 @@ export default function DashboardScreen({ operatorUser }) {
             { backgroundColor: telemetry.gatePercent > 0 ? '#78350F' : '#1C1917' }
           ]}
         >
-          <Text style={styles.statusCardIcon}>🚪</Text>
+          <SluiceGateIcon size={24} color="#F59E0B" />
           <View>
             <Text style={styles.statusCardLabel}>Gate Status</Text>
             <Text style={styles.statusCardValue}>
@@ -317,7 +318,7 @@ export default function DashboardScreen({ operatorUser }) {
             { backgroundColor: telemetry.controlMode === 'AUTO' ? '#064E3B' : '#78350F' }
           ]}
         >
-          <Text style={styles.statusCardIcon}>⚙️</Text>
+          <GearSettingsIcon size={24} color="#34D399" />
           <View>
             <Text style={styles.statusCardLabel}>System Mode</Text>
             <Text style={styles.statusCardValue}>

@@ -1,3 +1,4 @@
+import { WaterDropIcon, WeatherCloudSunIcon, ReportFloodIcon, CommunityIcon, HomeIcon, ClipboardReportIcon, BellAlertIcon, ChatBubbleIcon, MapPinIcon } from './src/Icons';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
@@ -448,7 +449,7 @@ export default function PublicApp() {
             <View style={styles.mockupWaterLevelCard}>
               <View style={styles.mwLeft}>
                 <View style={styles.mwIconCircle}>
-                  <Text style={styles.mwIconText}>💧</Text>
+                  <WaterDropIcon size={24} color="#38BDF8" />
                 </View>
                 <View>
                   <Text style={styles.mwLabel}>{t.waterLevel || 'Water Level'}</Text>
@@ -485,7 +486,7 @@ export default function PublicApp() {
             {/* Screen 1: Today\'s Weather Card */}
             <View style={styles.mockupWeatherCard}>
               <View style={styles.mWeatherLeft}>
-                <Text style={styles.mWeatherIcon}>⛅</Text>
+                <WeatherCloudSunIcon size={26} color="#F59E0B" />
                 <View>
                   <Text style={styles.mWeatherLabel}>Today\'s Weather</Text>
                   <Text style={styles.mWeatherTemp}>28°C Partly Cloudy</Text>
@@ -500,7 +501,7 @@ export default function PublicApp() {
                 style={styles.quickActionBtn}
                 onPress={() => setActiveTab('HOME')}
               >
-                <Text style={styles.qaIcon}>💧</Text>
+                <WaterDropIcon size={22} color="#38BDF8" />
                 <Text style={styles.qaLabel}>{t.waterLevel || 'Water Level'}</Text>
               </TouchableOpacity>
 
@@ -508,7 +509,7 @@ export default function PublicApp() {
                 style={styles.quickActionBtn}
                 onPress={() => setActiveTab('HOME')}
               >
-                <Text style={styles.qaIcon}>🌤️</Text>
+                <WeatherCloudSunIcon size={22} color="#F59E0B" />
                 <Text style={styles.qaLabel}>{t.weather || 'Weather'}</Text>
               </TouchableOpacity>
 
@@ -520,7 +521,7 @@ export default function PublicApp() {
                 <View style={styles.qaRedBadge}>
                   <Text style={styles.qaRedBadgeText}>NEW</Text>
                 </View>
-                <Text style={styles.qaReportIcon}>⚠️</Text>
+                <ReportFloodIcon size={24} color="#EF4444" />
                 <Text style={styles.qaReportLabel}>{t.reportFlood || 'Report Flood'}</Text>
               </TouchableOpacity>
 
@@ -528,7 +529,7 @@ export default function PublicApp() {
                 style={styles.quickActionBtn}
                 onPress={() => setActiveTab('UPDATES')}
               >
-                <Text style={styles.qaIcon}>👥</Text>
+                <CommunityIcon size={22} color="#3B82F6" />
                 <Text style={styles.qaLabel}>{t.community || 'Community'}</Text>
               </TouchableOpacity>
             </View>
@@ -905,7 +906,7 @@ export default function PublicApp() {
           style={[styles.mNavTab, activeTab === 'HOME' && styles.mNavTabActive]}
           onPress={() => setActiveTab('HOME')}
         >
-          <Text style={styles.mNavIcon}>🏠</Text>
+          <HomeIcon size={20} color={activeTab === "HOME" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.mNavLabel, activeTab === 'HOME' && styles.mNavLabelActive]}>
             {t.home || 'Home'}
           </Text>
@@ -915,7 +916,7 @@ export default function PublicApp() {
           style={[styles.mNavTab, styles.mNavTabReport, activeTab === 'REPORT' && styles.mNavTabReportActive]}
           onPress={() => setActiveTab('REPORT')}
         >
-          <Text style={styles.mNavIcon}>⚠️</Text>
+          <ReportFloodIcon size={20} color={activeTab === "REPORT" ? "#EF4444" : "#FCA5A5"} />
           <Text style={[styles.mNavLabel, styles.mNavLabelReport, activeTab === 'REPORT' && styles.mNavLabelActive]}>
             {t.reportFlood || 'Report'}
           </Text>
@@ -925,7 +926,7 @@ export default function PublicApp() {
           style={[styles.mNavTab, activeTab === 'UPDATES' && styles.mNavTabActive]}
           onPress={() => setActiveTab('UPDATES')}
         >
-          <Text style={styles.mNavIcon}>📋</Text>
+          <ClipboardReportIcon size={20} color={activeTab === "UPDATES" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.mNavLabel, activeTab === 'UPDATES' && styles.mNavLabelActive]}>
             Updates
           </Text>
@@ -935,7 +936,7 @@ export default function PublicApp() {
           style={[styles.mNavTab, activeTab === 'NOTIFICATIONS' && styles.mNavTabActive]}
           onPress={() => setActiveTab('NOTIFICATIONS')}
         >
-          <Text style={styles.mNavIcon}>🔔</Text>
+          <BellAlertIcon size={20} color={activeTab === "NOTIFICATIONS" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.mNavLabel, activeTab === 'NOTIFICATIONS' && styles.mNavLabelActive]}>
             Alerts
           </Text>
@@ -945,7 +946,7 @@ export default function PublicApp() {
           style={[styles.mNavTab, activeTab === 'CHAT' && styles.mNavTabActive]}
           onPress={() => setActiveTab('CHAT')}
         >
-          <Text style={styles.mNavIcon}>💬</Text>
+          <ChatBubbleIcon size={20} color={activeTab === "CHAT" ? "#38BDF8" : "#64748B"} />
           <Text style={[styles.mNavLabel, activeTab === 'CHAT' && styles.mNavLabelActive]}>
             Chat
           </Text>
