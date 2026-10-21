@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SDAS - Interactive Dual Mobile App Simulator</title>
+  <style>
+    :root {
+      --bg-dark: #070B19;
+      --card-dark: #111C36;
+      --card-border: #1E2F54;
+      --primary: #2563EB;
+      --primary-light: #38BDF8;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body {
+      background: #0B1120;
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 40px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+      max-width: 900px;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(37, 99, 235, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38BDF8;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #FFFFFF, #93C5FD);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+    }
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .dual-container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 36px;
+      width: 100%;
+      max-width: 960px;
+    }
+    /* Phone Shell */
+    .phone-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .phone-tag {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--primary-light);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .phone-frame {
+      width: 360px;
+      height: 720px;
+      background: #FFFFFF;
+      border-radius: 42px;
+      border: 8px solid #1E293B;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px #334155;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .phone-frame.dark {
+      background: #0A0F1D;
+    }
+    /* Dynamic Island / Notch */
+    .notch {
+      width: 120px;
+      height: 22px;
+      background: #1E293B;
+      border-radius: 0 0 14px 14px;
+      align-self: center;
+      z-index: 20;
+    }
+    .screen-content {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    /* Bottom Nav Bar */
+    .bottom-nav {
+      height: 56px;
+      display: flex;
+      border-top: 1px solid #E2E8F0;
+      background: #FFFFFF;
+      z-index: 10;
+    }
+    .phone-frame.dark .bottom-nav {
+      background: #070B19;
+      border-top-color: #1E2F54;
+    }
+    .nav-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748B;
+      transition: all 0.2s;
+    }
+    .nav-item.active {
+      color: var(--primary);
+    }
+    .phone-frame.dark .nav-item.active {
+      color: var(--primary-light);
+    }
+    .nav-item.report-tab {
+      background: #FEF2F2;
+      border-radius: 8px;
+      margin: 4px;
+      color: #DC2626;
+    }
+    .nav-item.report-tab.active {
+      background: #FEE2E2;
+      border: 1px solid #EF4444;
+    }
+
+    /* PUBLIC APP STYLES (Screen 1-5) */
+    .public-screen {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      padding: 14px;
+      background: #F8FAFC;
+      color: #0F172A;
+    }
+    .public-screen.active {
+      display: flex;
+    }
+    /* Screen 1: Home */
+    .hero-banner {
+      height: 120px;
+      background: linear-gradient(135deg, #1E3A8A, #0284C7);
+      border-radius: 16px;
+      position: relative;
+      overflow: hidden;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      text-align: center;
+      padding: 10px;
+    }
+    .hero-banner::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: url('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=500') center/cover;
+      opacity: 0.35;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 2;
+    }
+    .hero-title {
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: -0.3px;
+    }
+    .hero-sub {
+      font-size: 11px;
+      opacity: 0.9;
+      margin-top: 2px;
+    }
+    /* Metric Cards */
+    .metric-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .icon-box {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #EFF6FF;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+    .status-pill {
+      background: #DCFCE7;
+      color: #15803D;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .quick-btn {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 12px;
+      padding: 10px 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .quick-btn.report-alert {
+      border: 1.8px solid #EF4444;
+      background: #FFF5F5;
+      color: #991B1B;
+      position: relative;
+    }
+    .quick-btn.report-alert::before {
+      content: "NEW";
+      position: absolute;
+      top: -6px;
+      right: 2px;
+      background: #EF4444;
+      color: #FFFFFF;
+      font-size: 7px;
+      font-weight: 900;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    /* Form & Buttons */
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #475569;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .input-box {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #CBD5E1;
+      border-radius: 10px;
+      font-size: 13px;
+      outline: none;
+      background: #FFFFFF;
+    }
+    .photo-picker {
+      border: 2px dashed #93C5FD;
+      border-radius: 12px;
+      height: 90px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #EFF6FF;
+      cursor: pointer;
+      color: #2563EB;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .btn-submit {
+      width: 100%;
+      background: var(--primary);
+      color: #FFFFFF;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    /* OPERATOR APP STYLES (Screen 6-7) */
+    .operator-screen {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      padding: 14px;
+      background: #0A0F1D;
+      color: var(--text-main);
+    }
+    .operator-screen.active {
+      display: flex;
+    }
+    .op-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .op-online-pill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10B981;
+      color: #34D399;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 800;
+    }
+    .op-gauge-card {
+      background: var(--card-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .gauge-wrapper {
+      position: relative;
+      width: 140px;
+      height: 140px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gauge-center {
+      position: absolute;
+      text-align: center;
+    }
+    .gauge-pct {
+      font-size: 28px;
+      font-weight: 900;
+      color: #F8FAFC;
+    }
+    .gauge-depth {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38BDF8;
+    }
+    .metrics-summary-row {
+      display: flex;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--card-border);
+    }
+    .metric-col {
+      text-align: center;
+      flex: 1;
+    }
+    .metric-col-title {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+    .metric-col-val {
+      font-size: 13px;
+      font-weight: 800;
+      color: #F8FAFC;
+      margin-top: 2px;
+    }
+    .op-action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .op-btn {
+      padding: 12px 8px;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      color: #FFFFFF;
+      text-align: center;
+    }
+    .btn-open { background: #10B981; }
+    .btn-close { background: #EF4444; }
+    .btn-manual { background: #F59E0B; }
+    .btn-auto { background: #2563EB; }
+
+    /* Report Verification List */
+    .report-item {
+      background: var(--card-dark);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .report-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .report-loc {
+      font-size: 13px;
+      font-weight: 800;
+      color: #F8FAFC;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .report-desc {
+      font-size: 11px;
+      color: #94A3B8;
+      line-height: 15px;
+      margin-bottom: 8px;
+    }
+    .report-actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-verify {
+      flex: 1;
+      background: #10B981;
+      color: #FFFFFF;
+      padding: 6px;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .btn-view {
+      flex: 1;
+      background: #1E2F54;
+      color: #CBD5E1;
+      padding: 6px;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Notification cards */
+    .notif-card {
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .notif-red { background: #FEF2F2; border-left: 4px solid #EF4444; }
+    .notif-yellow { background: #FFFBEB; border-left: 4px solid #F59E0B; }
+    .notif-blue { background: #F0F9FF; border-left: 4px solid #0284C7; }
+
+    /* Lang switcher */
+    .lang-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .lang-btn {
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #E2E8F0;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .lang-btn.active {
+      background: var(--primary);
+      color: #FFFFFF;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="badge-pill">● LIVE TWO-WAY CONNECTED PROTOTYPE</div>
+    <h1>Smart Dam Alerting System (SDAS)</h1>
+    <p class="subtitle">Interactive Testbench: Public Citizen App (Left) & Operator Control Console (Right)</p>
+  </header>
+
+  <div class="dual-container">
+
+    <!-- ========================================== -->
+    <!-- PHONE 1: PUBLIC APP                        -->
+    <!-- ========================================== -->
+    <div class="phone-wrapper">
+      <div class="phone-tag">Citizen Public App (Client)</div>
+      <div class="phone-frame">
+        <div class="notch"></div>
+
+        <div class="screen-content">
+
+          <!-- TAB 1: HOME SCREEN -->
+          <div id="pub-home" class="public-screen active">
+            <!-- Language Bar -->
+            <div class="lang-row">
+              <div class="lang-btn active" onclick="setLang('en', this)">English</div>
+              <div class="lang-btn" onclick="setLang('si', this)">සිංහල</div>
+              <div class="lang-btn" onclick="setLang('ta', this)">தமிழ்</div>
+            </div>
+
+            <!-- Scenic Dam Banner -->
+            <div class="hero-banner">
+              <div class="hero-content">
+                <div class="hero-title" id="pub-title">Smart Dam</div>
+                <div class="hero-sub" id="pub-sub">Alerting System • Kantalai Node</div>
+              </div>
+            </div>
+
+            <!-- Water Level Metric Card -->
+            <div class="metric-card">
+              <div class="card-left">
+                <div class="icon-box">💧</div>
+                <div>
+                  <div style="font-size: 11px; color: #64748B; font-weight: 700;" id="txt-water-level">Water Level</div>
+                  <div style="font-size: 18px; font-weight: 900; color: #0F172A;" id="pub-water-display">2.04 m</div>
+                  <div style="font-size: 11px; color: #0284C7; font-weight: 700;" id="pub-water-cm">(204 cm)</div>
+                </div>
+              </div>
+              <div class="status-pill" id="pub-status-pill">Normal</div>
+            </div>
+
+            <!-- Weather Card -->
+            <div class="metric-card">
+              <div class="card-left">
+                <div class="icon-box" style="background: #FEF3C7; color: #D97706;">⛅</div>
+                <div>
+                  <div style="font-size: 11px; color: #64748B; font-weight: 700;">Today's Weather</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #0F172A;">28°C Partly Cloudy</div>
+                </div>
+              </div>
+              <div style="font-size: 11px; color: #0284C7; font-weight: 700;">Rain: 12%</div>
+            </div>
+
+            <!-- Quick Action Grid -->
+            <div class="quick-grid">
+              <div class="quick-btn" onclick="switchPubTab('home')">
+                <span style="font-size: 18px;">💧</span>
+                <span id="qa-water">Level</span>
+              </div>
+              <div class="quick-btn" onclick="switchPubTab('home')">
+                <span style="font-size: 18px;">🌤️</span>
+                <span id="qa-weather">Weather</span>
+              </div>
+              <div class="quick-btn report-alert" onclick="switchPubTab('report')">
+                <span style="font-size: 18px;">⚠️</span>
+                <span id="qa-report" style="color: #DC2626;">Report</span>
+              </div>
+              <div class="quick-btn" onclick="switchPubTab('updates')">
+                <span style="font-size: 18px;">👥</span>
+                <span id="qa-comm">Community</span>
+              </div>
+            </div>
+
+            <!-- Safe Evacuation Status -->
+            <div style="background: #F1F5F9; border-radius: 12px; padding: 12px; font-size: 11px; line-height: 16px; color: #475569;">
+              <strong>ℹ️ Community Status:</strong> Sluice gate aperture is currently <span id="pub-gate-status" style="font-weight: bold; color: #059669;">CLOSED (0%)</span>. River spillways are clear for normal access.
+            </div>
+          </div>
+
+          <!-- TAB 2: REPORT FLOOD -->
+          <div id="pub-report" class="public-screen">
+            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">Report Flood Situation</h3>
+            
+            <div class="form-group">
+              <label class="form-label">📍 Detected Location</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="text" id="rep-loc" class="input-box" value="Kantalai, Trincomalee (2.4 km away)">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">📷 Add Photo (Optional)</label>
+              <div class="photo-picker" id="photo-box" onclick="togglePhoto()">
+                <span id="photo-picker-text">Tap to Attach Photo Evidence</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">📝 Situation Description</label>
+              <textarea id="rep-desc" class="input-box" rows="3" placeholder="e.g. Water is entering the road near the bridge..."></textarea>
+            </div>
+
+            <button class="btn-submit" onclick="submitCitizenReport()">Submit Report to Operations</button>
+          </div>
+
+          <!-- TAB 3: COMMUNITY UPDATES -->
+          <div id="pub-updates" class="public-screen">
+            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 10px;">Community Updates</h3>
+            <div id="updates-feed">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- TAB 4: NOTIFICATIONS -->
+          <div id="pub-notif" class="public-screen">
+            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 10px;">Alerts & Broadcasts</h3>
+            <div class="notif-card notif-red">
+              <strong style="color: #991B1B;">🚨 Emergency Alert (Dam Safety)</strong><br>
+              <span style="font-size: 11px; color: #64748B;">Today, 10:15 AM</span>
+              <p style="margin-top: 4px; color: #334155;">Dam water level has reached critical stage. Gate opening release planned.</p>
+            </div>
+            <div class="notif-card notif-yellow">
+              <strong style="color: #92400E;">⚠️ Nearby Flood Report (Verified)</strong><br>
+              <span style="font-size: 11px; color: #64748B;">Today, 09:32 AM</span>
+              <p style="margin-top: 4px; color: #334155;">Flood reported near Kantalai Bridge (2.4 km). Please avoid the area.</p>
+            </div>
+            <div class="notif-card notif-blue">
+              <strong style="color: #075985;">🌧️ Catchment Basin Weather Update</strong><br>
+              <span style="font-size: 11px; color: #64748B;">Today, 08:15 AM</span>
+              <p style="margin-top: 4px; color: #334155;">Heavy rainfall predicted over Deduru Oya basin. Inflow surge expected.</p>
+            </div>
+          </div>
+
+          <!-- TAB 5: CHAT -->
+          <div id="pub-chat" class="public-screen">
+            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 4px;">Kantalai Community</h3>
+            <span style="font-size: 11px; color: #64748B; margin-bottom: 10px;">125 verified community members</span>
+            
+            <div id="chat-messages" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+              <div style="background: #FFFFFF; padding: 8px 12px; border-radius: 10px; border: 1px solid #E2E8F0; align-self: flex-start; max-width: 80%;">
+                <strong style="color: #2563EB; font-size: 11px;">Tharindu:</strong>
+                <p style="font-size: 12px; color: #1E293B; margin-top: 2px;">Water is flowing near the old bridge.</p>
+              </div>
+              <div style="background: #FFFFFF; padding: 8px 12px; border-radius: 10px; border: 1px solid #E2E8F0; align-self: flex-start; max-width: 80%;">
+                <strong style="color: #2563EB; font-size: 11px;">Saman:</strong>
+                <p style="font-size: 12px; color: #1E293B; margin-top: 2px;">Be careful everyone. Avoid this area.</p>
+              </div>
+              <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 6px 10px; border-radius: 8px; align-self: center; font-size: 10px; color: #1D4ED8; font-weight: 700;">
+                ℹ️ System: This report is under verification by the operator.
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="chat-input" class="input-box" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendChat()">
+              <button style="background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 0 14px; font-weight: bold; cursor: pointer;" onclick="sendChat()">Send</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- PUBLIC BOTTOM NAV -->
+        <div class="bottom-nav">
+          <div class="nav-item active" onclick="switchPubTab('home', this)">
+            <span style="font-size: 16px;">🏠</span>
+            <span>Home</span>
+          </div>
+          <div class="nav-item report-tab" onclick="switchPubTab('report', this)">
+            <span style="font-size: 16px;">⚠️</span>
+            <span>Report</span>
+          </div>
+          <div class="nav-item" onclick="switchPubTab('updates', this)">
+            <span style="font-size: 16px;">📋</span>
+            <span>Updates</span>
+          </div>
+          <div class="nav-item" onclick="switchPubTab('notif', this)">
+            <span style="font-size: 16px;">🔔</span>
+            <span>Alerts</span>
+          </div>
+          <div class="nav-item" onclick="switchPubTab('chat', this)">
+            <span style="font-size: 16px;">💬</span>
+            <span>Chat</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- PHONE 2: OPERATOR APP                      -->
+    <!-- ========================================== -->
+    <div class="phone-wrapper">
+      <div class="phone-tag">Operator Console (Dam Control & Verification)</div>
+      <div class="phone-frame dark">
+        <div class="notch"></div>
+
+        <div class="screen-content">
+
+          <!-- TAB 1: OPERATOR DASHBOARD -->
+          <div id="op-dash" class="operator-screen active">
+            <!-- Top Header -->
+            <div class="op-header">
+              <div>
+                <span style="font-size: 15px; font-weight: 900; color: #F8FAFC;">Operator Dashboard</span><br>
+                <span style="font-size: 11px; color: #94A3B8;">📍 Kantalai Dam - Live Telemetry</span>
+              </div>
+              <div class="op-online-pill">
+                <span style="width: 6px; height: 6px; border-radius: 3px; background: #34D399;"></span>
+                <span>ONLINE</span>
+              </div>
+            </div>
+
+            <!-- Circular Gauge Card -->
+            <div class="op-gauge-card">
+              <div class="gauge-wrapper">
+                <svg width="140" height="140" viewBox="0 0 140 140">
+                  <circle cx="70" cy="70" r="54" stroke="#1E2F54" stroke-width="12" fill="none" />
+                  <circle cx="70" cy="70" r="54" stroke="#38BDF8" stroke-width="12" fill="none"
+                          stroke-dasharray="339.29" id="op-gauge-arc" stroke-dashoffset="108.57" stroke-linecap="round"
+                          transform="rotate(-90 70 70)" />
+                </svg>
+                <div class="gauge-center">
+                  <div class="gauge-pct" id="op-pct-display">68%</div>
+                  <div class="gauge-depth" id="op-depth-display">2.04 m (204 cm)</div>
+                </div>
+              </div>
+
+              <!-- 3 Metrics Row -->
+              <div class="metrics-summary-row">
+                <div class="metric-col">
+                  <div class="metric-col-title">TOTAL HEIGHT</div>
+                  <div class="metric-col-val">3.00 m</div>
+                </div>
+                <div style="width: 1px; background: var(--card-border); height: 24px;"></div>
+                <div class="metric-col">
+                  <div class="metric-col-title">CURRENT LEVEL</div>
+                  <div class="metric-col-val" style="color: #38BDF8;" id="op-curr-m">2.04 m</div>
+                </div>
+                <div style="width: 1px; background: var(--card-border); height: 24px;"></div>
+                <div class="metric-col">
+                  <div class="metric-col-title">REMAINING</div>
+                  <div class="metric-col-val" id="op-rem-m">0.96 m</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Gate Status & Mode Row -->
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+              <div style="flex: 1; background: #1E1B18; border: 1px solid #443527; border-radius: 10px; padding: 10px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 20px;">🚪</span>
+                <div>
+                  <div style="font-size: 9px; color: #94A3B8;">GATE STATUS</div>
+                  <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="op-gate-pct">Closed (0%)</div>
+                </div>
+              </div>
+              <div style="flex: 1; background: #064E3B; border: 1px solid #059669; border-radius: 10px; padding: 10px; display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 20px;">⚙️</span>
+                <div>
+                  <div style="font-size: 9px; color: #94A3B8;">SYSTEM MODE</div>
+                  <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="op-mode-text">Automatic</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Quick Action Actuation Buttons -->
+            <div class="op-action-grid">
+              <button class="op-btn btn-open" onclick="triggerGate(20)">↑ Open Gate (20%)</button>
+              <button class="op-btn btn-close" onclick="triggerGate(0)">↓ Close Gate</button>
+              <button class="op-btn btn-manual" onclick="setMode('MANUAL')">⚙ Manual Mode</button>
+              <button class="op-btn btn-auto" onclick="setMode('AUTO')">⚡ Auto Mode</button>
+            </div>
+
+            <!-- Sensor Integrity -->
+            <div style="background: var(--card-dark); border: 1px solid var(--card-border); border-radius: 10px; padding: 10px; font-size: 11px;">
+              <span style="color: #64748B; font-weight: bold;">HARDWARE SENSORS:</span><br>
+              <span style="color: #38BDF8;">HC-SR04 #1: 32.4 cm</span> &bull; <span style="color: #38BDF8;">HC-SR04 #2: 32.7 cm</span> &bull; <span style="color: #10B981;">Plurality: AGREED</span>
+            </div>
+          </div>
+
+          <!-- TAB 2: VERIFY FLOOD REPORTS -->
+          <div id="op-reports" class="operator-screen">
+            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 4px; color: #F8FAFC;">Verify & Manage Reports</h3>
+            <span style="font-size: 11px; color: #94A3B8; margin-bottom: 12px;">Review citizen submissions & trigger radius alerts</span>
+            
+            <div id="op-reports-list" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- OPERATOR BOTTOM NAV -->
+        <div class="bottom-nav">
+          <div class="nav-item active" onclick="switchOpTab('dash', this)">
+            <span style="font-size: 16px;">📊</span>
+            <span>Dashboard</span>
+          </div>
+          <div class="nav-item" onclick="switchOpTab('reports', this)">
+            <span style="font-size: 16px;">📋</span>
+            <span>Reports <span id="op-badge-pending" style="background: #EF4444; color: #fff; padding: 1px 5px; border-radius: 8px; font-size: 9px;">2</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // State
+    let currentWaterPct = 68;
+    let gatePercent = 0;
+    let systemMode = 'AUTO';
+    let photoAttached = false;
+
+    let reports = [
+      {
+        id: 1,
+        loc: "Kantalai, 2.4 km",
+        time: "09:15 AM",
+        desc: "Water is covering the road near the bridge.",
+        verified: true,
+        photo: "https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500"
+      },
+      {
+        id: 2,
+        loc: "Mahaweli Rd, 5.1 km",
+        time: "09:20 AM",
+        desc: "Moderate water level on the road near agricultural canal.",
+        verified: false,
+        photo: null
+      }
+    ];
+
+    function renderUpdatesFeed() {
+      const feed = document.getElementById('updates-feed');
+      feed.innerHTML = reports.map(r => `
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <span style="background: ${r.verified ? '#EF4444' : '#64748B'}; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800;">
+              ${r.verified ? 'Flood Report' : 'Community'}
+            </span>
+            <span style="font-size: 10px; color: #94A3B8;">${r.time}</span>
+          </div>
+          <strong style="font-size: 13px; color: #0F172A;">${r.loc}</strong>
+          <p style="font-size: 12px; color: #475569; margin: 4px 0 8px;">${r.desc}</p>
+          <div style="display: flex; justify-content: flex-end;">
+            ${r.verified ? '<span style="background: #DCFCE7; color: #15803D; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800;">✓ Verified by Ops</span>' : '<span style="font-size: 10px; color: #94A3B8;">Under review</span>'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderOperatorReports() {
+      const list = document.getElementById('op-reports-list');
+      const pendingCount = reports.filter(r => !r.verified).length;
+      document.getElementById('op-badge-pending').innerText = pendingCount;
+
+      list.innerHTML = reports.map(r => `
+        <div class="report-item">
+          <div class="report-item-header">
+            <span class="report-loc">
+              <span style="width: 8px; height: 8px; border-radius: 4px; background: ${r.verified ? '#10B981' : '#EF4444'};"></span>
+              ${r.loc}
+            </span>
+            <span style="font-size: 10px; color: #94A3B8;">${r.time}</span>
+          </div>
+          <p class="report-desc">${r.desc}</p>
+          <div class="report-actions">
+            ${!r.verified ? `
+              <button class="btn-verify" onclick="verifyReport(${r.id})">✓ Verify & Alert Radius</button>
+            ` : `
+              <span style="color: #34D399; font-size: 11px; font-weight: 800; align-self: center;">✓ Verified (Radius Alerted)</span>
+            `}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function submitCitizenReport() {
+      const loc = document.getElementById('rep-loc').value || "Kantalai Area";
+      const desc = document.getElementById('rep-desc').value || "Rising water level observed.";
+
+      const newRep = {
+        id: Date.now(),
+        loc: loc,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        desc: desc,
+        verified: false,
+        photo: photoAttached ? "attached" : null
+      };
+
+      reports.unshift(newRep);
+      renderUpdatesFeed();
+      renderOperatorReports();
+
+      alert("✓ Report Submitted! Your report is now visible in the Operator Console under 'Pending Verification'.");
+      document.getElementById('rep-desc').value = "";
+      switchPubTab('updates');
+    }
+
+    function verifyReport(id) {
+      const r = reports.find(x => x.id === id);
+      if (r) {
+        r.verified = true;
+        renderUpdatesFeed();
+        renderOperatorReports();
+        alert(`✓ Report for ${r.loc} Verified! Community push notification dispatched to nearby residents.`);
+      }
+    }
+
+    function togglePhoto() {
+      photoAttached = !photoAttached;
+      const box = document.getElementById('photo-box');
+      const txt = document.getElementById('photo-picker-text');
+      if (photoAttached) {
+        box.style.background = "#DCFCE7";
+        box.style.borderColor = "#10B981";
+        txt.innerHTML = "📷 Photo Evidence Attached (Tap to remove)";
+        txt.style.color = "#15803D";
+      } else {
+        box.style.background = "#EFF6FF";
+        box.style.borderColor = "#93C5FD";
+        txt.innerHTML = "Tap to Attach Photo Evidence";
+        txt.style.color = "#2563EB";
+      }
+    }
+
+    function triggerGate(pct) {
+      gatePercent = pct;
+      const text = pct > 0 ? `${pct}% Open` : 'Closed (0%)';
+      document.getElementById('op-gate-pct').innerText = text;
+      document.getElementById('pub-gate-status').innerText = pct > 0 ? `${pct}% OPEN (Active Discharge)` : 'CLOSED (0%)';
+      document.getElementById('pub-gate-status').style.color = pct > 0 ? '#DC2626' : '#059669';
+      alert(`Sluice Gate Command Executed: ${text}`);
+    }
+
+    function setMode(mode) {
+      systemMode = mode;
+      document.getElementById('op-mode-text').innerText = mode === 'AUTO' ? 'Automatic' : 'Manual';
+      alert(`System Mode changed to ${mode}`);
+    }
+
+    function sendChat() {
+      const input = document.getElementById('chat-input');
+      const val = input.value.trim();
+      if (!val) return;
+      const container = document.getElementById('chat-messages');
+      const msg = document.createElement('div');
+      msg.style.cssText = "background: #2563EB; color: #fff; padding: 8px 12px; border-radius: 10px; align-self: flex-end; max-width: 80%; font-size: 12px;";
+      msg.innerHTML = `<strong>You:</strong><br>${val}`;
+      container.appendChild(msg);
+      input.value = "";
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function switchPubTab(tab, el) {
+      document.querySelectorAll('.public-screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('pub-' + tab).classList.add('active');
+      if (el) {
+        document.querySelectorAll('.phone-frame:not(.dark) .nav-item').forEach(n => n.classList.remove('active'));
+        el.classList.add('active');
+      }
+    }
+
+    function switchOpTab(tab, el) {
+      document.querySelectorAll('.operator-screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('op-' + tab).classList.add('active');
+      if (el) {
+        document.querySelectorAll('.phone-frame.dark .nav-item').forEach(n => n.classList.remove('active'));
+        el.classList.add('active');
+      }
+    }
+
+    const dict = {
+      en: { title: "Smart Dam", sub: "Alerting System • Kantalai Node", level: "Water Level", rep: "Report" },
+      si: { title: "ස්මාර්ට් වේල්ල", sub: "අනතුරු ඇඟවීමේ පද්ධතිය • කන්තලේ", level: "ජල මට්ටම", rep: "වාර්තා කරන්න" },
+      ta: { title: "ஸ்மார்ட் அணை", sub: "எச்சரிக்கை அமைப்பு • கந்தளாய்", level: "நீர் அளவு", rep: "வெள்ளம் பதிவு" }
+    };
+
+    function setLang(lang, el) {
+      document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      const d = dict[lang];
+      document.getElementById('pub-title').innerText = d.title;
+      document.getElementById('pub-sub').innerText = d.sub;
+      document.getElementById('txt-water-level').innerText = d.level;
+      document.getElementById('qa-report').innerText = d.rep;
+    }
+
+    // Init
+    renderUpdatesFeed();
+    renderOperatorReports();
+  </script>
+</body>
+</html>
