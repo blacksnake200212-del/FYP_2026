@@ -316,12 +316,14 @@
   <div class="screen-selector-bar">
     <div class="selector-group">
       <span class="group-label" style="color: #38BDF8;">Public App:</span>
-      <button class="screen-btn" onclick="setPublicScreen('welcome')">1. Welcome</button>
+      <button class="screen-btn" id="btn-pub-welcome" onclick="setPublicScreen('welcome')">1. Welcome</button>
       <button class="screen-btn active" id="btn-pub-home" onclick="setPublicScreen('home')">2. Dashboard</button>
-      <button class="screen-btn" id="btn-pub-weather" onclick="setPublicScreen('weather')">3. Weather</button>
-      <button class="screen-btn" id="btn-pub-notif" onclick="setPublicScreen('notif')">4. Notifications</button>
-      <button class="screen-btn" id="btn-pub-chat" onclick="setPublicScreen('chat')">5. AI Chat</button>
-      <button class="screen-btn" id="btn-pub-lang" onclick="setPublicScreen('lang')">6. Language</button>
+      <button class="screen-btn" id="btn-pub-community" onclick="setPublicScreen('community')">3. Community Hub</button>
+      <button class="screen-btn" id="btn-pub-report" onclick="setPublicScreen('report')">4. Report Flood</button>
+      <button class="screen-btn" id="btn-pub-weather" onclick="setPublicScreen('weather')">5. Weather</button>
+      <button class="screen-btn" id="btn-pub-notif" onclick="setPublicScreen('notif')">6. Notifications</button>
+      <button class="screen-btn" id="btn-pub-chat" onclick="setPublicScreen('chat')">7. AI Chat</button>
+      <button class="screen-btn" id="btn-pub-lang" onclick="setPublicScreen('lang')">8. Language</button>
     </div>
 
     <div class="selector-group">
@@ -364,17 +366,17 @@
             <span style="font-size:18px;">🏠</span>
             <span>Home</span>
           </div>
+          <div class="nav-item" id="pub-tab-community" onclick="setPublicScreen('community')">
+            <span style="font-size:18px;">👥</span>
+            <span>Community</span>
+          </div>
           <div class="nav-item" id="pub-tab-weather" onclick="setPublicScreen('weather')">
             <span style="font-size:18px;">🌤️</span>
             <span>Weather</span>
           </div>
           <div class="nav-item" id="pub-tab-notif" onclick="setPublicScreen('notif')">
             <span style="font-size:18px;">🔔</span>
-            <span>Notifications</span>
-          </div>
-          <div class="nav-item" id="pub-tab-chat" onclick="setPublicScreen('chat')">
-            <span style="font-size:18px;">💬</span>
-            <span>AI Chat</span>
+            <span>Alerts</span>
           </div>
           <div class="nav-item" id="pub-tab-lang" onclick="setPublicScreen('lang')">
             <span style="font-size:18px;">🌐</span>
@@ -442,11 +444,48 @@
     let gatePct = 0;
     let gateMode = 'AUTO';
 
-    // Real reports list (initially empty or persistent)
-    let reports = JSON.parse(localStorage.getItem('sdas_sim_reports') || '[]');
+    // Real reports list (seed default realistic flood reports if empty)
+    let reports = JSON.parse(localStorage.getItem('sdas_sim_reports') || 'null');
+    if (!reports || reports.length === 0) {
+      reports = [
+        {
+          id: 101,
+          loc: "Kantalai Low-lying Paddy Sector 4",
+          time: "08:15 AM",
+          desc: "Water level rose 0.3m overnight along drainage dyke. Minor embankment pooling. (Depth: 0.4m)",
+          verified: true,
+          status: 'VERIFIED',
+          photo: "https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500"
+        },
+        {
+          id: 102,
+          loc: "A11 Causeway Culvert, Kantalai",
+          time: "09:40 AM",
+          desc: "Water level approaching sub-surface bridge culvert. Flow speed moderate. (Depth: 0.1m)",
+          verified: false,
+          status: 'PENDING',
+          photo: null
+        }
+      ];
+      try { localStorage.setItem('sdas_sim_reports', JSON.stringify(reports)); } catch(e) {}
+    }
 
     function saveReports() {
       try { localStorage.setItem('sdas_sim_reports', JSON.stringify(reports)); } catch(e) {}
+    }
+
+    // Community Sub-Tab state ('alerts', 'chat', 'report')
+    let pubCommunitySubTab = 'alerts';
+    let selectedSimDepth = '0.4m (Knee)';
+    let simPhotoAttached = false;
+    let simChatMessages = JSON.parse(localStorage.getItem('sdas_sim_chat') || 'null');
+    if (!simChatMessages) {
+      simChatMessages = [
+        { name: "Dam Automated Warning", role: "SYSTEM", time: "09:30 AM", text: "Kantalai Reservoir water level is currently 45% (Normal supply level). Sluice gates closed." },
+        { name: "Kamal Perera (Citizen)", role: "CITIZEN", time: "10:14 AM", text: "Good morning all. Light drizzle around the lower causeway, water moving freely." },
+        { name: "P. Vigneshwaran (Farmer)", role: "CITIZEN", time: "10:45 AM", text: "Irrigation channel gates are working properly. No backflow." }
+      ];
+      try { localStorage.setItem('sdas_sim_chat', JSON.stringify(simChatMessages)); } catch(e) {}
     }
 
     // ==========================================
@@ -454,6 +493,10 @@
     // ==========================================
     function setPublicScreen(screen) {
       pubCurrentScreen = screen;
+      document.querySelectorAll('[id^="btn-pub-"]').forEach(el => el.classList.remove('active'));
+      const activeBtn = document.getElementById('btn-pub-' + screen);
+      if (activeBtn) activeBtn.classList.add('active');
+
       document.querySelectorAll('[id^="pub-tab-"]').forEach(el => el.classList.remove('active'));
       const activeTab = document.getElementById('pub-tab-' + screen);
       if (activeTab) activeTab.classList.add('active');
@@ -463,6 +506,10 @@
         renderPubWelcome(vp);
       } else if (screen === 'home') {
         renderPubHome(vp);
+      } else if (screen === 'community') {
+        renderPubCommunity(vp);
+      } else if (screen === 'report') {
+        renderPubReport(vp);
       } else if (screen === 'weather') {
         renderPubWeather(vp);
       } else if (screen === 'notif') {
@@ -574,6 +621,264 @@
           </div>
           <span style="color: #94A3B8; font-size: 18px;">›</span>
         </div>
+
+        <!-- Community Flood Hub Hero Card -->
+        <div class="pub-card" style="border-left: 4px solid #0284C7; padding: 14px 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 18px;">👥</span>
+              <span style="font-size: 14px; font-weight: 800; color: #0F172A;">Community Flood Hub</span>
+            </div>
+            <span style="background: #DCFCE7; color: #15803D; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px; display: inline-flex; align-items: center; gap: 4px;">
+              <span style="width: 6px; height: 6px; border-radius: 3px; background: #16A34A;"></span> Live Alerts
+            </span>
+          </div>
+          <div style="font-size: 11px; color: #64748B; line-height: 16px; margin-bottom: 12px;">
+            Crowdsourced field reports, operator-verified flood warnings & neighborhood chat.
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button onclick="setPublicScreen('report')" style="flex: 1; background: #EF4444; color: #FFF; border: none; padding: 9px 10px; border-radius: 10px; font-weight: 700; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.25);">
+              🚨 Report Flood
+            </button>
+            <button onclick="setPublicScreen('community')" style="flex: 1; background: #F0F9FF; color: #0284C7; border: 1px solid #BAE6FD; padding: 9px 10px; border-radius: 10px; font-weight: 700; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              👥 Community Hub
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick AI Assistant Action -->
+        <div style="background: #F0FDF4; border: 1px solid #DCFCE7; border-radius: 14px; padding: 10px 14px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; cursor: pointer;" onclick="setPublicScreen('chat')">
+          <span style="font-size: 16px;">💬</span>
+          <span style="font-size: 12px; font-weight: 700; color: #15803D;">Ask Smart Dam Assistant (AI Chat)</span>
+        </div>
+      `;
+    }
+
+    function setCommunitySubTab(tab) {
+      pubCommunitySubTab = tab;
+      const vp = document.getElementById('pub-viewport');
+      renderPubCommunity(vp);
+    }
+
+    function renderPubCommunity(vp) {
+      const verifiedReports = reports.filter(r => r.verified);
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; cursor: pointer;" onclick="setPublicScreen('home')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #0F172A;">Community Flood Hub</span>
+          <span style="background: #DCFCE7; color: #15803D; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 10px;">Live</span>
+        </div>
+
+        <!-- Sub-Tabs: Verified Alerts | Discussions | Report Flood -->
+        <div style="display: flex; background: #F1F5F9; border-radius: 12px; padding: 3px; gap: 4px; margin-bottom: 14px;">
+          <button onclick="setCommunitySubTab('alerts')" style="flex: 1; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; ${pubCommunitySubTab === 'alerts' ? 'background: #0284C7; color: #FFF;' : 'background: transparent; color: #64748B;'}">
+            📋 Alerts (${verifiedReports.length})
+          </button>
+          <button onclick="setCommunitySubTab('chat')" style="flex: 1; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; ${pubCommunitySubTab === 'chat' ? 'background: #0284C7; color: #FFF;' : 'background: transparent; color: #64748B;'}">
+            💬 Discussions
+          </button>
+          <button onclick="setPublicScreen('report')" style="flex: 1; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; background: #EF4444; color: #FFF;">
+            🚨 Report
+          </button>
+        </div>
+
+        ${pubCommunitySubTab === 'alerts' ? `
+          <!-- Verified Alerts Feed -->
+          <div style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Automated Dam Advisory -->
+            <div class="pub-card" style="border-left: 4px solid #10B981; padding: 12px 14px; margin-bottom: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="background: #DCFCE7; color: #15803D; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px;">DAM SAFETY ADVISORY</span>
+                <span style="font-size: 10px; color: #94A3B8;">Auto-Updated</span>
+              </div>
+              <div style="font-size: 13px; font-weight: 800; color: #0F172A; margin: 2px 0;">Kantalai Dam Spillways Standby</div>
+              <div style="font-size: 11px; color: #475569; line-height: 16px;">Current level is 1.35 m (45%). Downstream riverbanks clear. Sluice gate in automatic standby mode.</div>
+            </div>
+
+            ${verifiedReports.length === 0 ? `
+              <div style="background: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 14px; padding: 24px 16px; text-align: center;">
+                <div style="font-size: 26px; margin-bottom: 6px;">🛡️</div>
+                <div style="font-size: 13px; font-weight: 800; color: #0F172A;">No Active Flood Incidents</div>
+                <div style="font-size: 11px; color: #64748B; margin-top: 4px;">All downstream communities verified safe. Have flood observations to report?</div>
+                <button onclick="setPublicScreen('report')" style="margin-top: 12px; background: #EF4444; color: #FFF; border: none; padding: 8px 16px; border-radius: 12px; font-size: 11px; font-weight: 700; cursor: pointer;">+ Report Flood Incident</button>
+              </div>
+            ` : verifiedReports.map(r => `
+              <div class="pub-card" style="border-left: 4px solid #0284C7; padding: 12px 14px; margin-bottom: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <span style="background: #E0F2FE; color: #0284C7; font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px;">✓ VERIFIED FIELD REPORT</span>
+                  <span style="font-size: 10px; color: #94A3B8;">${r.time}</span>
+                </div>
+                <div style="font-size: 13px; font-weight: 800; color: #0F172A; margin: 4px 0;">📍 ${r.loc}</div>
+                <div style="font-size: 12px; color: #334155; line-height: 17px; margin-bottom: 6px;">${r.desc}</div>
+                ${r.photo ? `
+                  <div style="height: 110px; border-radius: 10px; overflow: hidden; margin: 6px 0; background: #E2E8F0;">
+                    <img src="${r.photo}" style="width: 100%; height: 100%; object-fit: cover;" />
+                  </div>
+                ` : ''}
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding-top: 6px; border-top: 1px solid #F1F5F9;">
+                  <span style="font-size: 10px; color: #15803D; font-weight: 700;">✓ Dispatched to Downstream Public</span>
+                  <span style="font-size: 10px; color: #64748B;">Radius: 5.0 km</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <!-- Citizen Community Discussions (Live Chat) -->
+          <div style="display: flex; flex-direction: column; height: 360px;">
+            <div id="sim-comm-chat-box" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px;">
+              ${simChatMessages.map(m => `
+                <div style="align-self: ${m.role === 'CITIZEN' ? 'flex-end' : 'flex-start'}; max-width: 82%; background: ${m.role === 'CITIZEN' ? '#E0F2FE' : '#F1F5F9'}; border: 1px solid ${m.role === 'CITIZEN' ? '#BAE6FD' : '#E2E8F0'}; border-radius: 14px; padding: 8px 12px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px;">
+                    <span style="font-size: 11px; font-weight: 800; color: ${m.role === 'CITIZEN' ? '#0284C7' : '#0F172A'};">${m.name}</span>
+                    <span style="font-size: 9px; color: #94A3B8;">${m.time}</span>
+                  </div>
+                  <div style="font-size: 11px; color: #1E293B; line-height: 16px;">${m.text}</div>
+                </div>
+              `).join('')}
+            </div>
+
+            <!-- Send Input -->
+            <div style="display: flex; gap: 6px; margin-top: 10px; border-top: 1px solid #E2E8F0; padding-top: 8px;">
+              <input id="sim-comm-chat-input" placeholder="Share water or road update..." style="flex: 1; border: 1px solid #CBD5E1; border-radius: 16px; padding: 8px 12px; font-size: 12px; outline: none;" onkeydown="if(event.key==='Enter') sendSimCommChat()" />
+              <button onclick="sendSimCommChat()" style="background: #0284C7; color: #FFF; border: none; border-radius: 16px; padding: 8px 14px; font-size: 12px; font-weight: 700; cursor: pointer;">Send</button>
+            </div>
+          </div>
+        `}
+      `;
+    }
+
+    function sendSimCommChat() {
+      const inp = document.getElementById('sim-comm-chat-input');
+      if (!inp || !inp.value.trim()) return;
+      simChatMessages.push({
+        name: "You (Citizen)",
+        role: "CITIZEN",
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        text: inp.value.trim()
+      });
+      try { localStorage.setItem('sdas_sim_chat', JSON.stringify(simChatMessages)); } catch(e) {}
+      renderPubCommunity(document.getElementById('pub-viewport'));
+      setTimeout(() => {
+        const box = document.getElementById('sim-comm-chat-box');
+        if (box) box.scrollTop = box.scrollHeight;
+      }, 50);
+    }
+
+    function selectDepth(depth) {
+      selectedSimDepth = depth;
+      document.querySelectorAll('.depth-btn').forEach(b => {
+        b.style.background = '#F1F5F9';
+        b.style.color = '#475569';
+        b.style.borderColor = '#CBD5E1';
+      });
+      const active = document.getElementById('depth-' + depth);
+      if (active) {
+        active.style.background = '#EF4444';
+        active.style.color = '#FFFFFF';
+        active.style.borderColor = '#EF4444';
+      }
+    }
+
+    function toggleSimPhoto() {
+      simPhotoAttached = !simPhotoAttached;
+      const box = document.getElementById('sim-photo-box');
+      if (box) {
+        if (simPhotoAttached) {
+          box.innerHTML = `
+            <div style="font-size: 12px; font-weight: 700; color: #15803D; margin-bottom: 4px;">✓ Photo Evidence Attached (Tap to remove)</div>
+            <img src="https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500" style="width: 100%; height: 80px; object-fit: cover; border-radius: 8px;" />
+          `;
+          box.style.borderColor = '#10B981';
+          box.style.background = '#F0FDF4';
+        } else {
+          box.innerHTML = `📷 Click to Attach Photo Evidence`;
+          box.style.borderColor = '#CBD5E1';
+          box.style.background = '#F8FAFC';
+        }
+      }
+    }
+
+    function renderPubReport(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; cursor: pointer;" onclick="setPublicScreen('community')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #EF4444;">🚨 Report Local Flooding</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: #991B1B; margin-bottom: 2px;">⚡ Dam Operations Early Warning</div>
+          <div style="font-size: 10px; color: #B91C1C; line-height: 14px;">Your report will be sent to the Kantalai Dam Control Center. Verified reports trigger downstream sirens and public warnings.</div>
+        </div>
+
+        <!-- Location Field -->
+        <div style="margin-bottom: 10px;">
+          <label style="font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">Your Location / Landmark</label>
+          <input id="sim-rep-loc" value="Kantalai Low-lying Paddy Sector 2" style="width: 100%; box-sizing: border-box; border: 1px solid #CBD5E1; border-radius: 10px; padding: 8px 12px; font-size: 12px; outline: none;" />
+          <div style="font-size: 10px; color: #0284C7; font-weight: 600; margin-top: 4px;">📍 GPS: 8.5312° N, 80.9985° E (Accuracy: ±5m)</div>
+        </div>
+
+        <!-- Water Depth Selector -->
+        <div style="margin-bottom: 10px;">
+          <label style="font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">Estimated Water Depth</label>
+          <div style="display: flex; gap: 6px;">
+            <button class="depth-btn" id="depth-ankle" onclick="selectDepth('ankle')" style="flex: 1; padding: 6px 2px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; background: #F1F5F9; color: #475569;">Ankle (0.1m)</button>
+            <button class="depth-btn" id="depth-knee" onclick="selectDepth('knee')" style="flex: 1; padding: 6px 2px; border: 1px solid #EF4444; border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; background: #EF4444; color: #FFF;">Knee (0.4m)</button>
+            <button class="depth-btn" id="depth-waist" onclick="selectDepth('waist')" style="flex: 1; padding: 6px 2px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; background: #F1F5F9; color: #475569;">Waist (0.9m)</button>
+            <button class="depth-btn" id="depth-severe" onclick="selectDepth('severe')" style="flex: 1; padding: 6px 2px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; background: #F1F5F9; color: #475569;">Severe (&gt;1.5m)</button>
+          </div>
+        </div>
+
+        <!-- Situation Description -->
+        <div style="margin-bottom: 10px;">
+          <label style="font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">Observation Details</label>
+          <textarea id="sim-rep-desc" rows="3" placeholder="e.g. Drainage culvert blocked, water overflowing onto access road..." style="width: 100%; box-sizing: border-box; border: 1px solid #CBD5E1; border-radius: 10px; padding: 8px 12px; font-size: 12px; outline: none; resize: none;">Water overflowing secondary drainage channel near farm access road.</textarea>
+        </div>
+
+        <!-- Photo Toggle -->
+        <div style="margin-bottom: 14px;">
+          <label style="font-size: 11px; font-weight: 700; color: #334155; display: block; margin-bottom: 4px;">Photo Proof</label>
+          <div id="sim-photo-box" onclick="toggleSimPhoto()" style="border: 2px dashed #CBD5E1; border-radius: 10px; padding: 12px; text-align: center; cursor: pointer; background: #F8FAFC; font-size: 11px; font-weight: 700; color: #64748B;">
+            📷 Click to Attach Photo Evidence
+          </div>
+        </div>
+
+        <!-- Submit Button -->
+        <button onclick="submitSimCitizenReport()" style="width: 100%; background: #EF4444; color: #FFFFFF; border: none; padding: 12px; border-radius: 16px; font-weight: 800; font-size: 13px; cursor: pointer; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);">
+          🚨 Submit Flood Report to Control Center
+        </button>
+      `;
+    }
+
+    function submitSimCitizenReport() {
+      const loc = document.getElementById('sim-rep-loc')?.value || 'Kantalai Low-lying Area';
+      const desc = document.getElementById('sim-rep-desc')?.value || 'Water rising';
+      const newRep = {
+        id: Date.now(),
+        loc: loc,
+        desc: `${desc} (Depth: ${selectedSimDepth})`,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        verified: false,
+        status: 'PENDING',
+        photo: simPhotoAttached ? 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500' : null
+      };
+
+      reports.unshift(newRep);
+      saveReports();
+
+      // If operator screen is on reports, refresh it!
+      if (opCurrentScreen === 'reports') {
+        renderOpReports(document.getElementById('op-viewport'));
+      }
+
+      alert("✓ Flood Report Submitted!\n\nYour report is now sitting in the Dam Operator's 'Flood Reports' queue for verification.");
+
+      // Reset photo state
+      simPhotoAttached = false;
+      // Navigate to Community Hub
+      pubCommunitySubTab = 'alerts';
+      setPublicScreen('community');
+    }
       `;
     }
 
@@ -1196,12 +1501,17 @@
         id: Date.now(),
         loc: "Kantalai Spillway Road (1.8 km)",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        desc: "Rising water overflowing onto drainage channel near main road.",
-        verified: false
+        desc: "Rising water overflowing onto drainage channel near main road. (Depth: 0.4m)",
+        verified: false,
+        status: 'PENDING',
+        photo: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500'
       };
       reports.unshift(newRep);
       saveReports();
       renderOpReports(document.getElementById('op-viewport'));
+      if (pubCurrentScreen === 'community') {
+        renderPubCommunity(document.getElementById('pub-viewport'));
+      }
       alert("Field report created! Now visible under Pending Reports for verification.");
     }
 
@@ -1209,9 +1519,13 @@
       const r = reports.find(x => x.id === id);
       if (r) {
         r.verified = true;
+        r.status = 'VERIFIED';
         saveReports();
         renderOpReports(document.getElementById('op-viewport'));
-        alert(`Report for "${r.loc}" Verified! Dispatched to Public App.`);
+        if (pubCurrentScreen === 'community') {
+          renderPubCommunity(document.getElementById('pub-viewport'));
+        }
+        alert(`✓ Report for "${r.loc}" Verified!\n\nGeofenced flood alert dispatched! Now live in the Public App under "Community Hub" -> "Verified Alerts".`);
       }
     }
 

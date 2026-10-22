@@ -37,6 +37,7 @@ import WeatherScreen from './src/WeatherScreen';
 import NotificationsScreen from './src/NotificationsScreen';
 import ChatScreen from './src/ChatScreen';
 import LanguageScreen from './src/LanguageScreen';
+import CommunityHubScreen from './src/CommunityHubScreen';
 import ReportFloodScreen from './src/ReportFloodScreen';
 import CommunityUpdatesScreen from './src/CommunityUpdatesScreen';
 import { SUPABASE_CONFIG, supabase } from './src/supabaseClient';
@@ -136,6 +137,8 @@ export default function PublicApp() {
     setActiveTab(tab);
     if (tab === 'HOME') {
       setCurrentScreen('HOME');
+    } else if (tab === 'COMMUNITY') {
+      setCurrentScreen('COMMUNITY');
     } else if (tab === 'WEATHER') {
       setCurrentScreen('WEATHER');
     } else if (tab === 'NOTIFICATIONS') {
@@ -258,9 +261,12 @@ export default function PublicApp() {
 
   if (currentScreen === 'COMMUNITY') {
     return (
-      <CommunityUpdatesScreen
+      <CommunityHubScreen
         t={t}
-        onBack={() => setCurrentScreen('HOME')}
+        onBack={() => {
+          setCurrentScreen('HOME');
+          setActiveTab('HOME');
+        }}
       />
     );
   }
@@ -389,29 +395,61 @@ export default function PublicApp() {
           <Text style={styles.weatherChevron}>›</Text>
         </TouchableOpacity>
 
-        {/* Community Quick Action Buttons */}
-        <View style={styles.quickActionRow}>
-          <TouchableOpacity
-            style={[styles.quickButton, { backgroundColor: '#EFF6FF', borderColor: '#DBEAFE' }]}
-            onPress={() => setCurrentScreen('REPORT_FLOOD')}
-            activeOpacity={0.8}
-          >
-            <ReportFloodIcon size={20} color="#EF4444" />
-            <Text style={[styles.quickButtonText, { color: '#1E40AF' }]}>Report Flood</Text>
-          </TouchableOpacity>
+        {/* Community Flood Hub Card */}
+        <View style={styles.communityHubCard}>
+          <View style={styles.commHubHeader}>
+            <View style={styles.commHubTitleRow}>
+              <CommunityIcon size={20} color="#0284C7" />
+              <Text style={styles.commHubTitle}>Community Flood Hub</Text>
+            </View>
+            <View style={styles.commLiveBadge}>
+              <View style={styles.commLiveDot} />
+              <Text style={styles.commLiveText}>Live Alerts</Text>
+            </View>
+          </View>
 
+          <Text style={styles.commHubDesc}>
+            Crowdsourced field reports, operator-verified flood warnings & neighborhood chat.
+          </Text>
+
+          <View style={styles.commHubButtons}>
+            <TouchableOpacity
+              style={styles.commReportBtn}
+              onPress={() => setCurrentScreen('REPORT_FLOOD')}
+              activeOpacity={0.8}
+            >
+              <ReportFloodIcon size={18} color="#FFFFFF" />
+              <Text style={styles.commReportBtnText}>🚨 Report Flood</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.commFeedBtn}
+              onPress={() => {
+                setCurrentScreen('COMMUNITY');
+                setActiveTab('COMMUNITY');
+              }}
+              activeOpacity={0.8}
+            >
+              <CommunityIcon size={18} color="#0284C7" />
+              <Text style={styles.commFeedBtnText}>👥 Community Hub</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Quick Action Button for AI Assistant */}
+        <View style={styles.quickActionRow}>
           <TouchableOpacity
             style={[styles.quickButton, { backgroundColor: '#F0FDF4', borderColor: '#DCFCE7' }]}
             onPress={() => setCurrentScreen('CHAT')}
             activeOpacity={0.8}
           >
             <ChatBubbleIcon size={20} color="#0284C7" />
-            <Text style={[styles.quickButtonText, { color: '#15803D' }]}>Ask AI Assistant</Text>
+            <Text style={[styles.quickButtonText, { color: '#15803D' }]}>Ask Smart Dam Assistant (AI Chat)</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      {/* Bottom Navigation Bar matching Screen Mockup */}
+      {/* Bottom Navigation Bar */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.navTab, activeTab === 'HOME' && styles.navTabActive]}
@@ -421,6 +459,17 @@ export default function PublicApp() {
           <HomeIcon size={22} color={activeTab === 'HOME' ? '#0284C7' : '#94A3B8'} />
           <Text style={[styles.navLabel, activeTab === 'HOME' && styles.navLabelActive]}>
             Home
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.navTab, activeTab === 'COMMUNITY' && styles.navTabActive]}
+          onPress={() => handleTabPress('COMMUNITY')}
+          activeOpacity={0.7}
+        >
+          <CommunityIcon size={22} color={activeTab === 'COMMUNITY' ? '#0284C7' : '#94A3B8'} />
+          <Text style={[styles.navLabel, activeTab === 'COMMUNITY' && styles.navLabelActive]}>
+            Community
           </Text>
         </TouchableOpacity>
 
@@ -733,6 +782,104 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontWeight: '300',
     paddingLeft: 8
+  },
+  communityHubCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#0284C7',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E0F2FE'
+  },
+  commHubHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8
+  },
+  commHubTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  commHubTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginLeft: 6
+  },
+  commLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12
+  },
+  commLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#16A34A',
+    marginRight: 5
+  },
+  commLiveText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#15803D'
+  },
+  commHubDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 14
+  },
+  commHubButtons: {
+    flexDirection: 'row',
+    gap: 10
+  },
+  commReportBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EF4444',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2
+  },
+  commReportBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6
+  },
+  commFeedBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12
+  },
+  commFeedBtnText: {
+    color: '#0284C7',
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6
   },
   quickActionRow: {
     flexDirection: 'row',
