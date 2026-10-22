@@ -1,4 +1,3 @@
-import { DashboardGaugeIcon, SluiceGateIcon, ClipboardReportIcon, BellAlertIcon, GearSettingsIcon } from './src/Icons';
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -10,6 +9,12 @@ import {
   ActivityIndicator
 } from 'react-native';
 
+import {
+  DashboardGaugeIcon,
+  SluiceGateIcon,
+  ClipboardReportIcon,
+  GearSettingsIcon
+} from './src/Icons';
 import { supabase } from './src/supabaseClient';
 import UpdateBanner from './src/UpdateBanner';
 import { checkAppVersion, APP_VERSION } from './src/updateService';
@@ -17,31 +22,28 @@ import { checkAppVersion, APP_VERSION } from './src/updateService';
 // Screens
 import LoginScreen from './src/components/LoginScreen';
 import DashboardScreen from './src/components/DashboardScreen';
-import HistoryInsightsScreen from './src/components/HistoryInsightsScreen';
 import GateControlScreen from './src/components/GateControlScreen';
-import AlertsSMSScreen from './src/components/AlertsSMSScreen';
 import FloodReportsScreen from './src/components/FloodReportsScreen';
+import HistoryInsightsScreen from './src/components/HistoryInsightsScreen';
+import WeatherForecastScreen from './src/components/WeatherForecastScreen';
 import ContactsScreen from './src/components/ContactsScreen';
 import SettingsScreen from './src/components/SettingsScreen';
 
 export default function OperatorApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [activeTab, setActiveTab] = useState('DASHBOARD'); // 'DASHBOARD', 'GATE_CONTROL', 'FLOOD_REPORTS', 'HISTORY', 'WEATHER', 'CONTACTS', 'SETTINGS'
   const [updateInfo, setUpdateInfo] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // Check version and active Supabase session on app launch
+  // Check version and active Supabase session on launch
   useEffect(() => {
     const initializeAuthAndVersion = async () => {
       try {
-        // 1. App Version Check
         checkAppVersion('operator_app', APP_VERSION).then(setUpdateInfo);
 
-        // 2. Check for active Supabase Auth session
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          // Fetch role from profiles table
           const { data: profile } = await supabase
             .from('profiles')
             .select('role, full_name, email')
@@ -86,7 +88,7 @@ export default function OperatorApp() {
   if (isInitializing) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#38BDF8" />
+        <ActivityIndicator size="large" color="#00F0FF" />
         <Text style={styles.loadingText}>Initializing SDAS Operator Console...</Text>
       </View>
     );
@@ -96,7 +98,7 @@ export default function OperatorApp() {
   if (!isAuthenticated) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#0B1120" />
+        <StatusBar barStyle="light-content" backgroundColor="#0B132B" />
         <UpdateBanner
           updateInfo={updateInfo}
           onCheckUpdate={() => checkAppVersion('operator_app', APP_VERSION).then(setUpdateInfo)}
@@ -106,30 +108,25 @@ export default function OperatorApp() {
     );
   }
 
+  // Active Bottom Tab Mapping
+  const getBottomNavActive = () => {
+    if (activeTab === 'DASHBOARD') return 'DASHBOARD';
+    if (activeTab === 'GATE_CONTROL') return 'GATE_CONTROL';
+    if (activeTab === 'FLOOD_REPORTS') return 'FLOOD_REPORTS';
+    return 'SETTINGS';
+  };
+
+  const bottomActive = getBottomNavActive();
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0B1120" />
+      <StatusBar barStyle="light-content" backgroundColor="#0B132B" />
 
-      {/* Global Version Update Banner (Dismissible or Blocking) */}
+      {/* Global Version Update Banner */}
       <UpdateBanner
         updateInfo={updateInfo}
         onCheckUpdate={() => checkAppVersion('operator_app', APP_VERSION).then(setUpdateInfo)}
       />
-
-      {/* Top Header Bar */}
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.topBarTitle}>SDAS CONSOLE</Text>
-          <Text style={styles.topBarSub}>TABBOWA IRRIGATION #01</Text>
-        </View>
-
-        <View style={styles.operatorBadge}>
-          <Text style={styles.operatorDot}>●</Text>
-          <Text style={styles.operatorEmail} numberOfLines={1}>
-            {currentUser?.email || 'operator@tabbowa.gov.lk'}
-          </Text>
-        </View>
-      </View>
 
       {/* Tab Screen Content */}
       <View style={styles.mainContent}>
@@ -137,77 +134,84 @@ export default function OperatorApp() {
           <DashboardScreen operatorUser={currentUser} />
         )}
         {activeTab === 'GATE_CONTROL' && (
-          <GateControlScreen operatorUser={currentUser} />
+          <GateControlScreen
+            operatorUser={currentUser}
+            onBack={() => setActiveTab('DASHBOARD')}
+          />
         )}
         {activeTab === 'FLOOD_REPORTS' && (
           <FloodReportsScreen operatorUser={currentUser} />
         )}
-        {activeTab === 'ANALYTICS' && (
-          <HistoryInsightsScreen operatorUser={currentUser} />
+        {activeTab === 'HISTORY' && (
+          <HistoryInsightsScreen
+            onBack={() => setActiveTab('SETTINGS')}
+          />
         )}
-        {activeTab === 'ALERTS_SMS' && (
-          <AlertsSMSScreen operatorUser={currentUser} />
+        {activeTab === 'WEATHER' && (
+          <WeatherForecastScreen
+            onBack={() => setActiveTab('SETTINGS')}
+          />
         )}
         {activeTab === 'CONTACTS' && (
-          <ContactsScreen operatorUser={currentUser} />
+          <ContactsScreen
+            operatorUser={currentUser}
+            onBack={() => setActiveTab('SETTINGS')}
+          />
         )}
         {activeTab === 'SETTINGS' && (
           <SettingsScreen
             operatorUser={currentUser}
             onLogout={handleLogout}
             onTriggerUpdateCheck={(res) => setUpdateInfo(res)}
+            onNavigateToHistory={() => setActiveTab('HISTORY')}
+            onNavigateToWeather={() => setActiveTab('WEATHER')}
+            onNavigateToContacts={() => setActiveTab('CONTACTS')}
           />
         )}
       </View>
 
-      {/* Bottom Navigation Bar (Matching UI Design Mockup) */}
+      {/* Bottom Navigation Bar (Matching Operator App Design Mockup) */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
-          style={[styles.navTab, activeTab === 'DASHBOARD' && styles.navTabActive]}
+          style={[styles.navTab, bottomActive === 'DASHBOARD' && styles.navTabActive]}
           onPress={() => setActiveTab('DASHBOARD')}
+          activeOpacity={0.7}
         >
-          <DashboardGaugeIcon size={20} color={activeTab === "DASHBOARD" ? "#38BDF8" : "#64748B"} />
-          <Text style={[styles.tabLabel, activeTab === 'DASHBOARD' && styles.tabLabelActive]}>
+          <DashboardGaugeIcon size={22} color={bottomActive === 'DASHBOARD' ? '#00F0FF' : '#64748B'} />
+          <Text style={[styles.tabLabel, bottomActive === 'DASHBOARD' && styles.tabLabelActive]}>
             Dashboard
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.navTab, activeTab === 'GATE_CONTROL' && styles.navTabActive]}
+          style={[styles.navTab, bottomActive === 'GATE_CONTROL' && styles.navTabActive]}
           onPress={() => setActiveTab('GATE_CONTROL')}
+          activeOpacity={0.7}
         >
-          <SluiceGateIcon size={20} color={activeTab === "GATE_CONTROL" ? "#F59E0B" : "#64748B"} />
-          <Text style={[styles.tabLabel, activeTab === 'GATE_CONTROL' && styles.tabLabelActive]}>
+          <SluiceGateIcon size={22} color={bottomActive === 'GATE_CONTROL' ? '#00F0FF' : '#64748B'} />
+          <Text style={[styles.tabLabel, bottomActive === 'GATE_CONTROL' && styles.tabLabelActive]}>
             Control
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.navTab, activeTab === 'FLOOD_REPORTS' && styles.navTabActive]}
+          style={[styles.navTab, bottomActive === 'FLOOD_REPORTS' && styles.navTabActive]}
           onPress={() => setActiveTab('FLOOD_REPORTS')}
+          activeOpacity={0.7}
         >
-          <ClipboardReportIcon size={20} color={activeTab === "FLOOD_REPORTS" ? "#38BDF8" : "#64748B"} />
-          <Text style={[styles.tabLabel, activeTab === 'FLOOD_REPORTS' && styles.tabLabelActive]}>
+          <ClipboardReportIcon size={22} color={bottomActive === 'FLOOD_REPORTS' ? '#00F0FF' : '#64748B'} />
+          <Text style={[styles.tabLabel, bottomActive === 'FLOOD_REPORTS' && styles.tabLabelActive]}>
             Reports
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.navTab, activeTab === 'ALERTS_SMS' && styles.navTabActive]}
-          onPress={() => setActiveTab('ALERTS_SMS')}
-        >
-          <BellAlertIcon size={20} color={activeTab === "ALERTS_SMS" ? "#EF4444" : "#64748B"} />
-          <Text style={[styles.tabLabel, activeTab === 'ALERTS_SMS' && styles.tabLabelActive]}>
-            Alerts
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.navTab, activeTab === 'SETTINGS' && styles.navTabActive]}
+          style={[styles.navTab, bottomActive === 'SETTINGS' && styles.navTabActive]}
           onPress={() => setActiveTab('SETTINGS')}
+          activeOpacity={0.7}
         >
-          <GearSettingsIcon size={20} color={activeTab === "SETTINGS" ? "#38BDF8" : "#64748B"} />
-          <Text style={[styles.tabLabel, activeTab === 'SETTINGS' && styles.tabLabelActive]}>
+          <GearSettingsIcon size={22} color={bottomActive === 'SETTINGS' ? '#00F0FF' : '#64748B'} />
+          <Text style={[styles.tabLabel, bottomActive === 'SETTINGS' && styles.tabLabelActive]}>
             Settings
           </Text>
         </TouchableOpacity>
@@ -219,63 +223,19 @@ export default function OperatorApp() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B1120'
+    backgroundColor: '#0B132B'
   },
   loadingContainer: {
     flex: 1,
-    backgroundColor: '#0B1120',
-    justifyContent: 'center',
+    backgroundColor: '#0B132B',
     alignItems: 'center',
-    padding: 24
+    justifyContent: 'center'
   },
   loadingText: {
-    color: '#94A3B8',
-    fontSize: 13,
     marginTop: 14,
-    fontWeight: '600'
-  },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#0F172A',
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B'
-  },
-  topBarTitle: {
-    color: '#F8FAFC',
+    color: '#94A3B8',
     fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.8
-  },
-  topBarSub: {
-    color: '#64748B',
-    fontSize: 9,
-    fontWeight: '700',
-    marginTop: 1
-  },
-  operatorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#334155',
-    maxWidth: 180
-  },
-  operatorDot: {
-    color: '#10B981',
-    fontSize: 10,
-    marginRight: 6
-  },
-  operatorEmail: {
-    color: '#CBD5E1',
-    fontSize: 11,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   mainContent: {
     flex: 1
@@ -283,31 +243,31 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#0F172A',
+    paddingVertical: 10,
+    paddingBottom: 14,
     borderTopWidth: 1,
     borderTopColor: '#1E293B',
-    paddingVertical: 8,
-    paddingHorizontal: 2
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 10
   },
   navTab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 4,
-    borderRadius: 8
+    justifyContent: 'center',
+    paddingVertical: 3
   },
-  navTabActive: {
-    backgroundColor: '#1E293B'
-  },
-  tabIcon: {
-    fontSize: 15,
-    marginBottom: 2
-  },
+  navTabActive: {},
   tabLabel: {
-    fontSize: 9.5,
+    fontSize: 11,
+    fontWeight: '600',
     color: '#64748B',
-    fontWeight: '700'
+    marginTop: 4
   },
   tabLabelActive: {
-    color: '#38BDF8',
-    fontWeight: '800'
+    color: '#00F0FF',
+    fontWeight: '700'
   }
 });

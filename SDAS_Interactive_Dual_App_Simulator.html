@@ -3,824 +3,428 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SDAS - Interactive Dual Mobile App Simulator</title>
+  <title>SDAS - Master Dual Mobile App Showcase & Simulator</title>
   <style>
     :root {
       --bg-dark: #070B19;
-      --card-dark: #111C36;
-      --card-border: #1E2F54;
-      --primary: #2563EB;
-      --primary-light: #38BDF8;
+      --card-dark: #1E293B;
+      --card-border: #334155;
+      --pub-bg: #F8FAFC;
+      --pub-card: #FFFFFF;
+      --pub-border: #F1F5F9;
+      --primary-blue: #0284C7;
+      --cyan-neon: #00F0FF;
       --success: #10B981;
       --warning: #F59E0B;
       --danger: #EF4444;
-      --text-main: #F8FAFC;
-      --text-muted: #94A3B8;
+      --text-dark: #0F172A;
+      --text-muted: #64748B;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     body {
       background: #0B1120;
-      color: var(--text-main);
+      color: #F8FAFC;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 24px 16px 40px;
+      padding: 20px 16px 40px;
     }
     header {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
       max-width: 900px;
     }
     .badge-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(37, 99, 235, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      color: #38BDF8;
-      padding: 5px 12px;
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid rgba(0, 240, 255, 0.4);
+      color: var(--cyan-neon);
+      padding: 5px 14px;
       border-radius: 20px;
       font-size: 12px;
       font-weight: 700;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
     h1 {
       font-size: 26px;
       font-weight: 900;
-      background: linear-gradient(135deg, #FFFFFF, #93C5FD);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      margin-bottom: 6px;
+      color: #FFFFFF;
+      letter-spacing: -0.5px;
     }
-    p.subtitle {
-      color: var(--text-muted);
+    p.sub {
+      color: #94A3B8;
       font-size: 14px;
+      margin-top: 4px;
     }
-    .dual-container {
+
+    /* Screen Selector Bar */
+    .screen-selector-bar {
       display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
       flex-wrap: wrap;
       justify-content: center;
-      gap: 36px;
-      width: 100%;
-      max-width: 960px;
     }
-    /* Phone Shell */
-    .phone-wrapper {
+    .selector-group {
+      background: #111C36;
+      border: 1px solid #1E2F54;
+      border-radius: 14px;
+      padding: 6px 10px;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .group-label {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 4px;
+    }
+    .screen-btn {
+      background: #1E293B;
+      border: 1px solid #334155;
+      color: #94A3B8;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .screen-btn.active {
+      background: var(--primary-blue);
+      color: #FFFFFF;
+      border-color: var(--cyan-neon);
+    }
+
+    /* Phone Frames Grid */
+    .showcase-grid {
+      display: flex;
+      flex-direction: row;
+      gap: 36px;
+      justify-content: center;
+      align-items: flex-start;
+      max-width: 960px;
+      width: 100%;
+      flex-wrap: wrap;
+    }
+    .phone-container {
       display: flex;
       flex-direction: column;
       align-items: center;
+      width: 375px;
     }
-    .phone-tag {
-      font-size: 13px;
+    .phone-header-title {
+      font-size: 18px;
       font-weight: 800;
-      color: var(--primary-light);
-      margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
-    .phone-frame {
-      width: 360px;
-      height: 720px;
-      background: #FFFFFF;
-      border-radius: 42px;
-      border: 8px solid #1E293B;
-      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 1px #334155;
+    .phone-sub-desc {
+      font-size: 12px;
+      color: #94A3B8;
+      margin-bottom: 12px;
+    }
+
+    /* Phone Mockup */
+    .phone-mockup {
+      width: 375px;
+      height: 750px;
+      border-radius: 46px;
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.8), 0 0 0 10px #1E293B, 0 0 0 12px #334155;
       overflow: hidden;
       display: flex;
       flex-direction: column;
       position: relative;
     }
-    .phone-frame.dark {
-      background: #0A0F1D;
+    .public-phone {
+      background: var(--pub-bg);
+      color: var(--text-dark);
     }
-    /* Dynamic Island / Notch */
-    .notch {
-      width: 120px;
-      height: 22px;
-      background: #1E293B;
-      border-radius: 0 0 14px 14px;
-      align-self: center;
-      z-index: 20;
+    .operator-phone {
+      background: #0B132B;
+      color: #F8FAFC;
     }
-    .screen-content {
+
+    /* Top Notch & Status Bar */
+    .status-bar {
+      height: 38px;
+      padding: 10px 24px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      z-index: 10;
+    }
+    .public-phone .status-bar { color: #0F172A; }
+    .operator-phone .status-bar { color: #F8FAFC; }
+
+    /* Phone Screen Viewport */
+    .phone-screen {
       flex: 1;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
       position: relative;
     }
+
     /* Bottom Nav Bar */
     .bottom-nav {
-      height: 56px;
+      height: 60px;
+      border-top: 1px solid;
       display: flex;
-      border-top: 1px solid #E2E8F0;
-      background: #FFFFFF;
+      align-items: center;
+      justify-content: space-around;
+      padding-bottom: 8px;
       z-index: 10;
     }
-    .phone-frame.dark .bottom-nav {
-      background: #070B19;
-      border-top-color: #1E2F54;
+    .public-phone .bottom-nav {
+      background: #FFFFFF;
+      border-color: #F1F5F9;
+    }
+    .operator-phone .bottom-nav {
+      background: #0F172A;
+      border-color: #1E293B;
     }
     .nav-item {
-      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 2px;
-      cursor: pointer;
       font-size: 10px;
       font-weight: 700;
-      color: #64748B;
-      transition: all 0.2s;
+      cursor: pointer;
+      gap: 3px;
     }
-    .nav-item.active {
-      color: var(--primary);
-    }
-    .phone-frame.dark .nav-item.active {
-      color: var(--primary-light);
-    }
-    .nav-item.report-tab {
-      background: #FEF2F2;
-      border-radius: 8px;
-      margin: 4px;
-      color: #DC2626;
-    }
-    .nav-item.report-tab.active {
-      background: #FEE2E2;
-      border: 1px solid #EF4444;
-    }
+    .public-phone .nav-item { color: #94A3B8; }
+    .public-phone .nav-item.active { color: var(--primary-blue); }
+    .operator-phone .nav-item { color: #64748B; }
+    .operator-phone .nav-item.active { color: var(--cyan-neon); }
 
-    /* PUBLIC APP STYLES (Screen 1-5) */
-    .public-screen {
-      display: none;
-      flex-direction: column;
-      flex: 1;
+    /* Common Card Styles */
+    .pub-card {
+      background: #FFFFFF;
+      border: 1px solid #F1F5F9;
+      border-radius: 18px;
       padding: 14px;
-      background: #F8FAFC;
-      color: #0F172A;
-    }
-    .public-screen.active {
-      display: flex;
-    }
-    /* Screen 1: Home */
-    .hero-banner {
-      height: 120px;
-      background: linear-gradient(135deg, #1E3A8A, #0284C7);
-      border-radius: 16px;
-      position: relative;
-      overflow: hidden;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #FFFFFF;
-      text-align: center;
-      padding: 10px;
-    }
-    .hero-banner::after {
-      content: "";
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: url('https://images.unsplash.com/photo-1578328819058-b69f3a3b0f6b?w=500') center/cover;
-      opacity: 0.35;
-    }
-    .hero-content {
-      position: relative;
-      z-index: 2;
-    }
-    .hero-title {
-      font-size: 18px;
-      font-weight: 900;
-      letter-spacing: -0.3px;
-    }
-    .hero-sub {
-      font-size: 11px;
-      opacity: 0.9;
-      margin-top: 2px;
-    }
-    /* Metric Cards */
-    .metric-card {
-      background: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      border-radius: 14px;
-      padding: 12px 14px;
-      margin-bottom: 10px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .card-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .icon-box {
-      width: 40px;
-      height: 40px;
-      border-radius: 10px;
-      background: #EFF6FF;
-      color: var(--primary);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 20px;
-    }
-    .status-pill {
-      background: #DCFCE7;
-      color: #15803D;
-      font-size: 11px;
-      font-weight: 800;
-      padding: 4px 10px;
-      border-radius: 20px;
-    }
-    .quick-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      box-shadow: 0 4px 12px rgba(100, 116, 139, 0.06);
       margin-bottom: 12px;
     }
-    .quick-btn {
-      background: #FFFFFF;
-      border: 1px solid #E2E8F0;
-      border-radius: 12px;
-      padding: 10px 4px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      cursor: pointer;
-      font-size: 10px;
-      font-weight: 700;
-      color: #334155;
-    }
-    .quick-btn.report-alert {
-      border: 1.8px solid #EF4444;
-      background: #FFF5F5;
-      color: #991B1B;
-      position: relative;
-    }
-    .quick-btn.report-alert::before {
-      content: "NEW";
-      position: absolute;
-      top: -6px;
-      right: 2px;
-      background: #EF4444;
-      color: #FFFFFF;
-      font-size: 7px;
-      font-weight: 900;
-      padding: 1px 4px;
-      border-radius: 4px;
-    }
-
-    /* Form & Buttons */
-    .form-group {
-      margin-bottom: 12px;
-    }
-    .form-label {
-      font-size: 12px;
-      font-weight: 700;
-      color: #475569;
-      margin-bottom: 6px;
-      display: block;
-    }
-    .input-box {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #CBD5E1;
-      border-radius: 10px;
-      font-size: 13px;
-      outline: none;
-      background: #FFFFFF;
-    }
-    .photo-picker {
-      border: 2px dashed #93C5FD;
-      border-radius: 12px;
-      height: 90px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #EFF6FF;
-      cursor: pointer;
-      color: #2563EB;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .btn-submit {
-      width: 100%;
-      background: var(--primary);
-      color: #FFFFFF;
-      padding: 12px;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 800;
-      cursor: pointer;
-      margin-top: 8px;
-    }
-
-    /* OPERATOR APP STYLES (Screen 6-7) */
-    .operator-screen {
-      display: none;
-      flex-direction: column;
-      flex: 1;
+    .op-card {
+      background: #1E293B;
+      border: 1px solid #334155;
+      border-radius: 18px;
       padding: 14px;
-      background: #0A0F1D;
-      color: var(--text-main);
-    }
-    .operator-screen.active {
-      display: flex;
-    }
-    .op-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       margin-bottom: 12px;
     }
-    .op-online-pill {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid #10B981;
-      color: #34D399;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 10px;
-      font-weight: 800;
-    }
-    .op-gauge-card {
-      background: var(--card-dark);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      margin-bottom: 12px;
-    }
+
+    /* SVG Gauge Styles */
     .gauge-wrapper {
       position: relative;
-      width: 140px;
-      height: 140px;
+      width: 200px;
+      height: 200px;
+      margin: 10px auto;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .gauge-center {
+    .gauge-svg {
+      transform: rotate(-90deg);
+      width: 200px;
+      height: 200px;
+    }
+    .gauge-bg {
+      fill: none;
+      stroke-width: 14;
+    }
+    .gauge-fill {
+      fill: none;
+      stroke-width: 14;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s ease;
+    }
+    .gauge-inner-data {
       position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       text-align: center;
     }
-    .gauge-pct {
-      font-size: 28px;
-      font-weight: 900;
-      color: #F8FAFC;
-    }
-    .gauge-depth {
-      font-size: 11px;
+
+    /* Buttons */
+    .btn-blue {
+      background: var(--primary-blue);
+      color: #FFFFFF;
+      border: none;
+      border-radius: 20px;
+      padding: 12px;
       font-weight: 700;
-      color: #38BDF8;
-    }
-    .metrics-summary-row {
-      display: flex;
-      justify-content: space-between;
+      font-size: 14px;
+      cursor: pointer;
+      text-align: center;
+      display: block;
       width: 100%;
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid var(--card-border);
     }
-    .metric-col {
-      text-align: center;
-      flex: 1;
-    }
-    .metric-col-title {
-      font-size: 9px;
-      color: var(--text-muted);
-      font-weight: 700;
-    }
-    .metric-col-val {
-      font-size: 13px;
-      font-weight: 800;
-      color: #F8FAFC;
-      margin-top: 2px;
-    }
-    .op-action-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .op-btn {
-      padding: 12px 8px;
-      border: none;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 800;
-      cursor: pointer;
+    .btn-green {
+      background: var(--success);
       color: #FFFFFF;
-      text-align: center;
-    }
-    .btn-open { background: #10B981; }
-    .btn-close { background: #EF4444; }
-    .btn-manual { background: #F59E0B; }
-    .btn-auto { background: #2563EB; }
-
-    /* Report Verification List */
-    .report-item {
-      background: var(--card-dark);
-      border: 1px solid var(--card-border);
-      border-radius: 12px;
+      border: none;
+      border-radius: 14px;
       padding: 12px;
-      margin-bottom: 10px;
-    }
-    .report-item-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 4px;
-    }
-    .report-loc {
+      font-weight: 800;
       font-size: 13px;
-      font-weight: 800;
-      color: #F8FAFC;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      cursor: pointer;
     }
-    .report-desc {
-      font-size: 11px;
-      color: #94A3B8;
-      line-height: 15px;
-      margin-bottom: 8px;
-    }
-    .report-actions {
-      display: flex;
-      gap: 8px;
-    }
-    .btn-verify {
-      flex: 1;
-      background: #10B981;
+    .btn-red {
+      background: var(--danger);
       color: #FFFFFF;
-      padding: 6px;
       border: none;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .btn-view {
-      flex: 1;
-      background: #1E2F54;
-      color: #CBD5E1;
-      padding: 6px;
-      border: none;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    /* Notification cards */
-    .notif-card {
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 12px;
-      margin-bottom: 8px;
-      font-size: 12px;
-    }
-    .notif-red { background: #FEF2F2; border-left: 4px solid #EF4444; }
-    .notif-yellow { background: #FFFBEB; border-left: 4px solid #F59E0B; }
-    .notif-blue { background: #F0F9FF; border-left: 4px solid #0284C7; }
-
-    /* Lang switcher */
-    .lang-row {
-      display: flex;
-      gap: 6px;
-      margin-bottom: 10px;
-    }
-    .lang-btn {
-      padding: 4px 8px;
-      border-radius: 6px;
-      background: #E2E8F0;
-      font-size: 10px;
-      font-weight: 700;
+      font-weight: 800;
+      font-size: 13px;
       cursor: pointer;
     }
-    .lang-btn.active {
-      background: var(--primary);
+    .btn-amber {
+      background: var(--warning);
       color: #FFFFFF;
+      border: none;
+      border-radius: 14px;
+      padding: 12px;
+      font-weight: 800;
+      font-size: 13px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
   <header>
-    <div class="badge-pill">● LIVE TWO-WAY CONNECTED PROTOTYPE</div>
-    <h1>Smart Dam Alerting System (SDAS)</h1>
-    <p class="subtitle">Interactive Testbench: Public Citizen App (Left) & Operator Control Console (Right)</p>
+    <div class="badge-pill">✨ Master Design Showcase V3.0 • Pixel-Aligned</div>
+    <h1>Smart Dam Alert System (SDAS)</h1>
+    <p class="sub">Complete Trilingual Flood Early Warning & Automated Sluice Gate Control System</p>
   </header>
 
-  <div class="dual-container">
+  <!-- Navigation Screen Selectors -->
+  <div class="screen-selector-bar">
+    <div class="selector-group">
+      <span class="group-label" style="color: #38BDF8;">Public App:</span>
+      <button class="screen-btn" onclick="setPublicScreen('welcome')">1. Welcome</button>
+      <button class="screen-btn active" id="btn-pub-home" onclick="setPublicScreen('home')">2. Dashboard</button>
+      <button class="screen-btn" id="btn-pub-weather" onclick="setPublicScreen('weather')">3. Weather</button>
+      <button class="screen-btn" id="btn-pub-notif" onclick="setPublicScreen('notif')">4. Notifications</button>
+      <button class="screen-btn" id="btn-pub-chat" onclick="setPublicScreen('chat')">5. AI Chat</button>
+      <button class="screen-btn" id="btn-pub-lang" onclick="setPublicScreen('lang')">6. Language</button>
+    </div>
 
-    <!-- ========================================== -->
-    <!-- PHONE 1: PUBLIC APP                        -->
-    <!-- ========================================== -->
-    <div class="phone-wrapper">
-      <div class="phone-tag">Citizen Public App (Client)</div>
-      <div class="phone-frame">
-        <div class="notch"></div>
+    <div class="selector-group">
+      <span class="group-label" style="color: var(--cyan-neon);">Operator App:</span>
+      <button class="screen-btn" onclick="setOperatorScreen('login')">1. Login</button>
+      <button class="screen-btn active" id="btn-op-dash" onclick="setOperatorScreen('dashboard')">2. Dashboard</button>
+      <button class="screen-btn" id="btn-op-gate" onclick="setOperatorScreen('gate')">3. Gate Control</button>
+      <button class="screen-btn" id="btn-op-history" onclick="setOperatorScreen('history')">4. History</button>
+      <button class="screen-btn" id="btn-op-weather" onclick="setOperatorScreen('weather')">5. Weather</button>
+      <button class="screen-btn" id="btn-op-contacts" onclick="setOperatorScreen('contacts')">6. Contacts</button>
+      <button class="screen-btn" id="btn-op-reports" onclick="setOperatorScreen('reports')">7. Flood Reports</button>
+    </div>
+  </div>
 
-        <div class="screen-content">
+  <div class="showcase-grid">
 
-          <!-- TAB 1: HOME SCREEN -->
-          <div id="pub-home" class="public-screen active">
-            <!-- Language Bar -->
-            <div class="lang-row">
-              <div class="lang-btn active" onclick="setLang('en', this)">English</div>
-              <div class="lang-btn" onclick="setLang('si', this)">සිංහල</div>
-              <div class="lang-btn" onclick="setLang('ta', this)">தமிழ்</div>
-            </div>
+    <!-- =====================================================================
+         1. PUBLIC APP (FOR EVERYONE) - LIGHT CLEAN THEME
+         ===================================================================== -->
+    <div class="phone-container">
+      <div class="phone-header-title">
+        <span style="display:inline-block; width:10px; height:10px; border-radius:5px; background:#10B981;"></span>
+        Public App (For Everyone)
+      </div>
+      <div class="phone-sub-desc">Stay informed • Stay safe • Together</div>
 
-            <!-- Scenic Dam Banner -->
-            <div class="hero-banner">
-              <div class="hero-content">
-                <div class="hero-title" id="pub-title">Smart Dam</div>
-                <div class="hero-sub" id="pub-sub">Alerting System • Kantalai Node</div>
-              </div>
-            </div>
-
-            <!-- Water Level Metric Card -->
-            <div class="metric-card">
-              <div class="card-left">
-                <div class="icon-box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="#0284C7" fill-opacity="0.25" stroke="#0284C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 13a3 3 0 0 0 4 0" stroke="#0284C7" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-                <div>
-                  <div style="font-size: 11px; color: #64748B; font-weight: 700;" id="txt-water-level">Water Level</div>
-                  <div style="font-size: 18px; font-weight: 900; color: #0F172A;" id="pub-water-display">2.04 m</div>
-                  <div style="font-size: 11px; color: #0284C7; font-weight: 700;" id="pub-water-cm">(204 cm)</div>
-                </div>
-              </div>
-              <div class="status-pill" id="pub-status-pill">Normal</div>
-            </div>
-
-            <!-- Weather Card -->
-            <div class="metric-card">
-              <div class="card-left">
-                <div class="icon-box" style="background: #FEF3C7;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7" r="3.5" fill="#F59E0B"/><path d="M12 1.5v1.5M12 11v1.5M6.5 7H5M19 7h-1.5M8 3.5l1 1M16 3.5l-1 1" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/><path d="M7 19h10a4 4 0 0 0 .5-7.97 5 5 0 0 0-9.6 1.1A3.5 3.5 0 0 0 7 19z" fill="#94A3B8" fill-opacity="0.3" stroke="#64748B" stroke-width="1.8" stroke-linejoin="round"/></svg></div>
-                <div>
-                  <div style="font-size: 11px; color: #64748B; font-weight: 700;">Today's Weather</div>
-                  <div style="font-size: 14px; font-weight: 800; color: #0F172A;">28°C Partly Cloudy</div>
-                </div>
-              </div>
-              <div style="font-size: 11px; color: #0284C7; font-weight: 700;">Rain: 12%</div>
-            </div>
-
-            <!-- Quick Action Grid -->
-            <div class="quick-grid">
-              <div class="quick-btn" onclick="switchPubTab('home')">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" fill="#0284C7" fill-opacity="0.25" stroke="#0284C7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 13a3 3 0 0 0 4 0" stroke="#0284C7" stroke-width="1.6" stroke-linecap="round"/></svg>
-                <span id="qa-water">Level</span>
-              </div>
-              <div class="quick-btn" onclick="switchPubTab('home')">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="7" r="3.5" fill="#F59E0B"/><path d="M12 1.5v1.5M12 11v1.5M6.5 7H5M19 7h-1.5M8 3.5l1 1M16 3.5l-1 1" stroke="#F59E0B" stroke-width="1.6" stroke-linecap="round"/><path d="M7 19h10a4 4 0 0 0 .5-7.97 5 5 0 0 0-9.6 1.1A3.5 3.5 0 0 0 7 19z" fill="#94A3B8" fill-opacity="0.3" stroke="#64748B" stroke-width="1.8" stroke-linejoin="round"/></svg>
-                <span id="qa-weather">Weather</span>
-              </div>
-              <div class="quick-btn report-alert" onclick="switchPubTab('report')">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><polygon points="12,2 22,20 2,20" fill="#EF4444" fill-opacity="0.25" stroke="#EF4444" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 8v5M12 16v1" stroke="#EF4444" stroke-width="2.2" stroke-linecap="round"/><path d="M7 18q2.5-2 5 0t5 0" stroke="#EF4444" stroke-width="1.6" stroke-linecap="round"/></svg>
-                <span id="qa-report" style="color: #DC2626;">Report</span>
-              </div>
-              <div class="quick-btn" onclick="switchPubTab('updates')">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="7" r="3.2" stroke="#2563EB" stroke-width="1.8" fill="#2563EB" fill-opacity="0.2"/><path d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round"/><circle cx="16.5" cy="8.5" r="2.5" stroke="#2563EB" stroke-width="1.6"/><path d="M16 13.5c2.4.4 4 2.2 4 4.5" stroke="#2563EB" stroke-width="1.6" stroke-linecap="round"/></svg>
-                <span id="qa-comm">Community</span>
-              </div>
-            </div>
-
-            <!-- Safe Evacuation Status -->
-            <div style="background: #F1F5F9; border-radius: 12px; padding: 12px; font-size: 11px; line-height: 16px; color: #475569;">
-              <strong>ℹ️ Community Status:</strong> Sluice gate aperture is currently <span id="pub-gate-status" style="font-weight: bold; color: #059669;">CLOSED (0%)</span>. River spillways are clear for normal access.
-            </div>
-          </div>
-
-          <!-- TAB 2: REPORT FLOOD -->
-          <div id="pub-report" class="public-screen">
-            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 12px;">Report Flood Situation</h3>
-            
-            <div class="form-group">
-              <label class="form-label">📍 Detected Location</label>
-              <div style="display: flex; gap: 6px;">
-                <input type="text" id="rep-loc" class="input-box" value="Kantalai, Trincomalee (2.4 km away)">
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">📷 Add Photo (Optional)</label>
-              <div class="photo-picker" id="photo-box" onclick="togglePhoto()">
-                <span id="photo-picker-text">Tap to Attach Photo Evidence</span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">📝 Situation Description</label>
-              <textarea id="rep-desc" class="input-box" rows="3" placeholder="e.g. Water is entering the road near the bridge..."></textarea>
-            </div>
-
-            <button class="btn-submit" onclick="submitCitizenReport()">Submit Report to Operations</button>
-          </div>
-
-          <!-- TAB 3: COMMUNITY UPDATES -->
-          <div id="pub-updates" class="public-screen">
-            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 10px;">Community Updates</h3>
-            <div id="updates-feed">
-              <!-- Dynamically populated -->
-            </div>
-          </div>
-
-          <!-- TAB 4: NOTIFICATIONS -->
-          <div id="pub-notif" class="public-screen">
-            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 10px;">Alerts & Broadcasts</h3>
-            <div class="notif-card notif-red">
-              <strong style="color: #991B1B;">🚨 Emergency Alert (Dam Safety)</strong><br>
-              <span style="font-size: 11px; color: #64748B;">Today, 10:15 AM</span>
-              <p style="margin-top: 4px; color: #334155;">Dam water level has reached critical stage. Gate opening release planned.</p>
-            </div>
-            <div class="notif-card notif-yellow">
-              <strong style="color: #92400E;">⚠️ Nearby Flood Report (Verified)</strong><br>
-              <span style="font-size: 11px; color: #64748B;">Today, 09:32 AM</span>
-              <p style="margin-top: 4px; color: #334155;">Flood reported near Kantalai Bridge (2.4 km). Please avoid the area.</p>
-            </div>
-            <div class="notif-card notif-blue">
-              <strong style="color: #075985;">🌧️ Catchment Basin Weather Update</strong><br>
-              <span style="font-size: 11px; color: #64748B;">Today, 08:15 AM</span>
-              <p style="margin-top: 4px; color: #334155;">Heavy rainfall predicted over Deduru Oya basin. Inflow surge expected.</p>
-            </div>
-          </div>
-
-          <!-- TAB 5: CHAT -->
-          <div id="pub-chat" class="public-screen">
-            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 4px;">Kantalai Community</h3>
-            <span style="font-size: 11px; color: #64748B; margin-bottom: 10px;">125 verified community members</span>
-            
-            <div id="chat-messages" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-              <div style="background: #FFFFFF; padding: 8px 12px; border-radius: 10px; border: 1px solid #E2E8F0; align-self: flex-start; max-width: 80%;">
-                <strong style="color: #2563EB; font-size: 11px;">Tharindu:</strong>
-                <p style="font-size: 12px; color: #1E293B; margin-top: 2px;">Water is flowing near the old bridge.</p>
-              </div>
-              <div style="background: #FFFFFF; padding: 8px 12px; border-radius: 10px; border: 1px solid #E2E8F0; align-self: flex-start; max-width: 80%;">
-                <strong style="color: #2563EB; font-size: 11px;">Saman:</strong>
-                <p style="font-size: 12px; color: #1E293B; margin-top: 2px;">Be careful everyone. Avoid this area.</p>
-              </div>
-              <div style="background: #EFF6FF; border: 1px solid #BFDBFE; padding: 6px 10px; border-radius: 8px; align-self: center; font-size: 10px; color: #1D4ED8; font-weight: 700;">
-                ℹ️ System: This report is under verification by the operator.
-              </div>
-            </div>
-
-            <div style="display: flex; gap: 6px;">
-              <input type="text" id="chat-input" class="input-box" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendChat()">
-              <button style="background: var(--primary); color: #fff; border: none; border-radius: 8px; padding: 0 14px; font-weight: bold; cursor: pointer;" onclick="sendChat()">Send</button>
-            </div>
-          </div>
-
+      <div class="phone-mockup public-phone">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span>📶 5G 🔋 100%</span>
         </div>
 
-        <!-- PUBLIC BOTTOM NAV -->
+        <div class="phone-screen" id="pub-viewport" style="padding: 14px 16px;">
+          <!-- Dynamically Rendered via JS -->
+        </div>
+
+        <!-- Public Bottom Nav Bar -->
         <div class="bottom-nav">
-          <div class="nav-item active" onclick="switchPubTab('home', this)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5l9-7.5 9 7.5V20a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 20z"/><path d="M9.5 21v-7h5v7"/></svg>
+          <div class="nav-item active" id="pub-tab-home" onclick="setPublicScreen('home')">
+            <span style="font-size:18px;">🏠</span>
             <span>Home</span>
           </div>
-          <div class="nav-item report-tab" onclick="switchPubTab('report', this)">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><polygon points="12,2 22,20 2,20" fill="#EF4444" fill-opacity="0.25" stroke="#EF4444" stroke-width="2.2" stroke-linejoin="round"/><path d="M12 8v5M12 16v1" stroke="#EF4444" stroke-width="2.2" stroke-linecap="round"/><path d="M7 18q2.5-2 5 0t5 0" stroke="#EF4444" stroke-width="1.6" stroke-linecap="round"/></svg>
-            <span>Report</span>
+          <div class="nav-item" id="pub-tab-weather" onclick="setPublicScreen('weather')">
+            <span style="font-size:18px;">🌤️</span>
+            <span>Weather</span>
           </div>
-          <div class="nav-item" onclick="switchPubTab('updates', this)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M9 2h6v3H9z"/><path d="M8 10h8M8 14h5"/><path d="M15 15l2 2 3-3" stroke="#10B981"/></svg>
-            <span>Updates</span>
+          <div class="nav-item" id="pub-tab-notif" onclick="setPublicScreen('notif')">
+            <span style="font-size:18px;">🔔</span>
+            <span>Notifications</span>
           </div>
-          <div class="nav-item" onclick="switchPubTab('notif', this)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-            <span>Alerts</span>
+          <div class="nav-item" id="pub-tab-chat" onclick="setPublicScreen('chat')">
+            <span style="font-size:18px;">💬</span>
+            <span>AI Chat</span>
           </div>
-          <div class="nav-item" onclick="switchPubTab('chat', this)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-            <span>Chat</span>
+          <div class="nav-item" id="pub-tab-lang" onclick="setPublicScreen('lang')">
+            <span style="font-size:18px;">🌐</span>
+            <span>More</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- PHONE 2: OPERATOR APP                      -->
-    <!-- ========================================== -->
-    <div class="phone-wrapper">
-      <div class="phone-tag">Operator Console (Dam Control & Verification)</div>
-      <div class="phone-frame dark">
-        <div class="notch"></div>
+    <!-- =====================================================================
+         2. OPERATOR APP (FOR DAM OPERATORS) - DARK TECH THEME
+         ===================================================================== -->
+    <div class="phone-container">
+      <div class="phone-header-title">
+        <span style="display:inline-block; width:10px; height:10px; border-radius:5px; background:var(--cyan-neon);"></span>
+        Operator App (For Dam Operators)
+      </div>
+      <div class="phone-sub-desc">Monitor • Control • Protect</div>
 
-        <div class="screen-content">
-
-          <!-- TAB 1: OPERATOR DASHBOARD -->
-          <div id="op-dash" class="operator-screen active">
-            <!-- Top Header -->
-            <div class="op-header">
-              <div>
-                <span style="font-size: 15px; font-weight: 900; color: #F8FAFC;">Operator Dashboard</span><br>
-                <span style="font-size: 11px; color: #94A3B8;">📍 Kantalai Dam - Live Telemetry</span>
-              </div>
-              <div class="op-online-pill">
-                <span style="width: 6px; height: 6px; border-radius: 3px; background: #34D399;"></span>
-                <span>ONLINE</span>
-              </div>
-            </div>
-
-            <!-- Circular Gauge Card -->
-            <div class="op-gauge-card">
-              <div class="gauge-wrapper">
-                <svg width="140" height="140" viewBox="0 0 140 140">
-                  <circle cx="70" cy="70" r="54" stroke="#1E2F54" stroke-width="12" fill="none" />
-                  <circle cx="70" cy="70" r="54" stroke="#38BDF8" stroke-width="12" fill="none"
-                          stroke-dasharray="339.29" id="op-gauge-arc" stroke-dashoffset="108.57" stroke-linecap="round"
-                          transform="rotate(-90 70 70)" />
-                </svg>
-                <div class="gauge-center">
-                  <div class="gauge-pct" id="op-pct-display">68%</div>
-                  <div class="gauge-depth" id="op-depth-display">2.04 m (204 cm)</div>
-                </div>
-              </div>
-
-              <!-- 3 Metrics Row -->
-              <div class="metrics-summary-row">
-                <div class="metric-col">
-                  <div class="metric-col-title">TOTAL HEIGHT</div>
-                  <div class="metric-col-val">3.00 m</div>
-                </div>
-                <div style="width: 1px; background: var(--card-border); height: 24px;"></div>
-                <div class="metric-col">
-                  <div class="metric-col-title">CURRENT LEVEL</div>
-                  <div class="metric-col-val" style="color: #38BDF8;" id="op-curr-m">2.04 m</div>
-                </div>
-                <div style="width: 1px; background: var(--card-border); height: 24px;"></div>
-                <div class="metric-col">
-                  <div class="metric-col-title">REMAINING</div>
-                  <div class="metric-col-val" id="op-rem-m">0.96 m</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Gate Status & Mode Row -->
-            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-              <div style="flex: 1; background: #1E1B18; border: 1px solid #443527; border-radius: 10px; padding: 10px; display: flex; align-items: center; gap: 8px;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2" y="4" width="4" height="16" rx="1" fill="#F59E0B" fill-opacity="0.3" stroke="#F59E0B" stroke-width="1.8"/><rect x="18" y="4" width="4" height="16" rx="1" fill="#F59E0B" fill-opacity="0.3" stroke="#F59E0B" stroke-width="1.8"/><rect x="4" y="3" width="16" height="3" rx="0.5" stroke="#F59E0B" stroke-width="1.6"/><rect x="6" y="8" width="12" height="7" rx="1" fill="#F59E0B" stroke="#F59E0B" stroke-width="1.8"/><path d="M6 18c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0" stroke="#38BDF8" stroke-width="1.8" stroke-linecap="round"/></svg>
-                <div>
-                  <div style="font-size: 9px; color: #94A3B8;">GATE STATUS</div>
-                  <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="op-gate-pct">Closed (0%)</div>
-                </div>
-              </div>
-              <div style="flex: 1; background: #064E3B; border: 1px solid #059669; border-radius: 10px; padding: 10px; display: flex; align-items: center; gap: 8px;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34D399" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                <div>
-                  <div style="font-size: 9px; color: #94A3B8;">SYSTEM MODE</div>
-                  <div style="font-size: 13px; font-weight: 800; color: #F8FAFC;" id="op-mode-text">Automatic</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Quick Action Actuation Buttons -->
-            <div class="op-action-grid">
-              <button class="op-btn btn-open" onclick="triggerGate(20)">↑ Open Gate (20%)</button>
-              <button class="op-btn btn-close" onclick="triggerGate(0)">↓ Close Gate</button>
-              <button class="op-btn btn-manual" onclick="setMode('MANUAL')">⚙ Manual Mode</button>
-              <button class="op-btn btn-auto" onclick="setMode('AUTO')">⚡ Auto Mode</button>
-            </div>
-
-            <!-- Sensor Integrity -->
-            <div style="background: var(--card-dark); border: 1px solid var(--card-border); border-radius: 10px; padding: 10px; font-size: 11px;">
-              <span style="color: #64748B; font-weight: bold;">HARDWARE SENSORS:</span><br>
-              <span style="color: #38BDF8;">HC-SR04 #1: 32.4 cm</span> &bull; <span style="color: #38BDF8;">HC-SR04 #2: 32.7 cm</span> &bull; <span style="color: #10B981;">Plurality: AGREED</span>
-            </div>
-          </div>
-
-          <!-- TAB 2: VERIFY FLOOD REPORTS -->
-          <div id="op-reports" class="operator-screen">
-            <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 4px; color: #F8FAFC;">Verify & Manage Reports</h3>
-            <span style="font-size: 11px; color: #94A3B8; margin-bottom: 12px;">Review citizen submissions & trigger radius alerts</span>
-            
-            <div id="op-reports-list" style="display: flex; flex-direction: column; gap: 8px;">
-              <!-- Dynamically populated -->
-            </div>
-          </div>
-
+      <div class="phone-mockup operator-phone">
+        <div class="status-bar">
+          <span>9:41</span>
+          <span>📶 4G 🔋 98%</span>
         </div>
 
-        <!-- OPERATOR BOTTOM NAV -->
+        <div class="phone-screen" id="op-viewport" style="padding: 14px 16px;">
+          <!-- Dynamically Rendered via JS -->
+        </div>
+
+        <!-- Operator Bottom Nav Bar -->
         <div class="bottom-nav">
-          <div class="nav-item active" onclick="switchOpTab('dash', this)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4.93 19.07A10 10 0 1 1 19.07 19.07"/><path d="M12 12l3.5-3.5"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
+          <div class="nav-item active" id="op-tab-dash" onclick="setOperatorScreen('dashboard')">
+            <span style="font-size:18px;">📊</span>
             <span>Dashboard</span>
           </div>
-          <div class="nav-item" onclick="switchOpTab('reports', this)">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17" rx="2"/><path d="M9 2h6v3H9z"/><path d="M8 10h8M8 14h5"/><path d="M15 15l2 2 3-3" stroke="#10B981"/></svg>
-            <span>Reports <span id="op-badge-pending" style="background: #EF4444; color: #fff; padding: 1px 5px; border-radius: 8px; font-size: 9px;">2</span></span>
+          <div class="nav-item" id="op-tab-gate" onclick="setOperatorScreen('gate')">
+            <span style="font-size:18px;">🎛️</span>
+            <span>Control</span>
+          </div>
+          <div class="nav-item" id="op-tab-reports" onclick="setOperatorScreen('reports')">
+            <span style="font-size:18px;">📋</span>
+            <span>Reports</span>
+          </div>
+          <div class="nav-item" id="op-tab-history" onclick="setOperatorScreen('history')">
+            <span style="font-size:18px;">📈</span>
+            <span>Analytics</span>
+          </div>
+          <div class="nav-item" id="op-tab-contacts" onclick="setOperatorScreen('contacts')">
+            <span style="font-size:18px;">📞</span>
+            <span>Contacts</span>
           </div>
         </div>
       </div>
@@ -830,200 +434,790 @@
 
   <script>
     // State
-    let currentWaterPct = 0;
-    let gatePercent = 0;
-    let systemMode = 'AUTO';
-    let photoAttached = false;
+    let pubCurrentScreen = 'home';
+    let opCurrentScreen = 'dashboard';
 
+    let waterLevelPct = 45; // 45% (1.35 m) from Public Mockup
+    let opWaterPct = 68;    // 68% (2.04 m) from Operator Mockup
+    let gatePct = 0;
+    let gateMode = 'AUTO';
+
+    // Real reports list (initially empty or persistent)
     let reports = JSON.parse(localStorage.getItem('sdas_sim_reports') || '[]');
 
-    function saveSimReports() {
+    function saveReports() {
       try { localStorage.setItem('sdas_sim_reports', JSON.stringify(reports)); } catch(e) {}
     }
 
-    function renderUpdatesFeed() {
-      const feed = document.getElementById('updates-feed');
-      const verifiedReports = reports.filter(r => r.verified);
-      if (verifiedReports.length === 0) {
-        feed.innerHTML = `
-          <div style="background: #FFFFFF; border: 1px dashed #CBD5E1; border-radius: 12px; padding: 24px; text-align: center; margin-top: 10px;">
-            <div style="font-size: 24px; margin-bottom: 6px;">🛡️</div>
-            <strong style="font-size: 13px; color: #0F172A;">No Active Flood Alerts</strong>
-            <p style="font-size: 11px; color: #64748B; margin: 4px 0 0;">All waterways and downstream sectors are operating normally.</p>
-          </div>
-        `;
-        return;
+    // ==========================================
+    // PUBLIC APP RENDERERS
+    // ==========================================
+    function setPublicScreen(screen) {
+      pubCurrentScreen = screen;
+      document.querySelectorAll('[id^="pub-tab-"]').forEach(el => el.classList.remove('active'));
+      const activeTab = document.getElementById('pub-tab-' + screen);
+      if (activeTab) activeTab.classList.add('active');
+
+      const vp = document.getElementById('pub-viewport');
+      if (screen === 'welcome') {
+        renderPubWelcome(vp);
+      } else if (screen === 'home') {
+        renderPubHome(vp);
+      } else if (screen === 'weather') {
+        renderPubWeather(vp);
+      } else if (screen === 'notif') {
+        renderPubNotif(vp);
+      } else if (screen === 'chat') {
+        renderPubChat(vp);
+      } else if (screen === 'lang') {
+        renderPubLang(vp);
       }
-      feed.innerHTML = verifiedReports.map(r => `
-        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <span style="background: ${r.verified ? '#EF4444' : '#64748B'}; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800;">
-              ${r.verified ? 'Flood Report' : 'Community'}
-            </span>
-            <span style="font-size: 10px; color: #94A3B8;">${r.time}</span>
-          </div>
-          <strong style="font-size: 13px; color: #0F172A;">${r.loc}</strong>
-          <p style="font-size: 12px; color: #475569; margin: 4px 0 8px;">${r.desc}</p>
-          <div style="display: flex; justify-content: flex-end;">
-            ${r.verified ? '<span style="background: #DCFCE7; color: #15803D; padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 800;">✓ Verified by Ops</span>' : '<span style="font-size: 10px; color: #94A3B8;">Under review</span>'}
-          </div>
-        </div>
-      `).join('');
     }
 
-    function renderOperatorReports() {
-      const list = document.getElementById('op-reports-list');
+    function renderPubWelcome(vp) {
+      vp.innerHTML = `
+        <div style="text-align: center; padding-top: 10px;">
+          <div style="width: 70px; height: 70px; border-radius: 35px; background: #E0F2FE; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 30px;">
+            💧
+          </div>
+          <h2 style="font-size: 24px; font-weight: 900; color: #0F172A;">Smart Dam</h2>
+          <div style="font-size: 14px; font-weight: 700; color: #0284C7; margin-top: 2px;">Alerting System</div>
+          <div style="font-size: 11px; color: #64748B; margin-top: 4px;">Safer Dams • Safer Communities</div>
+
+          <div style="height: 180px; border-radius: 20px; overflow: hidden; margin: 20px 0; background: #E2E8F0; box-shadow: 0 4px 14px rgba(2, 132, 199, 0.15);">
+            <img src="https://images.unsplash.com/photo-1547683905-f686c993aae5?w=600" style="width: 100%; height: 100%; object-fit: cover;" />
+          </div>
+
+          <button class="btn-blue" onclick="setPublicScreen('home')" style="margin-bottom: 12px;">Get Started</button>
+          <button style="width: 100%; background: #FFF; border: 1.5px solid #0284C7; color: #0284C7; padding: 11px; border-radius: 20px; font-weight: 700; cursor: pointer;" onclick="setOperatorScreen('login')">Operator Login</button>
+
+          <div style="display: flex; justify-content: center; gap: 8px; margin-top: 24px;">
+            <span style="background: #E0F2FE; color: #0284C7; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700;">🇬🇧 English</span>
+            <span style="background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; cursor: pointer;" onclick="setPublicScreen('lang')">🇱🇰 සිංහල</span>
+            <span style="background: #F1F5F9; color: #64748B; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; cursor: pointer;" onclick="setPublicScreen('lang')">🇱🇰 தமிழ்</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPubHome(vp) {
+      const circ = 2 * Math.PI * 80;
+      const offset = circ - (circ * waterLevelPct) / 100;
+      vp.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="font-size: 20px; cursor: pointer;" onclick="setPublicScreen('lang')">☰</div>
+          <div style="text-align: center;">
+            <span style="font-size: 15px; font-weight: 800; color: #0F172A;">💧 Smart Dam</span>
+            <div style="font-size: 10px; color: #0284C7; font-weight: 600;">Alerting System</div>
+          </div>
+          <div style="font-size: 20px; position: relative; cursor: pointer;" onclick="setPublicScreen('notif')">
+            🔔<span style="position: absolute; top: -2px; right: -2px; width: 7px; height: 7px; border-radius: 4px; background: #EF4444;"></span>
+          </div>
+        </div>
+
+        <!-- Location Chip -->
+        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 6px 14px; border-radius: 16px; width: fit-content; margin: 0 auto 12px; font-size: 13px; font-weight: 700; color: #0F172A;">
+          📍 Kantalai Dam <span style="font-size: 10px; color: #64748B;">▾</span>
+        </div>
+
+        <!-- Status Card -->
+        <div style="background: #DCFCE7; border: 1px solid #BBF7D0; border-radius: 14px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+          <span style="font-size: 18px; color: #15803D;">✓</span>
+          <div>
+            <div style="font-size: 13px; font-weight: 800; color: #15803D;">Normal Level</div>
+            <div style="font-size: 11px; color: #166534;">No danger at the moment</div>
+          </div>
+        </div>
+
+        <!-- Gauge Card -->
+        <div class="pub-card" style="text-align: center; padding: 16px 10px;">
+          <div class="gauge-wrapper">
+            <svg class="gauge-svg" viewBox="0 0 180 180">
+              <circle class="gauge-bg" cx="90" cy="90" r="80" stroke="#E0F2FE" />
+              <circle class="gauge-fill" cx="90" cy="90" r="80" stroke="#0284C7" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" />
+            </svg>
+            <div class="gauge-inner-data">
+              <span style="font-size: 12px; font-weight: 600; color: #64748B;">Water Level</span>
+              <span style="font-size: 38px; font-weight: 900; color: #0284C7; line-height: 44px;">45%</span>
+              <span style="font-size: 13px; font-weight: 700; color: #0F172A;">1.35 m (135 cm)</span>
+            </div>
+          </div>
+
+          <!-- 3 Stats Row -->
+          <div style="display: flex; justify-content: space-around; border-top: 1px solid #F1F5F9; padding-top: 12px; margin-top: 8px;">
+            <div>
+              <div style="font-size: 10px; color: #64748B; font-weight: 600;">Total Height</div>
+              <div style="font-size: 14px; font-weight: 800; color: #0F172A;">3.00 m</div>
+            </div>
+            <div style="width: 1px; height: 24px; background: #E2E8F0;"></div>
+            <div>
+              <div style="font-size: 10px; color: #64748B; font-weight: 600;">Current Level</div>
+              <div style="font-size: 14px; font-weight: 800; color: #0284C7;">1.35 m</div>
+            </div>
+            <div style="width: 1px; height: 24px; background: #E2E8F0;"></div>
+            <div>
+              <div style="font-size: 10px; color: #64748B; font-weight: 600;">Remaining</div>
+              <div style="font-size: 14px; font-weight: 800; color: #0F172A;">1.65 m</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Today's Weather Card -->
+        <div class="pub-card" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="setPublicScreen('weather')">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span style="font-size: 32px;">⛅</span>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #0F172A;">Today's Weather</div>
+              <div style="font-size: 12px; color: #475569; margin-top: 1px;">Partly Cloudy <strong style="color: #0284C7;">28°C</strong></div>
+              <div style="font-size: 10px; color: #94A3B8; margin-top: 2px;">Wind: 12 km/h | Humidity: 78%</div>
+            </div>
+          </div>
+          <span style="color: #94A3B8; font-size: 18px;">›</span>
+        </div>
+      `;
+    }
+
+    function renderPubWeather(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <button style="background: none; border: none; font-size: 20px; cursor: pointer;" onclick="setPublicScreen('home')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #0F172A;">Weather</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <!-- Hero Card -->
+        <div class="pub-card" style="text-align: center; padding: 22px 14px; margin-bottom: 14px;">
+          <div style="font-size: 64px; margin-bottom: 6px;">⛅</div>
+          <div style="font-size: 18px; font-weight: 800; color: #0F172A;">Partly Cloudy</div>
+          <div style="font-size: 46px; font-weight: 900; color: #0F172A; letter-spacing: -1px; margin: 4px 0;">28°C</div>
+          <div style="font-size: 12px; color: #64748B;">Feels like 31°C</div>
+        </div>
+
+        <!-- Details Card -->
+        <div class="pub-card" style="padding: 6px 14px;">
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
+            <span style="font-size: 13px; font-weight: 600; color: #1E293B;">💨 Wind Speed</span>
+            <span style="font-size: 13px; font-weight: 800; color: #0F172A;">12 km/h</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
+            <span style="font-size: 13px; font-weight: 600; color: #1E293B;">💧 Humidity</span>
+            <span style="font-size: 13px; font-weight: 800; color: #0F172A;">78%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
+            <span style="font-size: 13px; font-weight: 600; color: #1E293B;">🌧️ Rain Chance</span>
+            <span style="font-size: 13px; font-weight: 800; color: #0F172A;">20%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #F1F5F9;">
+            <span style="font-size: 13px; font-weight: 600; color: #1E293B;">🌅 Sunrise</span>
+            <span style="font-size: 13px; font-weight: 800; color: #0F172A;">5:52 AM</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 12px 0;">
+            <span style="font-size: 13px; font-weight: 600; color: #1E293B;">🌇 Sunset</span>
+            <span style="font-size: 13px; font-weight: 800; color: #0F172A;">6:12 PM</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPubNotif(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <button style="background: none; border: none; font-size: 20px; cursor: pointer;" onclick="setPublicScreen('home')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #0F172A;">Notifications</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <!-- 1. Red Alert -->
+        <div class="pub-card" style="padding: 12px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 14px; font-weight: 800; color: #EF4444;">⚠️ Alert</span>
+            <span style="font-size: 10px; color: #94A3B8;">Today, 10:25 AM</span>
+          </div>
+          <div style="font-size: 12px; color: #334155; line-height: 17px;">
+            Water level has reached 85%. The dam is in a high level. The gate will open soon.
+          </div>
+        </div>
+
+        <!-- 2. Blue Info -->
+        <div class="pub-card" style="padding: 12px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 14px; font-weight: 800; color: #0284C7;">ℹ️ Information</span>
+            <span style="font-size: 10px; color: #94A3B8;">Today, 09:15 AM</span>
+          </div>
+          <div style="font-size: 12px; color: #334155; line-height: 17px;">
+            Gate will open automatically. Water level is 80% and rising.
+          </div>
+        </div>
+
+        <!-- 3. Green System -->
+        <div class="pub-card" style="padding: 12px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 14px; font-weight: 800; color: #15803D;">✓ System Update</span>
+            <span style="font-size: 10px; color: #94A3B8;">Yesterday, 07:30 PM</span>
+          </div>
+          <div style="font-size: 12px; color: #334155; line-height: 17px;">
+            Everything is normal. Water level is 62%.
+          </div>
+        </div>
+
+        <!-- 4. Weather Update -->
+        <div class="pub-card" style="padding: 12px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 14px; font-weight: 800; color: #0284C7;">🌧️ Weather Update</span>
+            <span style="font-size: 10px; color: #94A3B8;">Yesterday, 06:15 PM</span>
+          </div>
+          <div style="font-size: 12px; color: #334155; line-height: 17px;">
+            Rain is expected. Possible rainfall in your area.
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPubChat(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; cursor: pointer;" onclick="setPublicScreen('home')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #0F172A;">Chat</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 10px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 10px 14px; border-radius: 14px; margin-bottom: 14px;">
+          <div style="width: 32px; height: 32px; border-radius: 16px; background: #E0F2FE; display: flex; align-items: center; justify-content: center; font-size: 18px;">💧</div>
+          <div>
+            <div style="font-size: 13px; font-weight: 800; color: #0F172A;">Smart Dam</div>
+            <div style="font-size: 10px; color: #10B981; font-weight: 600;">● Online • Hydro AI Assistant</div>
+          </div>
+        </div>
+
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; margin-bottom: 10px;" id="chat-msgs-box">
+          <div style="align-self: flex-start; max-width: 80%; background: #F1F5F9; border-radius: 16px; padding: 10px 12px; font-size: 12px; color: #1E293B;">
+            Hello! I'm your Smart Dam assistant. How can I help you today?
+            <div style="font-size: 9px; color: #94A3B8; text-align: right; margin-top: 3px;">09:12 AM</div>
+          </div>
+
+          <div style="align-self: flex-end; max-width: 80%; background: #0284C7; color: #FFF; border-radius: 16px; padding: 10px 12px; font-size: 12px;">
+            What is the current water level?
+            <div style="font-size: 9px; color: #BAE6FD; text-align: right; margin-top: 3px;">09:13 AM ✓✓</div>
+          </div>
+
+          <div style="align-self: flex-start; max-width: 80%; background: #F1F5F9; border-radius: 16px; padding: 10px 12px; font-size: 12px; color: #1E293B;">
+            The current water level is 1.35 m (45%). It is currently safe.
+            <div style="font-size: 9px; color: #94A3B8; text-align: right; margin-top: 3px;">09:13 AM</div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; background: #FFF; border: 1px solid #CBD5E1; border-radius: 20px; padding: 10px 14px; font-size: 12px;" onkeypress="if(event.key==='Enter') sendSimChat()" />
+          <button style="width: 38px; height: 38px; border-radius: 19px; background: #0284C7; color: #FFF; border: none; font-size: 16px; cursor: pointer;" onclick="sendSimChat()">➤</button>
+        </div>
+      `;
+    }
+
+    function sendSimChat() {
+      const inp = document.getElementById('chat-input');
+      const val = inp.value.trim();
+      if (!val) return;
+      const box = document.getElementById('chat-msgs-box');
+
+      box.innerHTML += `
+        <div style="align-self: flex-end; max-width: 80%; background: #0284C7; color: #FFF; border-radius: 16px; padding: 10px 12px; font-size: 12px; margin-top: 6px;">
+          ${val}
+          <div style="font-size: 9px; color: #BAE6FD; text-align: right; margin-top: 3px;">Just now ✓✓</div>
+        </div>
+      `;
+      inp.value = '';
+
+      setTimeout(() => {
+        box.innerHTML += `
+          <div style="align-self: flex-start; max-width: 80%; background: #F1F5F9; border-radius: 16px; padding: 10px 12px; font-size: 12px; color: #1E293B; margin-top: 6px;">
+            Kantalai Reservoir is operating under safe parameters. Water level: 1.35 m (45%), Sluice gate is CLOSED.
+            <div style="font-size: 9px; color: #94A3B8; text-align: right; margin-top: 3px;">Just now</div>
+          </div>
+        `;
+        box.scrollTop = box.scrollHeight;
+      }, 500);
+    }
+
+    function renderPubLang(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <button style="background: none; border: none; font-size: 20px; cursor: pointer;" onclick="setPublicScreen('home')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #0F172A;">Language</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <div style="font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 14px;">Select Your Language</div>
+
+        <div class="pub-card" style="padding: 4px 16px; margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #F1F5F9; cursor: pointer;">
+            <span style="font-size: 15px; font-weight: 700; color: #0284C7;">🇬🇧 English</span>
+            <span style="width: 20px; height: 20px; border-radius: 10px; border: 2px solid #0284C7; display: flex; align-items: center; justify-content: center;">
+              <span style="width: 10px; height: 10px; border-radius: 5px; background: #0284C7;"></span>
+            </span>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #F1F5F9; cursor: pointer;">
+            <span style="font-size: 15px; font-weight: 600; color: #1E293B;">🇱🇰 සිංහල</span>
+            <span style="width: 20px; height: 20px; border-radius: 10px; border: 2px solid #CBD5E1;"></span>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; cursor: pointer;">
+            <span style="font-size: 15px; font-weight: 600; color: #1E293B;">🇱🇰 தமிழ்</span>
+            <span style="width: 20px; height: 20px; border-radius: 10px; border: 2px solid #CBD5E1;"></span>
+          </div>
+        </div>
+
+        <button class="btn-blue" onclick="setPublicScreen('home')">Save</button>
+      `;
+    }
+
+    // ==========================================
+    // OPERATOR APP RENDERERS
+    // ==========================================
+    function setOperatorScreen(screen) {
+      opCurrentScreen = screen;
+      document.querySelectorAll('[id^="op-tab-"]').forEach(el => el.classList.remove('active'));
+      const activeTab = document.getElementById('op-tab-' + screen);
+      if (activeTab) activeTab.classList.add('active');
+
+      const vp = document.getElementById('op-viewport');
+      if (screen === 'login') {
+        renderOpLogin(vp);
+      } else if (screen === 'dashboard') {
+        renderOpDashboard(vp);
+      } else if (screen === 'gate') {
+        renderOpGate(vp);
+      } else if (screen === 'history') {
+        renderOpHistory(vp);
+      } else if (screen === 'weather') {
+        renderOpWeather(vp);
+      } else if (screen === 'contacts') {
+        renderOpContacts(vp);
+      } else if (screen === 'reports') {
+        renderOpReports(vp);
+      }
+    }
+
+    function renderOpLogin(vp) {
+      vp.innerHTML = `
+        <div style="text-align: center; padding-top: 14px;">
+          <div style="width: 68px; height: 68px; border-radius: 20px; background: #1E293B; border: 2px solid var(--cyan-neon); margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);">
+            💧
+          </div>
+          <h2 style="font-size: 22px; font-weight: 900; color: #FFFFFF;">Smart Dam</h2>
+          <div style="font-size: 14px; font-weight: 700; color: #38BDF8; margin-top: 2px;">Operator Panel</div>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 4px;">Control • Monitor • Respond</div>
+
+          <div style="height: 150px; border-radius: 18px; overflow: hidden; margin: 18px 0; background: #1E293B; position: relative;">
+            <img src="https://images.unsplash.com/photo-1547683905-f686c993aae5?w=600" style="width: 100%; height: 100%; object-fit: cover;" />
+            <div style="position: absolute; bottom: 8px; left: 10px; background: rgba(15,23,42,0.85); padding: 4px 8px; border-radius: 8px; font-size: 9px; font-weight: 800; color: var(--cyan-neon);">
+              ● KANTALAI BARRAGE #01
+            </div>
+          </div>
+
+          <input type="text" placeholder="👤 Username" value="operator@kantalai.gov.lk" style="width: 100%; background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 12px; color: #FFF; font-size: 13px; margin-bottom: 10px;" />
+          <input type="password" placeholder="🔒 Password" value="••••••••••••" style="width: 100%; background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 12px; color: #FFF; font-size: 13px; margin-bottom: 14px;" />
+
+          <button class="btn-blue" onclick="setOperatorScreen('dashboard')" style="background: #0284C7;">Login</button>
+          <div style="font-size: 11px; color: #94A3B8; margin-top: 10px; cursor: pointer;">Forgot Password?</div>
+        </div>
+      `;
+    }
+
+    function renderOpDashboard(vp) {
+      const circ = 2 * Math.PI * 80;
+      const offset = circ - (circ * opWaterPct) / 100;
+      vp.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px; color: #94A3B8; cursor: pointer;">☰</span>
+            <span style="font-size: 15px; font-weight: 800; color: #FFFFFF;">Operator Dashboard</span>
+          </div>
+          <div style="width: 32px; height: 32px; border-radius: 16px; background: #1E293B; border: 1.5px solid #38BDF8; display: flex; align-items: center; justify-content: center; position: relative;">
+            👷
+            <span style="position: absolute; bottom: 0; right: 0; width: 8px; height: 8px; border-radius: 4px; background: #10B981;"></span>
+          </div>
+        </div>
+
+        <!-- Location Chip -->
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; margin-bottom: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 18px;">📍</span>
+            <div>
+              <div style="font-size: 13px; font-weight: 800; color: #FFFFFF;">Kantalai Dam</div>
+              <div style="font-size: 10px; color: #94A3B8;">Live Data</div>
+            </div>
+          </div>
+          <span style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10B981; color: #10B981; padding: 3px 8px; border-radius: 8px; font-size: 10px; font-weight: 800;">
+            ✓ Normal
+          </span>
+        </div>
+
+        <!-- Gauge Card -->
+        <div class="op-card" style="text-align: center; padding: 14px 10px;">
+          <div class="gauge-wrapper">
+            <svg class="gauge-svg" viewBox="0 0 180 180">
+              <circle class="gauge-bg" cx="90" cy="90" r="80" stroke="#1E293B" />
+              <circle class="gauge-fill" cx="90" cy="90" r="80" stroke="#00F0FF" stroke-dasharray="${circ}" stroke-dashoffset="${offset}" />
+            </svg>
+            <div class="gauge-inner-data">
+              <span style="font-size: 11px; font-weight: 600; color: #94A3B8;">Water Level</span>
+              <span style="font-size: 38px; font-weight: 900; color: #FFFFFF; line-height: 44px;">68%</span>
+              <span style="font-size: 13px; font-weight: 700; color: var(--cyan-neon);">2.04 m (204 cm)</span>
+            </div>
+          </div>
+
+          <!-- 3 Stats Row -->
+          <div style="display: flex; justify-content: space-around; border-top: 1px solid #334155; padding-top: 12px; margin-top: 6px;">
+            <div>
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Total Height</div>
+              <div style="font-size: 14px; font-weight: 800; color: #FFFFFF;">3.00 m</div>
+            </div>
+            <div style="width: 1px; height: 24px; background: #334155;"></div>
+            <div>
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Current Level</div>
+              <div style="font-size: 14px; font-weight: 800; color: var(--cyan-neon);">2.04 m</div>
+            </div>
+            <div style="width: 1px; height: 24px; background: #334155;"></div>
+            <div>
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Remaining</div>
+              <div style="font-size: 14px; font-weight: 800; color: #FFFFFF;">0.96 m</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Gate Status & Mode Cards Row -->
+        <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+          <div class="op-card" style="flex: 1; padding: 10px 12px; display: flex; align-items: center; gap: 8px; margin-bottom: 0;">
+            <span style="font-size: 22px;">🚪</span>
+            <div>
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Gate Status</div>
+              <div style="font-size: 13px; font-weight: 800; color: ${gatePct > 0 ? '#F59E0B' : '#EF4444'};">
+                ${gatePct > 0 ? gatePct + '% Open' : 'Closed'}
+              </div>
+            </div>
+          </div>
+
+          <div class="op-card" style="flex: 1; padding: 10px 12px; display: flex; align-items: center; gap: 8px; margin-bottom: 0;">
+            <span style="font-size: 22px;">⚙️</span>
+            <div>
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">System Mode</div>
+              <div style="font-size: 13px; font-weight: 800; color: ${gateMode === 'AUTO' ? '#10B981' : '#F59E0B'};">
+                ${gateMode === 'AUTO' ? 'Automatic' : 'Manual'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions 2x2 Grid -->
+        <div style="margin-bottom: 6px;">
+          <div style="font-size: 12px; font-weight: 700; color: #94A3B8; margin-bottom: 8px;">Quick Actions</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button class="btn-green" onclick="setOpGate(20)">↑ Open Gate</button>
+            <button class="btn-red" onclick="setOpGate(0)">↓ Close Gate</button>
+            <button class="btn-amber" onclick="setOpMode('MANUAL')">⚙ Manual Mode</button>
+            <button class="btn-blue" onclick="setOpMode('AUTO')">✓ Auto Mode</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function setOpGate(pct) {
+      gatePct = pct;
+      alert(`Sluice gate target set to ${pct}%. (Max limit clamped to 50%)`);
+      renderOpDashboard(document.getElementById('op-viewport'));
+    }
+
+    function setOpMode(mode) {
+      gateMode = mode;
+      alert(`System mode switched to ${mode}.`);
+      renderOpDashboard(document.getElementById('op-viewport'));
+    }
+
+    function renderOpGate(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Gate Control</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <!-- Status Card -->
+        <div class="op-card">
+          <div style="font-size: 11px; color: #94A3B8; font-weight: 600; margin-bottom: 8px;">Current Gate Status</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 26px;">🚪</span>
+              <span style="font-size: 18px; font-weight: 800; color: ${gatePct > 0 ? '#F59E0B' : '#EF4444'};">
+                ${gatePct > 0 ? 'Open (' + gatePct + '%)' : 'Closed'}
+              </span>
+            </div>
+            <span style="width: 10px; height: 10px; border-radius: 5px; background: ${gatePct > 0 ? '#F59E0B' : '#EF4444'};"></span>
+          </div>
+
+          <div style="height: 140px; border-radius: 12px; overflow: hidden; background: #0B132B;">
+            <img src="https://images.unsplash.com/photo-1547683905-f686c993aae5?w=600" style="width: 100%; height: 100%; object-fit: cover;" />
+          </div>
+        </div>
+
+        <!-- Control Options -->
+        <div style="font-size: 12px; font-weight: 700; color: #94A3B8; margin-bottom: 8px;">Control Options</div>
+        <div style="display: flex; gap: 10px; margin-bottom: 14px;">
+          <button class="btn-green" style="flex: 1;" onclick="setOpGate(20)">↑ Open Gate</button>
+          <button class="btn-red" style="flex: 1;" onclick="setOpGate(0)">↓ Close Gate</button>
+        </div>
+
+        <div class="op-card" style="padding: 6px 14px; margin-bottom: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #334155;">
+            <span style="font-size: 13px; font-weight: 600;">Manual Mode</span>
+            <input type="checkbox" ${gateMode === 'MANUAL' ? 'checked' : ''} onchange="setOpMode(this.checked ? 'MANUAL' : 'AUTO')" />
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0;">
+            <span style="font-size: 13px; font-weight: 600;">Automatic Mode</span>
+            <input type="checkbox" ${gateMode === 'AUTO' ? 'checked' : ''} onchange="setOpMode(this.checked ? 'AUTO' : 'MANUAL')" />
+          </div>
+        </div>
+
+        <button style="width: 100%; background: rgba(239, 68, 68, 0.15); border: 1.5px solid #EF4444; color: #EF4444; padding: 14px; border-radius: 16px; font-weight: 800; cursor: pointer;" onclick="alert('EMERGENCY STOP (E-STOP) triggered! Gate halted immediately.')">Cancel / Stop</button>
+      `;
+    }
+
+    function renderOpHistory(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Water Level History</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <!-- Filter Pills -->
+        <div style="display: flex; background: #1E293B; border-radius: 12px; padding: 3px; margin-bottom: 14px;">
+          <div style="flex: 1; text-align: center; padding: 8px; background: #0284C7; border-radius: 10px; font-size: 12px; font-weight: 700;">Today</div>
+          <div style="flex: 1; text-align: center; padding: 8px; color: #94A3B8; font-size: 12px; font-weight: 600; cursor: pointer;">7 Days</div>
+          <div style="flex: 1; text-align: center; padding: 8px; color: #94A3B8; font-size: 12px; font-weight: 600; cursor: pointer;">30 Days</div>
+        </div>
+
+        <!-- Graph Card -->
+        <div class="op-card" style="padding: 14px 10px; margin-bottom: 14px;">
+          <div style="font-size: 10px; color: #64748B; margin-bottom: 4px;">Level (m)</div>
+          <svg viewBox="0 0 320 140" style="width: 100%; height: 130px;">
+            <line x1="20" y1="20" x2="310" y2="20" stroke="#334155" stroke-dasharray="3 3" />
+            <line x1="20" y1="60" x2="310" y2="60" stroke="#334155" stroke-dasharray="3 3" />
+            <line x1="20" y1="100" x2="310" y2="100" stroke="#334155" stroke-dasharray="3 3" />
+            <path d="M 20 110 C 80 90, 140 70, 200 40 C 240 25, 280 50, 310 70" fill="none" stroke="#00F0FF" stroke-width="3" />
+            <circle cx="200" cy="40" r="5" fill="#00F0FF" />
+            <rect x="175" y="15" width="50" height="18" rx="4" fill="#0284C7" />
+            <text x="200" y="28" fill="#FFF" font-size="10" font-weight="bold" text-anchor="middle">2.04 m</text>
+            <text x="20" y="130" fill="#64748B" font-size="9">12 AM</text>
+            <text x="90" y="130" fill="#64748B" font-size="9">6 AM</text>
+            <text x="160" y="130" fill="#64748B" font-size="9">12 PM</text>
+            <text x="230" y="130" fill="#64748B" font-size="9">6 PM</text>
+            <text x="295" y="130" fill="#64748B" font-size="9">12 AM</text>
+          </svg>
+        </div>
+
+        <!-- 3 Stats Cards -->
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: #FFF;">Current Level</div>
+            <div style="font-size: 10px; color: #64748B;">Live Hydrometric Reading</div>
+          </div>
+          <span style="font-size: 16px; font-weight: 800; color: var(--cyan-neon);">2.04 m (68%)</span>
+        </div>
+
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: #FFF;">Highest Level</div>
+            <div style="font-size: 10px; color: #64748B;">Peak Inflow Surge</div>
+          </div>
+          <span style="font-size: 16px; font-weight: 800; color: #EF4444;">2.65 m (88%)</span>
+        </div>
+
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: #FFF;">Lowest Level</div>
+            <div style="font-size: 10px; color: #64748B;">Base Inflow Baseline</div>
+          </div>
+          <span style="font-size: 16px; font-weight: 800; color: #10B981;">0.92 m (31%)</span>
+        </div>
+      `;
+    }
+
+    function renderOpWeather(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Weather & Forecast</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <!-- Hero Card -->
+        <div class="op-card" style="text-align: center; padding: 20px 14px;">
+          <div style="font-size: 54px; margin-bottom: 6px;">🌧️</div>
+          <div style="font-size: 24px; font-weight: 900; color: #FFF;">Rainy  28°C</div>
+          <div style="font-size: 12px; color: #94A3B8; margin-top: 2px;">Wind: 15 km/h  |  Humidity: 82%</div>
+        </div>
+
+        <!-- 5-Day Forecast -->
+        <div class="op-card">
+          <div style="font-size: 11px; font-weight: 700; color: #94A3B8; margin-bottom: 10px;">5-Day Forecast</div>
+          <div style="display: flex; justify-content: space-between; text-align: center;">
+            <div><div style="font-size:11px; color:#94A3B8;">Wed</div><div style="font-size:20px; margin:4px 0;">☀️</div><div style="font-size:12px; font-weight:700;">28°</div></div>
+            <div><div style="font-size:11px; color:#94A3B8;">Thu</div><div style="font-size:20px; margin:4px 0;">☀️</div><div style="font-size:12px; font-weight:700;">27°</div></div>
+            <div><div style="font-size:11px; color:#94A3B8;">Fri</div><div style="font-size:20px; margin:4px 0;">⛅</div><div style="font-size:12px; font-weight:700;">28°</div></div>
+            <div><div style="font-size:11px; color:#94A3B8;">Sat</div><div style="font-size:20px; margin:4px 0;">☀️</div><div style="font-size:12px; font-weight:700;">29°</div></div>
+            <div><div style="font-size:11px; color:#94A3B8;">Sun</div><div style="font-size:20px; margin:4px 0;">☀️</div><div style="font-size:12px; font-weight:700;">30°</div></div>
+          </div>
+        </div>
+
+        <!-- Alerts & Messages Card -->
+        <div class="op-card" style="background: rgba(239, 68, 68, 0.15); border-color: #EF4444;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="font-size: 20px;">⚠️</span>
+            <span style="font-size: 14px; font-weight: 800; color: #F87171;">Alerts & Messages</span>
+          </div>
+          <div style="font-size: 13px; font-weight: 700; color: #FFF; margin-bottom: 2px;">Water level is rising fast.</div>
+          <div style="font-size: 11px; color: #E2E8F0; line-height: 16px;">Gate will open automatically. Please monitor the system.</div>
+          <div style="font-size: 10px; color: #FCA5A5; margin-top: 6px;">Today, 10:25 AM</div>
+        </div>
+      `;
+    }
+
+    function renderOpContacts(vp) {
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Contacts & Messaging</span>
+          <div style="width: 24px;"></div>
+        </div>
+
+        <!-- Tabs -->
+        <div style="display: flex; background: #1E293B; border-radius: 12px; padding: 3px; margin-bottom: 14px;">
+          <div style="flex: 1; text-align: center; padding: 8px; background: #0284C7; border-radius: 10px; font-size: 12px; font-weight: 700;">Emergency Contacts</div>
+          <div style="flex: 1; text-align: center; padding: 8px; color: #94A3B8; font-size: 12px; font-weight: 600; cursor: pointer;">Public Contacts</div>
+        </div>
+
+        <!-- Contacts List with the 3 Required Testing Numbers -->
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 22px;">👤</span>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #FFF;">District Secretariat</div>
+              <div style="font-size: 11px; color: #94A3B8;">+94740099235</div>
+            </div>
+          </div>
+          <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" onclick="alert('Calling +94740099235...')">📞</button>
+        </div>
+
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 22px;">🛡️</span>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #FFF;">Police Emergency</div>
+              <div style="font-size: 11px; color: #94A3B8;">+94712833936</div>
+            </div>
+          </div>
+          <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" onclick="alert('Calling +94712833936...')">📞</button>
+        </div>
+
+        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 22px;">🔥</span>
+            <div>
+              <div style="font-size: 13px; font-weight: 700; color: #FFF;">Fire & Rescue</div>
+              <div style="font-size: 11px; color: #94A3B8;">+94781099235</div>
+            </div>
+          </div>
+          <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" onclick="alert('Calling +94781099235...')">📞</button>
+        </div>
+
+        <!-- Send Alert (To Public) -->
+        <div style="font-size: 12px; font-weight: 700; color: #94A3B8; margin: 14px 0 6px;">Send Alert (To Public)</div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="alert-msg-input" placeholder="Emergency message..." style="flex: 1; background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 10px 12px; color: #FFF; font-size: 12px;" />
+          <button style="background: #0284C7; color: #FFF; border: none; border-radius: 12px; padding: 10px 16px; font-weight: 700; font-size: 12px; cursor: pointer;" onclick="sendSimAlert()">Send ➤</button>
+        </div>
+      `;
+    }
+
+    function sendSimAlert() {
+      const inp = document.getElementById('alert-msg-input');
+      const val = inp.value.trim();
+      if (!val) return;
+      alert(`Emergency Broadcast Dispatched: "${val}" sent to Public App and SMS Gateway.`);
+      inp.value = '';
+    }
+
+    function renderOpReports(vp) {
       const pendingCount = reports.filter(r => !r.verified).length;
-      document.getElementById('op-badge-pending').innerText = pendingCount;
-
-      if (reports.length === 0) {
-        list.innerHTML = `
-          <div style="background: #1E293B; border: 1px dashed #334155; border-radius: 10px; padding: 20px; text-align: center;">
-            <div style="font-size: 22px; margin-bottom: 6px;">📋</div>
-            <div style="font-size: 12px; font-weight: 700; color: #94A3B8;">No Reports Awaiting Action</div>
-            <div style="font-size: 10px; color: #64748B; margin-top: 4px;">Submit a flood report from the Public App on the left to test verification.</div>
-          </div>
-        `;
-        return;
-      }
-
-      list.innerHTML = reports.map(r => `
-        <div class="report-item">
-          <div class="report-item-header">
-            <span class="report-loc">
-              <span style="width: 8px; height: 8px; border-radius: 4px; background: ${r.verified ? '#10B981' : '#EF4444'};"></span>
-              ${r.loc}
-            </span>
-            <span style="font-size: 10px; color: #94A3B8;">${r.time}</span>
-          </div>
-          <p class="report-desc">${r.desc}</p>
-          <div class="report-actions">
-            ${!r.verified ? `
-              <button class="btn-verify" onclick="verifyReport(${r.id})">✓ Verify & Alert Radius</button>
-            ` : `
-              <span style="color: #34D399; font-size: 11px; font-weight: 800; align-self: center;">✓ Verified (Radius Alerted)</span>
-            `}
-          </div>
+      vp.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
+          <span style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Citizen Flood Reports</span>
+          <span style="background: #EF4444; color: #FFF; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 800;">Pending: ${pendingCount}</span>
         </div>
-      `).join('');
+
+        <div style="display: flex; gap: 6px; margin-bottom: 14px;">
+          <button class="screen-btn active" style="flex: 1;">All (${reports.length})</button>
+          <button class="screen-btn" style="flex: 1;">Pending (${pendingCount})</button>
+          <button class="screen-btn" style="flex: 1;">Verified (${reports.length - pendingCount})</button>
+        </div>
+
+        <div id="sim-reports-feed" style="display: flex; flex-direction: column; gap: 10px;">
+          ${reports.length === 0 ? `
+            <div style="background: #1E293B; border: 1px dashed #334155; border-radius: 14px; padding: 20px; text-align: center;">
+              <div style="font-size: 24px; margin-bottom: 6px;">📋</div>
+              <div style="font-size: 13px; font-weight: 700; color: #94A3B8;">No Reports Awaiting Action</div>
+              <div style="font-size: 11px; color: #64748B; margin-top: 4px;">Click the button below to submit a live field report.</div>
+              <button class="btn-blue" style="margin-top: 14px; font-size: 12px; padding: 8px 14px;" onclick="simulateNewReport()">+ Simulate Citizen Flood Report</button>
+            </div>
+          ` : reports.map(r => `
+            <div class="op-card" style="padding: 12px 14px; margin-bottom: 0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 800; font-size: 13px; color: #FFF;">📍 ${r.loc}</span>
+                <span style="font-size: 10px; color: #94A3B8;">${r.time}</span>
+              </div>
+              <div style="font-size: 12px; color: #CBD5E1; margin: 4px 0 10px;">${r.desc}</div>
+              <div style="display: flex; justify-content: flex-end;">
+                ${!r.verified ? `
+                  <button class="btn-green" style="padding: 6px 12px; font-size: 11px;" onclick="verifySimReport(${r.id})">✓ Verify & Dispatch Alert</button>
+                ` : `
+                  <span style="background: rgba(16,185,129,0.2); color: #10B981; border: 1px solid #10B981; padding: 4px 10px; border-radius: 8px; font-size: 11px; font-weight: 800;">✓ Verified & Dispatched</span>
+                `}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
     }
 
-    function submitCitizenReport() {
-      const loc = document.getElementById('rep-loc').value || "Kantalai Area";
-      const desc = document.getElementById('rep-desc').value || "Rising water level observed.";
-
+    function simulateNewReport() {
       const newRep = {
         id: Date.now(),
-        loc: loc,
+        loc: "Kantalai Spillway Road (1.8 km)",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        desc: desc,
-        verified: false,
-        photo: photoAttached ? "attached" : null
+        desc: "Rising water overflowing onto drainage channel near main road.",
+        verified: false
       };
-
       reports.unshift(newRep);
-      saveSimReports();
-      renderUpdatesFeed();
-      renderOperatorReports();
-
-      alert("✓ Report Submitted! Your report is now visible in the Operator Console under 'Pending Verification'.");
-      document.getElementById('rep-desc').value = "";
-      switchPubTab('updates');
+      saveReports();
+      renderOpReports(document.getElementById('op-viewport'));
+      alert("Field report created! Now visible under Pending Reports for verification.");
     }
 
-    function verifyReport(id) {
+    function verifySimReport(id) {
       const r = reports.find(x => x.id === id);
       if (r) {
         r.verified = true;
-        saveSimReports();
-        renderUpdatesFeed();
-        renderOperatorReports();
-        alert(`✓ Report for ${r.loc} Verified! Community push notification dispatched to nearby residents.`);
+        saveReports();
+        renderOpReports(document.getElementById('op-viewport'));
+        alert(`Report for "${r.loc}" Verified! Dispatched to Public App.`);
       }
     }
 
-    function togglePhoto() {
-      photoAttached = !photoAttached;
-      const box = document.getElementById('photo-box');
-      const txt = document.getElementById('photo-picker-text');
-      if (photoAttached) {
-        box.style.background = "#DCFCE7";
-        box.style.borderColor = "#10B981";
-        txt.innerHTML = "📷 Photo Evidence Attached (Tap to remove)";
-        txt.style.color = "#15803D";
-      } else {
-        box.style.background = "#EFF6FF";
-        box.style.borderColor = "#93C5FD";
-        txt.innerHTML = "Tap to Attach Photo Evidence";
-        txt.style.color = "#2563EB";
-      }
-    }
-
-    function triggerGate(pct) {
-      gatePercent = pct;
-      const text = pct > 0 ? `${pct}% Open` : 'Closed (0%)';
-      document.getElementById('op-gate-pct').innerText = text;
-      document.getElementById('pub-gate-status').innerText = pct > 0 ? `${pct}% OPEN (Active Discharge)` : 'CLOSED (0%)';
-      document.getElementById('pub-gate-status').style.color = pct > 0 ? '#DC2626' : '#059669';
-      alert(`Sluice Gate Command Executed: ${text}`);
-    }
-
-    function setMode(mode) {
-      systemMode = mode;
-      document.getElementById('op-mode-text').innerText = mode === 'AUTO' ? 'Automatic' : 'Manual';
-      alert(`System Mode changed to ${mode}`);
-    }
-
-    function sendChat() {
-      const input = document.getElementById('chat-input');
-      const val = input.value.trim();
-      if (!val) return;
-      const container = document.getElementById('chat-messages');
-      const msg = document.createElement('div');
-      msg.style.cssText = "background: #2563EB; color: #fff; padding: 8px 12px; border-radius: 10px; align-self: flex-end; max-width: 80%; font-size: 12px;";
-      msg.innerHTML = `<strong>You:</strong><br>${val}`;
-      container.appendChild(msg);
-      input.value = "";
-      container.scrollTop = container.scrollHeight;
-    }
-
-    function switchPubTab(tab, el) {
-      document.querySelectorAll('.public-screen').forEach(s => s.classList.remove('active'));
-      document.getElementById('pub-' + tab).classList.add('active');
-      if (el) {
-        document.querySelectorAll('.phone-frame:not(.dark) .nav-item').forEach(n => n.classList.remove('active'));
-        el.classList.add('active');
-      }
-    }
-
-    function switchOpTab(tab, el) {
-      document.querySelectorAll('.operator-screen').forEach(s => s.classList.remove('active'));
-      document.getElementById('op-' + tab).classList.add('active');
-      if (el) {
-        document.querySelectorAll('.phone-frame.dark .nav-item').forEach(n => n.classList.remove('active'));
-        el.classList.add('active');
-      }
-    }
-
-    const dict = {
-      en: { title: "Smart Dam", sub: "Alerting System • Kantalai Node", level: "Water Level", rep: "Report" },
-      si: { title: "ස්මාර්ට් වේල්ල", sub: "අනතුරු ඇඟවීමේ පද්ධතිය • කන්තලේ", level: "ජල මට්ටම", rep: "වාර්තා කරන්න" },
-      ta: { title: "ஸ்மார்ட் அணை", sub: "எச்சரிக்கை அமைப்பு • கந்தளாய்", level: "நீர் அளவு", rep: "வெள்ளம் பதிவு" }
-    };
-
-    function setLang(lang, el) {
-      document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
-      const d = dict[lang];
-      document.getElementById('pub-title').innerText = d.title;
-      document.getElementById('pub-sub').innerText = d.sub;
-      document.getElementById('txt-water-level').innerText = d.level;
-      document.getElementById('qa-report').innerText = d.rep;
-    }
-
-    // Init
-    renderUpdatesFeed();
-    renderOperatorReports();
+    // Initialize Viewports
+    setPublicScreen('home');
+    setOperatorScreen('dashboard');
   </script>
 </body>
 </html>

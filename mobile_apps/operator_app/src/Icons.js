@@ -1,5 +1,5 @@
 import React from 'react';
-import Svg, { Path, Circle, Rect, G, Polygon } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, G, Polygon, Line } from 'react-native-svg';
 
 // Unique, Professional Vector Icons for SDAS Mobile Apps
 // Powered by react-native-svg for 100% vector fidelity across all Android & iOS devices
@@ -53,7 +53,6 @@ export function WeatherCloudSunIcon({ size = 24, color = '#F59E0B' }) {
 export function ReportFloodIcon({ size = 24, color = '#EF4444' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Hazard Warning Triangle */}
       <Polygon
         points="12,2 22,20 2,20"
         fill={color}
@@ -62,7 +61,6 @@ export function ReportFloodIcon({ size = 24, color = '#EF4444' }) {
         strokeWidth="2.2"
         strokeLinejoin="round"
       />
-      {/* Exclamation point / Flood surge wave */}
       <Path
         d="M12 8v5M12 16v1"
         stroke={color}
@@ -82,7 +80,6 @@ export function ReportFloodIcon({ size = 24, color = '#EF4444' }) {
 export function CommunityIcon({ size = 24, color = '#3B82F6' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Primary Center User */}
       <Circle cx="9" cy="7" r="3.2" stroke={color} strokeWidth="1.8" fill={color} fillOpacity="0.2" />
       <Path
         d="M3 19c0-3.3 2.7-6 6-6s6 2.7 6 6"
@@ -90,7 +87,6 @@ export function CommunityIcon({ size = 24, color = '#3B82F6' }) {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
-      {/* Secondary Right User */}
       <Circle cx="16.5" cy="8.5" r="2.5" stroke={color} strokeWidth="1.6" />
       <Path
         d="M16 13.5c2.4.4 4 2.2 4 4.5"
@@ -201,14 +197,10 @@ export function ChatBubbleIcon({ size = 24, color = '#3B82F6' }) {
 export function SluiceGateIcon({ size = 24, color = '#F59E0B' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      {/* Dual Dam Abutments */}
       <Rect x="2" y="4" width="4" height="16" rx="1" fill={color} fillOpacity="0.3" stroke={color} strokeWidth="1.8" />
       <Rect x="18" y="4" width="4" height="16" rx="1" fill={color} fillOpacity="0.3" stroke={color} strokeWidth="1.8" />
-      {/* Overhead Hoist Beam */}
       <Rect x="4" y="3" width="16" height="3" rx="0.5" stroke={color} strokeWidth="1.6" />
-      {/* Movable Sluice Barrier Plate */}
       <Rect x="6" y="8" width="12" height="7" rx="1" fill={color} stroke={color} strokeWidth="1.8" />
-      {/* Water Flow Discharge Waves underneath */}
       <Path d="M6 18c1.5-1 3-1 4.5 0s3 1 4.5 0 3-1 4.5 0" stroke="#38BDF8" strokeWidth="1.8" strokeLinecap="round" />
     </Svg>
   );
@@ -254,6 +246,191 @@ export function CheckShieldIcon({ size = 24, color = '#10B981' }) {
         strokeLinejoin="round"
       />
       <Path d="M9 12l2 2 4-4" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function HamburgerIcon({ size = 24, color = '#1E293B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M4 6h16M4 12h16M4 18h16" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function ArrowLeftIcon({ size = 24, color = '#1E293B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M19 12H5M12 19l-7-7 7-7" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function MoreHorizontalIcon({ size = 24, color = '#64748B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="1.8" fill={color} />
+      <Circle cx="19" cy="12" r="1.8" fill={color} />
+      <Circle cx="5" cy="12" r="1.8" fill={color} />
+    </Svg>
+  );
+}
+
+export function WindIcon({ size = 24, color = '#0284C7' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function DropletIcon({ size = 24, color = '#0284C7' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function CloudRainIcon({ size = 24, color = '#0284C7' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M16 13v6M8 13v6M12 15v6M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function SunriseIcon({ size = 24, color = '#F59E0B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 2v6M4.93 10.93l1.41 1.41M2 18h2M20 18h2M19.07 10.93l-1.41 1.41M22 22H2M8 6l4-4 4 4M16 18a4 4 0 0 0-8 0" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function SunsetIcon({ size = 24, color = '#F97316' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 10V4M4.93 10.93l1.41 1.41M2 18h2M20 18h2M19.07 10.93l-1.41 1.41M22 22H2M16 6l-4 4-4-4M16 18a4 4 0 0 0-8 0" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function SendIcon({ size = 24, color = '#FFFFFF' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function UserIcon({ size = 24, color = '#64748B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="12" cy="7" r="4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function LockIcon({ size = 24, color = '#64748B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3" y="11" width="18" height="11" rx="2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M7 11V7a5 5 0 0 1 10 0v4" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function EyeIcon({ size = 24, color = '#64748B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function EyeOffIcon({ size = 24, color = '#64748B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function PhoneCallIcon({ size = 24, color = '#10B981' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function TrashIcon({ size = 24, color = '#EF4444' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function ShieldIcon({ size = 24, color = '#3B82F6' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function FlameIcon({ size = 24, color = '#EF4444' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M8.5 14.5A2.5 2.5 0 0 0 11 17c1.38 0 2.5-1.12 2.5-2.5 0-1.63-1.04-2.8-1.5-3.5-.46.7-1.5 1.87-1.5 3.5zM12 2c0 3-3 5-3 8a4 4 0 0 0 8 0c0-3-3-5-3-8z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function CheckIcon({ size = 24, color = '#10B981' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M20 6L9 17l-5-5" stroke={color} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+export function AlertTriangleIcon({ size = 24, color = '#EF4444' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Line x1="12" y1="9" x2="12" y2="13" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Circle cx="12" cy="17" r="1" fill={color} />
+    </Svg>
+  );
+}
+
+export function InfoCircleIcon({ size = 24, color = '#0284C7' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <Line x1="12" y1="16" x2="12" y2="12" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Circle cx="12" cy="8" r="1" fill={color} />
+    </Svg>
+  );
+}
+
+export function SlidersIcon({ size = 24, color = '#64748B' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Line x1="4" y1="21" x2="4" y2="14" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="4" y1="10" x2="4" y2="3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="12" y1="21" x2="12" y2="12" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="12" y1="8" x2="12" y2="3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="20" y1="21" x2="20" y2="16" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="20" y1="12" x2="20" y2="3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="1" y1="14" x2="7" y2="14" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="9" y1="8" x2="15" y2="8" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <Line x1="17" y1="16" x2="23" y2="16" stroke={color} strokeWidth="2" strokeLinecap="round" />
     </Svg>
   );
 }

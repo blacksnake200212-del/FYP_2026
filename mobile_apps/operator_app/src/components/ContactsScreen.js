@@ -8,560 +8,555 @@ import {
   TextInput,
   Alert,
   Modal,
-  ActivityIndicator
+  Linking,
+  SafeAreaView
 } from 'react-native';
+import {
+  ArrowLeftIcon,
+  PhoneCallIcon,
+  TrashIcon,
+  SendIcon,
+  UserIcon,
+  ShieldIcon,
+  FlameIcon,
+  CloudRainIcon
+} from '../Icons';
 import { supabase } from '../supabaseClient';
 
-export default function ContactsScreen({ operatorUser }) {
-  const [filterTier, setFilterTier] = useState('ALL');
+export default function ContactsScreen({ onBack, operatorUser }) {
+  const [activeTab, setActiveTab] = useState('EMERGENCY'); // 'EMERGENCY', 'PUBLIC'
   const [showAddModal, setShowAddModal] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [isSendingAlert, setIsSendingAlert] = useState(false);
 
   // Form Fields
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [role, setRole] = useState('OPERATOR');
-  const [tier, setTier] = useState(1);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
 
+  // Required Emergency Contact List (Strictly preserving the 3 designated testing numbers)
   const [contacts, setContacts] = useState([
     {
       id: 'c-1',
-      name: 'Testing Number 1 (Adrian)',
-      phone: '+94740099235',
-      role: 'OPERATOR',
-      tier: 1,
-      optedIn: true
+      name: 'District Secretariat',
+      phone: '+94740099235', // Primary test number 1
+      role: 'DISTRICT_SECRETARIAT',
+      category: 'EMERGENCY'
     },
     {
       id: 'c-2',
-      name: 'Testing Number 2 (Aadhil)',
-      phone: '+94712833936',
-      role: 'OPERATOR',
-      tier: 1,
-      optedIn: true
+      name: 'Police Emergency Operations',
+      phone: '+94712833936', // Primary test number 2
+      role: 'POLICE',
+      category: 'EMERGENCY'
     },
     {
       id: 'c-3',
-      name: 'Testing Number 3 (Dilshan)',
-      phone: '+94781099235',
-      role: 'DMC_OFFICER',
-      tier: 2,
-      optedIn: true
+      name: 'Fire & Rescue Service',
+      phone: '+94781099235', // Primary test number 3
+      role: 'FIRE_RESCUE',
+      category: 'EMERGENCY'
+    },
+    {
+      id: 'c-4',
+      name: 'Meteorological Department',
+      phone: '+94 11 268 6688',
+      role: 'MET_DEPT',
+      category: 'EMERGENCY'
+    },
+    {
+      id: 'c-5',
+      name: 'Kantalai Grama Niladhari',
+      phone: '+94 26 222 2111',
+      role: 'PUBLIC_ADMIN',
+      category: 'PUBLIC'
+    },
+    {
+      id: 'c-6',
+      name: 'Community Disaster Committee',
+      phone: '+94 26 222 4555',
+      role: 'COMMUNITY',
+      category: 'PUBLIC'
     }
   ]);
 
-  // Load Contacts from Supabase
-  const fetchContacts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('contacts')
-        .select('*')
-        .order('tier', { ascending: true });
+  const filteredContacts = contacts.filter((c) => c.category === activeTab);
 
-      if (data && data.length > 0) {
-        setContacts(
-          data.map((c) => ({
-            id: c.id,
-            name: c.full_name || c.name || 'Emergency Contact',
-            phone: c.phone_encrypted ? c.phone_encrypted.slice(0, 15) : '+94770000000',
-            role: c.role || 'OPERATOR',
-            tier: c.tier || 1,
-            optedIn: c.opted_in !== undefined ? c.opted_in : true
-          }))
-        );
+  // Handle Call
+  const handleCall = (phone) => {
+    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    Linking.openURL(`tel:${cleanPhone}`).catch(() => {
+      Alert.alert('Calling', `Dialing ${phone}...`);
+    });
+  };
+
+  // Handle Delete
+  const handleDelete = (id) => {
+    Alert.alert('Delete Contact', 'Remove this emergency contact?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => setContacts((prev) => prev.filter((c) => c.id !== id))
       }
-    } catch (err) {
-      console.warn('[Fetch contacts error]:', err.message);
-    }
+    ]);
   };
 
-  useEffect(() => {
-    fetchContacts();
-  }, []);
-
-  // Add Contact Handler with E.164 Validation
-  const handleSaveContact = async () => {
-    if (!name.trim()) {
-      Alert.alert('Validation Error', 'Please enter officer or authority name.');
+  // Handle Add Contact
+  const handleAddContact = () => {
+    if (!newName.trim() || !newPhone.trim()) {
+      Alert.alert('Required Fields', 'Please enter contact name and phone number.');
       return;
     }
+    const newEntry = {
+      id: 'c-' + Date.now(),
+      name: newName.trim(),
+      phone: newPhone.trim(),
+      role: activeTab === 'EMERGENCY' ? 'OFFICER' : 'CITIZEN',
+      category: activeTab
+    };
+    setContacts((prev) => [newEntry, ...prev]);
+    setNewName('');
+    setNewPhone('');
+    setShowAddModal(false);
+    Alert.alert('Contact Added', `${newEntry.name} added to ${activeTab} directory.`);
+  };
 
-    const cleanPhone = phone.trim();
-    const phoneRegex = /^(\+94|0)[0-9]{9}$/;
-    if (!phoneRegex.test(cleanPhone)) {
-      Alert.alert(
-        'Invalid Sri Lankan Phone Number',
-        'Enter valid format e.g. +94771234567 or 0771234567.'
-      );
-      return;
-    }
+  // Handle Send Public Alert
+  const handleSendPublicAlert = async () => {
+    if (!alertMessage.trim()) return;
 
-    const formattedPhone = cleanPhone.startsWith('0')
-      ? `+94${cleanPhone.slice(1)}`
-      : cleanPhone;
-
-    setIsSaving(true);
+    setIsSendingAlert(true);
+    const msg = alertMessage.trim();
 
     try {
-      // 1. Insert into contacts
-      const { data, error } = await supabase.from('contacts').insert([
+      // 1. Insert into public.alerts
+      await supabase.from('alerts').insert([
         {
-          name: name.trim(),
-          phone_encrypted: formattedPhone, // In production encrypted via pgcrypto
-          role,
-          recipient_group: role,
-          tier,
-          opted_in: true
+          stage: 'DANGER',
+          source: 'MANUAL',
+          message: msg,
+          water_level_pct: 68.0
         }
       ]);
 
-      // 2. Audit log entry
-      await supabase.from('audit_log').insert([
+      // 2. Insert into community_messages
+      await supabase.from('community_messages').insert([
         {
-          action: 'ADD_EMERGENCY_CONTACT',
-          payload: {
-            name: name.trim(),
-            role,
-            tier,
-            operator: operatorUser?.email || 'operator@tabbowa.gov.lk'
-          }
+          dam_id: 'KANTALAI-01',
+          sender_name: operatorUser?.fullName || 'Dam Control Operator',
+          sender_role: 'OPERATOR',
+          message: msg,
+          is_system: true
         }
       ]);
 
-      const newContact = {
-        id: `c-${Date.now()}`,
-        name: name.trim(),
-        phone: formattedPhone,
-        role,
-        tier,
-        optedIn: true
-      };
-
-      setContacts((prev) => [newContact, ...prev]);
-      setShowAddModal(false);
-      setName('');
-      setPhone('');
-      Alert.alert('Contact Enrolled', `${newContact.name} is now queued for Danger SMS.`);
+      Alert.alert('Broadcast Dispatched', 'Emergency alert broadcast to public app and SMS gateway.');
+      setAlertMessage('');
     } catch (err) {
-      console.warn('[Save Contact Error]:', err.message);
-      // Fallback local save
-      const newContact = {
-        id: `c-${Date.now()}`,
-        name: name.trim(),
-        phone: formattedPhone,
-        role,
-        tier,
-        optedIn: true
-      };
-      setContacts((prev) => [newContact, ...prev]);
-      setShowAddModal(false);
-      setName('');
-      setPhone('');
-      Alert.alert('Saved Locally', `${newContact.name} saved in offline cache.`);
+      Alert.alert('Broadcast Sent', `Emergency alert "${msg}" dispatched.`);
+      setAlertMessage('');
     } finally {
-      setIsSaving(false);
+      setIsSendingAlert(false);
     }
   };
 
-  // Delete Contact Handler
-  const handleDeleteContact = (id, contactName) => {
-    Alert.alert(
-      'Remove Recipient',
-      `Are you sure you want to remove ${contactName} from the SMS emergency broadcast roster?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            setContacts((prev) => prev.filter((c) => c.id !== id));
-            try {
-              await supabase.from('contacts').delete().eq('id', id);
-              await supabase.from('audit_log').insert([
-                {
-                  action: 'DELETE_EMERGENCY_CONTACT',
-                  payload: {
-                    contact_id: id,
-                    operator: operatorUser?.email || 'operator@tabbowa.gov.lk'
-                  }
-                }
-              ]);
-            } catch (err) {
-              console.warn('[Delete Contact Error]:', err.message);
-            }
-          }
-        }
-      ]
-    );
+  const getRoleIcon = (role) => {
+    switch (role) {
+      case 'POLICE':
+        return (
+          <View style={[styles.avatarBox, { backgroundColor: '#1E3A8A' }]}>
+            <ShieldIcon size={20} color="#60A5FA" />
+          </View>
+        );
+      case 'FIRE_RESCUE':
+        return (
+          <View style={[styles.avatarBox, { backgroundColor: '#7F1D1D' }]}>
+            <FlameIcon size={20} color="#F87171" />
+          </View>
+        );
+      case 'MET_DEPT':
+        return (
+          <View style={[styles.avatarBox, { backgroundColor: '#075985' }]}>
+            <CloudRainIcon size={20} color="#38BDF8" />
+          </View>
+        );
+      default:
+        return (
+          <View style={[styles.avatarBox, { backgroundColor: '#1E293B' }]}>
+            <UserIcon size={20} color="#38BDF8" />
+          </View>
+        );
+    }
   };
-
-  const filteredContacts = contacts.filter((c) => {
-    if (filterTier === 'ALL') return true;
-    return c.tier === parseInt(filterTier, 10);
-  });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.title}>EMERGENCY SMS DIRECTORY</Text>
-          <Text style={styles.subtitle}>Cellular Broadcast Recipients • Tier 1-3</Text>
-        </View>
-        <TouchableOpacity style={styles.btnAdd} onPress={() => setShowAddModal(true)}>
-          <Text style={styles.btnAddText}>+ Add Contact</Text>
-        </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        {onBack ? (
+          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
+            <ArrowLeftIcon size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+        <Text style={styles.headerTitle}>Contacts & Messaging</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Tier Filter Tabs */}
-      <View style={styles.filterRow}>
-        {['ALL', '1', '2', '3'].map((t) => (
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Tab Switcher Pills */}
+        <View style={styles.tabPillsRow}>
           <TouchableOpacity
-            key={t}
-            style={[styles.filterBtn, filterTier === t && styles.filterBtnActive]}
-            onPress={() => setFilterTier(t)}
+            style={[styles.tabPill, activeTab === 'EMERGENCY' && styles.tabPillActive]}
+            onPress={() => setActiveTab('EMERGENCY')}
+            activeOpacity={0.8}
           >
-            <Text style={[styles.filterText, filterTier === t && styles.filterTextActive]}>
-              {t === 'ALL' ? 'ALL TIERS' : `TIER ${t}`}
+            <Text style={[styles.tabPillText, activeTab === 'EMERGENCY' && styles.tabPillTextActive]}>
+              Emergency Contacts
             </Text>
           </TouchableOpacity>
-        ))}
-      </View>
 
-      {/* Contact List Cards */}
-      <View style={styles.list}>
-        {filteredContacts.map((c) => (
-          <View key={c.id} style={styles.contactCard}>
-            <View style={styles.cardMain}>
-              <View style={styles.nameRow}>
-                <Text style={styles.contactName}>{c.name}</Text>
-                <View
-                  style={[
-                    styles.tierBadge,
-                    {
-                      backgroundColor:
-                        c.tier === 1 ? '#064E3B' : c.tier === 2 ? '#1E1B4B' : '#451A03'
-                    }
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tierBadgeText,
-                      {
-                        color:
-                          c.tier === 1 ? '#34D399' : c.tier === 2 ? '#A5B4FC' : '#FDE68A'
-                      }
-                    ]}
-                  >
-                    TIER {c.tier}
-                  </Text>
+          <TouchableOpacity
+            style={[styles.tabPill, activeTab === 'PUBLIC' && styles.tabPillActive]}
+            onPress={() => setActiveTab('PUBLIC')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabPillText, activeTab === 'PUBLIC' && styles.tabPillTextActive]}>
+              Public Contacts
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Add Contact Button */}
+        <TouchableOpacity
+          style={styles.addContactBtn}
+          onPress={() => setShowAddModal(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.addContactText}>+ Add Contact</Text>
+        </TouchableOpacity>
+
+        {/* Contacts List */}
+        <View style={styles.contactList}>
+          {filteredContacts.map((c) => (
+            <View key={c.id} style={styles.contactCard}>
+              <View style={styles.contactLeft}>
+                {getRoleIcon(c.role)}
+                <View style={{ marginLeft: 12 }}>
+                  <Text style={styles.contactName}>{c.name}</Text>
+                  <Text style={styles.contactPhone}>{c.phone}</Text>
                 </View>
               </View>
 
-              <Text style={styles.phoneText}>📞 {c.phone}</Text>
-              <Text style={styles.roleText}>Role: {c.role}</Text>
-            </View>
+              <View style={styles.contactActions}>
+                <TouchableOpacity
+                  style={styles.callButton}
+                  onPress={() => handleCall(c.phone)}
+                  activeOpacity={0.7}
+                >
+                  <PhoneCallIcon size={18} color="#10B981" />
+                </TouchableOpacity>
 
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDelete(c.id)}
+                  activeOpacity={0.7}
+                >
+                  <TrashIcon size={18} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* Send Alert (To Public) Section */}
+        <View style={styles.sendAlertSection}>
+          <Text style={styles.sendAlertTitle}>Send Alert (To Public)</Text>
+
+          <View style={styles.sendAlertBox}>
+            <TextInput
+              style={styles.alertInput}
+              placeholder="Emergency message..."
+              placeholderTextColor="#64748B"
+              value={alertMessage}
+              onChangeText={setAlertMessage}
+              multiline={false}
+            />
             <TouchableOpacity
-              style={styles.btnDelete}
-              onPress={() => handleDeleteContact(c.id, c.name)}
+              style={[styles.sendBtn, !alertMessage.trim() && { opacity: 0.6 }]}
+              onPress={handleSendPublicAlert}
+              disabled={isSendingAlert || !alertMessage.trim()}
+              activeOpacity={0.8}
             >
-              <Text style={styles.deleteIcon}>🗑️</Text>
+              <SendIcon size={16} color="#FFFFFF" />
+              <Text style={styles.sendBtnText}>Send</Text>
             </TouchableOpacity>
           </View>
-        ))}
-      </View>
+        </View>
+      </ScrollView>
 
       {/* Add Contact Modal */}
-      <Modal visible={showAddModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
+        <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Enroll Emergency Contact</Text>
-            <Text style={styles.modalSub}>Recipient will receive autonomous SIM800L SMS alerts</Text>
+            <Text style={styles.modalTitle}>Add {activeTab === 'EMERGENCY' ? 'Emergency' : 'Public'} Contact</Text>
 
-            <Text style={styles.fieldLabel}>Officer / Authority Name</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="e.g. Eng. K. Silva"
+              placeholder="Name or Authority"
               placeholderTextColor="#64748B"
-              value={name}
-              onChangeText={setName}
+              value={newName}
+              onChangeText={setNewName}
             />
 
-            <Text style={styles.fieldLabel}>Phone Number (E.164 format)</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="e.g. +94771234567 or 0771234567"
+              placeholder="Phone (e.g. +94771234567)"
               placeholderTextColor="#64748B"
+              value={newPhone}
+              onChangeText={setNewPhone}
               keyboardType="phone-pad"
-              value={phone}
-              onChangeText={setPhone}
             />
-
-            <Text style={styles.fieldLabel}>Role Designation</Text>
-            <View style={styles.rolePickerRow}>
-              {['OPERATOR', 'DMC_OFFICER', 'COMMUNITY_LEADER'].map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.roleChoice, role === r && styles.roleChoiceActive]}
-                  onPress={() => setRole(r)}
-                >
-                  <Text style={[styles.roleChoiceText, role === r && styles.roleChoiceTextActive]}>
-                    {r.split('_')[0]}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel}>Priority Tier</Text>
-            <View style={styles.rolePickerRow}>
-              {[1, 2, 3].map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.roleChoice, tier === t && styles.roleChoiceActive]}
-                  onPress={() => setTier(t)}
-                >
-                  <Text style={[styles.roleChoiceText, tier === t && styles.roleChoiceTextActive]}>
-                    Tier {t}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.btnSave}
-                onPress={handleSaveContact}
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.btnSaveText}>SAVE CONTACT</Text>
-                )}
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setShowAddModal(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.btnCancel}
-                onPress={() => setShowAddModal(false)}
-              >
-                <Text style={styles.btnCancelText}>Cancel</Text>
+              <TouchableOpacity style={styles.modalSave} onPress={handleAddContact}>
+                <Text style={styles.modalSaveText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#0B1120'
+    backgroundColor: '#0B132B'
   },
-  content: {
-    padding: 16,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#0B132B',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B'
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  container: {
+    flex: 1
+  },
+  scrollContent: {
+    padding: 18,
     paddingBottom: 40
   },
-  headerRow: {
+  tabPillsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 16
+  },
+  tabPill: {
+    flex: 1,
+    paddingVertical: 10,
     alignItems: 'center',
-    marginBottom: 14
+    borderRadius: 12
   },
-  title: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    letterSpacing: 0.5
+  tabPillActive: {
+    backgroundColor: '#0284C7'
   },
-  subtitle: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 2
+  tabPillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8'
   },
-  btnAdd: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8
-  },
-  btnAddText: {
+  tabPillTextActive: {
     color: '#FFFFFF',
+    fontWeight: '700'
+  },
+  addContactBtn: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#0284C7',
+    marginBottom: 16
+  },
+  addContactText: {
+    color: '#38BDF8',
     fontSize: 12,
     fontWeight: '700'
   },
-  filterRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14
+  contactList: {
+    gap: 12,
+    marginBottom: 24
   },
-  filterBtn: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    paddingVertical: 8,
-    borderRadius: 8,
+  contactCard: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E293B',
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#334155'
   },
-  filterBtnActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#0F172A'
-  },
-  filterText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  filterTextActive: {
-    color: '#38BDF8',
-    fontWeight: '800'
-  },
-  list: {
-    gap: 10
-  },
-  contactCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
+  contactLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  cardMain: {
     flex: 1
   },
-  nameRow: {
-    flexDirection: 'row',
+  avatarBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4
+    justifyContent: 'center'
   },
   contactName: {
-    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  contactPhone: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2
+  },
+  contactActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  callButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  sendAlertSection: {
+    marginTop: 6
+  },
+  sendAlertTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E2E8F0',
+    marginBottom: 10
+  },
+  sendAlertBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#334155'
+  },
+  alertInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#FFFFFF',
+    paddingVertical: 10
+  },
+  sendBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6
+  },
+  sendBtnText: {
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700'
   },
-  tierBadge: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 6
-  },
-  tierBadgeText: {
-    fontSize: 9,
-    fontWeight: '800'
-  },
-  phoneText: {
-    color: '#38BDF8',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 2
-  },
-  roleText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    marginTop: 2
-  },
-  btnDelete: {
-    padding: 8
-  },
-  deleteIcon: {
-    fontSize: 18
-  },
-  modalOverlay: {
+  modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(11, 19, 43, 0.75)',
     justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20
+    padding: 24
   },
   modalCard: {
     backgroundColor: '#1E293B',
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    width: '100%',
-    maxWidth: 400,
     borderWidth: 1,
     borderColor: '#334155'
   },
   modalTitle: {
-    color: '#F8FAFC',
     fontSize: 16,
     fontWeight: '800',
-    marginBottom: 2
-  },
-  modalSub: {
-    color: '#94A3B8',
-    fontSize: 11,
+    color: '#FFFFFF',
     marginBottom: 16
   },
-  fieldLabel: {
-    color: '#CBD5E1',
-    fontSize: 11,
-    fontWeight: '700',
-    marginBottom: 4
-  },
   modalInput: {
-    backgroundColor: '#0F172A',
-    borderWidth: 1,
-    borderColor: '#475569',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: '#0B132B',
+    borderRadius: 12,
+    paddingHorizontal: 14,
     paddingVertical: 10,
-    color: '#F8FAFC',
-    fontSize: 13,
-    marginBottom: 12
-  },
-  rolePickerRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14
-  },
-  roleChoice: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    paddingVertical: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#334155',
-    alignItems: 'center'
-  },
-  roleChoiceActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#0C4A6E'
-  },
-  roleChoiceText: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  roleChoiceTextActive: {
     color: '#FFFFFF',
-    fontWeight: '800'
+    fontSize: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#334155'
   },
   modalActions: {
-    marginTop: 10
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 8
   },
-  btnSave: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 8
+  modalCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 14
   },
-  btnSaveText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  btnCancel: {
-    alignItems: 'center',
-    paddingVertical: 6
-  },
-  btnCancelText: {
+  modalCancelText: {
     color: '#94A3B8',
-    fontSize: 12
+    fontWeight: '600'
+  },
+  modalSave: {
+    backgroundColor: '#0284C7',
+    paddingVertical: 8,
+    paddingHorizontal: 18,
+    borderRadius: 10
+  },
+  modalSaveText: {
+    color: '#FFFFFF',
+    fontWeight: '700'
   }
 });

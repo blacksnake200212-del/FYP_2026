@@ -6,788 +6,370 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  ActivityIndicator,
-  RefreshControl
+  SafeAreaView
 } from 'react-native';
 import Svg, {
   Path,
   Line,
   Circle,
-  Rect,
   Text as SvgText,
   Defs,
   LinearGradient,
-  Stop
+  Stop,
+  Rect
 } from 'react-native-svg';
+import { ArrowLeftIcon } from '../Icons';
 import { supabase } from '../supabaseClient';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - 48;
-const CHART_HEIGHT = 190;
-const CHART_PADDING = { top: 20, right: 16, bottom: 26, left: 34 };
+const CHART_HEIGHT = 200;
 
-export default function HistoryInsightsScreen({ operatorUser }) {
-  const [timeRange, setTimeRange] = useState('1H'); // '1H', '6H', '24H'
-  const [selectedPoint, setSelectedPoint] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(false);
+export default function HistoryInsightsScreen({ onBack }) {
+  const [activeRange, setActiveRange] = useState('TODAY'); // 'TODAY', '7DAYS', '30DAYS'
 
-  // AI Forecast state
-  const [aiForecast, setAiForecast] = useState({
-    predictedLevel: 88.2,
-    currentLevel: 81.5,
-    riskClass: 'DANGER',
-    confidence: 0.942,
-    horizonMin: 60,
-    inflowRateCmHr: +3.4,
-    recommendation: 'Sluice gate 50% opening required within 25 min to prevent spillway crest overtopping.'
-  });
+  // Time-series telemetry points
+  const points = [
+    { time: '12 AM', levelM: 0.95, pct: 32 },
+    { time: '6 AM', levelM: 1.25, pct: 42 },
+    { time: '12 PM', levelM: 1.85, pct: 62 },
+    { time: '6 PM', levelM: 2.04, pct: 68 }, // Current point
+    { time: '12 AM', levelM: 1.65, pct: 55 }
+  ];
 
-  // Time-series readings state
-  const [historyData, setHistoryData] = useState([
-    { time: '10:00', level: 49.5, s1: 45.2, s2: 45.1, gate: 0, stage: 'NORMAL' },
-    { time: '10:15', level: 57.2, s1: 42.1, s2: 42.3, gate: 0, stage: 'NORMAL' },
-    { time: '10:30', level: 62.5, s1: 40.0, s2: 39.8, gate: 0, stage: 'PRE_WARNING' },
-    { time: '10:45', level: 74.8, s1: 35.1, s2: 35.3, gate: 0, stage: 'PRE_WARNING' },
-    { time: '11:00', level: 81.2, s1: 32.5, s2: 32.7, gate: 20, stage: 'CLEAR_AREA' },
-    { time: '11:15', level: 85.5, s1: 30.8, s2: 31.0, gate: 50, stage: 'DANGER' }
-  ]);
+  // Current stats matching design mockup Screen 4
+  const currentLevelM = 2.04;
+  const currentPct = 68;
+  const highestLevelM = 2.65;
+  const highestPct = 88;
+  const lowestLevelM = 0.92;
+  const lowestPct = 31;
 
-  // Load history from Supabase
-  const loadHistoryFromSupabase = async () => {
-    try {
-      // 1. Fetch recent readings
-      const { data: readingsData } = await supabase
-        .from('readings')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
+  // Chart coordinates
+  const paddingLeft = 32;
+  const paddingRight = 20;
+  const paddingTop = 25;
+  const paddingBottom = 30;
+  const graphWidth = CHART_WIDTH - paddingLeft - paddingRight;
+  const graphHeight = CHART_HEIGHT - paddingTop - paddingBottom;
 
-      if (readingsData && readingsData.length >= 2) {
-        const stageLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
-        const formatted = readingsData
-          .reverse()
-          .map((r) => {
-            const d = new Date(r.created_at);
-            const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            return {
-              time: timeStr,
-              level: parseFloat(r.level_pct) || 0,
-              s1: parseFloat(r.distance_1) || 32,
-              s2: parseFloat(r.distance_2) || 32,
-              gate: parseInt(r.gate_percent, 10) || 0,
-              stage: stageLabels[r.alert_state] || 'NORMAL'
-            };
-          });
-        setHistoryData(formatted);
-      }
+  const maxVal = 3.0; // 3.00 m full supply level
+  const minVal = 0.0;
 
-      // 2. Fetch latest AI Forecast
-      const { data: forecastData } = await supabase
-        .from('forecasts')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1);
+  const getX = (index) => paddingLeft + (index / (points.length - 1)) * graphWidth;
+  const getY = (val) => paddingTop + graphHeight - ((val - minVal) / (maxVal - minVal)) * graphHeight;
 
-      if (forecastData && forecastData.length > 0) {
-        const f = forecastData[0];
-        setAiForecast((prev) => ({
-          ...prev,
-          predictedLevel: parseFloat(f.predicted_level) || 88.2,
-          riskClass: f.risk_class || 'DANGER',
-          confidence: parseFloat(f.confidence) || 0.942,
-          horizonMin: f.horizon_min || 60
-        }));
-      }
-    } catch (err) {
-      console.warn('[History fetch warning]:', err.message);
-    }
-  };
+  // Generate SVG smooth curve path
+  const pathD = points.reduce((acc, p, i) => {
+    const x = getX(i);
+    const y = getY(p.levelM);
+    if (i === 0) return `M ${x} ${y}`;
+    const prevX = getX(i - 1);
+    const prevY = getY(points[i - 1].levelM);
+    const cx1 = prevX + (x - prevX) / 2;
+    const cy1 = prevY;
+    const cx2 = prevX + (x - prevX) / 2;
+    const cy2 = y;
+    return `${acc} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x} ${y}`;
+  }, '');
 
-  useEffect(() => {
-    loadHistoryFromSupabase();
-  }, [timeRange]);
+  // Fill path under the curve
+  const fillD = `${pathD} L ${getX(points.length - 1)} ${paddingTop + graphHeight} L ${getX(0)} ${paddingTop + graphHeight} Z`;
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadHistoryFromSupabase();
-    setRefreshing(false);
-  };
-
-  // SVG Chart Geometry Calculations
-  const graphInnerWidth = CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right;
-  const graphInnerHeight = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
-
-  const minLevel = 40;
-  const maxLevel = 100;
-
-  const getX = (index, total) => {
-    if (total <= 1) return CHART_PADDING.left;
-    return CHART_PADDING.left + (index / (total - 1)) * (graphInnerWidth - 45); // reserve space for forecast point
-  };
-
-  const getY = (val) => {
-    const clamped = Math.max(minLevel, Math.min(maxLevel, val));
-    const ratio = (clamped - minLevel) / (maxLevel - minLevel);
-    return CHART_PADDING.top + graphInnerHeight * (1 - ratio);
-  };
-
-  // Build SVG Path for Measured Curve
-  const dataPoints = historyData;
-  const numPoints = dataPoints.length;
-
-  let pathD = '';
-  let areaD = '';
-
-  dataPoints.forEach((pt, i) => {
-    const x = getX(i, numPoints);
-    const y = getY(pt.level);
-    if (i === 0) {
-      pathD = `M ${x} ${y}`;
-      areaD = `M ${x} ${CHART_PADDING.top + graphInnerHeight} L ${x} ${y}`;
-    } else {
-      pathD += ` L ${x} ${y}`;
-      areaD += ` L ${x} ${y}`;
-    }
-  });
-
-  const lastMeasuredX = getX(numPoints - 1, numPoints);
-  const lastMeasuredY = getY(dataPoints[numPoints - 1].level);
-  areaD += ` L ${lastMeasuredX} ${CHART_PADDING.top + graphInnerHeight} Z`;
-
-  // AI Forecast Projection (Dotted line to 1-hour horizon)
-  const forecastX = CHART_PADDING.left + graphInnerWidth;
-  const forecastY = getY(aiForecast.predictedLevel);
-  const forecastPathD = `M ${lastMeasuredX} ${lastMeasuredY} L ${forecastX} ${forecastY}`;
-
-  // Threshold Y Coordinates
-  const yDanger = getY(85);
-  const yClear = getY(80);
-  const yPreWarn = getY(75);
-
-  const selectedOrLast = selectedPoint || dataPoints[dataPoints.length - 1];
+  // Highlight Current point (index 3: 6 PM, 2.04 m)
+  const currentX = getX(3);
+  const currentY = getY(currentLevelM);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#38BDF8" />}
-    >
-      <Text style={styles.headerTitle}>HYDROLOGICAL HISTORY & AI INSIGHTS</Text>
-      <Text style={styles.headerSubtitle}>
-        Dual-Ultrasonic Telemetry Log • XGBoost & LSTM Inflow Predictor
-      </Text>
-
-      {/* Time Range Filter Selector */}
-      <View style={styles.filterRow}>
-        {[
-          { key: '1H', label: '1 HOUR (5m)' },
-          { key: '6H', label: '6 HOURS (Spillway)' },
-          { key: '24H', label: '24 HOURS (Cycle)' }
-        ].map((t) => (
-          <TouchableOpacity
-            key={t.key}
-            style={[styles.filterBtn, timeRange === t.key && styles.filterBtnActive]}
-            onPress={() => setTimeRange(t.key)}
-          >
-            <Text style={[styles.filterText, timeRange === t.key && styles.filterTextActive]}>
-              {t.label}
-            </Text>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        {onBack ? (
+          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
+            <ArrowLeftIcon size={22} color="#FFFFFF" />
           </TouchableOpacity>
-        ))}
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+        <Text style={styles.headerTitle}>Water Level History</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      {/* Interactive Water Level Timeline SVG Chart */}
-      <View style={styles.chartCard}>
-        <View style={styles.chartHeaderRow}>
-          <View>
-            <Text style={styles.chartTitle}>RESERVOIR CAPACITY TREND (%)</Text>
-            <Text style={styles.chartSub}>Solid: Measured • Dotted: 60m AI Forecast</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#38BDF8' }]} />
-              <Text style={styles.legendLabel}>Actual</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#F43F5E' }]} />
-              <Text style={styles.legendLabel}>AI Projected</Text>
-            </View>
-          </View>
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Time Range Filter Pills */}
+        <View style={styles.pillRow}>
+          <TouchableOpacity
+            style={[styles.rangePill, activeRange === 'TODAY' && styles.rangePillActive]}
+            onPress={() => setActiveRange('TODAY')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.rangePillText, activeRange === 'TODAY' && styles.rangePillTextActive]}>
+              Today
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.rangePill, activeRange === '7DAYS' && styles.rangePillActive]}
+            onPress={() => setActiveRange('7DAYS')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.rangePillText, activeRange === '7DAYS' && styles.rangePillTextActive]}>
+              7 Days
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.rangePill, activeRange === '30DAYS' && styles.rangePillActive]}
+            onPress={() => setActiveRange('30DAYS')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.rangePillText, activeRange === '30DAYS' && styles.rangePillTextActive]}>
+              30 Days
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Selected Data Point Inspector Pill */}
-        {selectedOrLast && (
-          <View style={styles.inspectorBanner}>
-            <Text style={styles.inspectorTime}>🕒 {selectedOrLast.time}:</Text>
-            <Text style={styles.inspectorValue}>
-              {selectedOrLast.level.toFixed(1)}% ({((selectedOrLast.level / 100) * 40).toFixed(1)} cm)
-            </Text>
-            <Text style={styles.inspectorGate}>Gate: {selectedOrLast.gate}%</Text>
-            <View
-              style={[
-                styles.inspectorStage,
-                {
-                  backgroundColor:
-                    selectedOrLast.stage === 'DANGER'
-                      ? '#7F1D1D'
-                      : selectedOrLast.stage === 'CLEAR_AREA'
-                      ? '#7C2D12'
-                      : selectedOrLast.stage === 'PRE_WARNING'
-                      ? '#713F12'
-                      : '#064E3B'
-                }
-              ]}
-            >
-              <Text style={styles.inspectorStageText}>{selectedOrLast.stage}</Text>
-            </View>
-          </View>
-        )}
+        {/* Chart Card */}
+        <View style={styles.chartCard}>
+          <Text style={styles.chartAxisLabel}>Level (m)</Text>
 
-        {/* SVG Canvas */}
-        <View style={styles.svgContainer}>
           <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
             <Defs>
-              <LinearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                <Stop offset="0%" stopColor="#38BDF8" stopOpacity="0.38" />
-                <Stop offset="100%" stopColor="#38BDF8" stopOpacity="0.0" />
+              <LinearGradient id="chartGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                <Stop offset="0%" stopColor="#0284C7" stopOpacity="0.45" />
+                <Stop offset="100%" stopColor="#0284C7" stopOpacity="0.0" />
               </LinearGradient>
             </Defs>
 
-            {/* Threshold Guide Lines */}
-            {/* 85% DANGER */}
-            <Line
-              x1={CHART_PADDING.left}
-              y1={yDanger}
-              x2={CHART_WIDTH - CHART_PADDING.right}
-              y2={yDanger}
-              stroke="#EF4444"
-              strokeDasharray="4, 4"
-              strokeWidth="1"
-            />
-            <SvgText
-              x={CHART_PADDING.left - 4}
-              y={yDanger + 3}
-              fill="#EF4444"
-              fontSize="9"
-              fontWeight="bold"
-              textAnchor="end"
-            >
-              85%
-            </SvgText>
-
-            {/* 80% CLEAR AREA */}
-            <Line
-              x1={CHART_PADDING.left}
-              y1={yClear}
-              x2={CHART_WIDTH - CHART_PADDING.right}
-              y2={yClear}
-              stroke="#F97316"
-              strokeDasharray="4, 4"
-              strokeWidth="1"
-            />
-            <SvgText
-              x={CHART_PADDING.left - 4}
-              y={yClear + 3}
-              fill="#F97316"
-              fontSize="9"
-              fontWeight="bold"
-              textAnchor="end"
-            >
-              80%
-            </SvgText>
-
-            {/* 75% PRE-WARNING */}
-            <Line
-              x1={CHART_PADDING.left}
-              y1={yPreWarn}
-              x2={CHART_WIDTH - CHART_PADDING.right}
-              y2={yPreWarn}
-              stroke="#EAB308"
-              strokeDasharray="4, 4"
-              strokeWidth="1"
-            />
-            <SvgText
-              x={CHART_PADDING.left - 4}
-              y={yPreWarn + 3}
-              fill="#EAB308"
-              fontSize="9"
-              fontWeight="bold"
-              textAnchor="end"
-            >
-              75%
-            </SvgText>
-
-            {/* Area Fill Under Actual Curve */}
-            <Path d={areaD} fill="url(#areaGradient)" />
-
-            {/* Actual Curve Line */}
-            <Path
-              d={pathD}
-              fill="none"
-              stroke="#38BDF8"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-
-            {/* Forecast Projection Path */}
-            <Path
-              d={forecastPathD}
-              fill="none"
-              stroke="#F43F5E"
-              strokeWidth="2"
-              strokeDasharray="5, 4"
-            />
-
-            {/* Interactive Data Point Dots */}
-            {dataPoints.map((pt, i) => {
-              const cx = getX(i, numPoints);
-              const cy = getY(pt.level);
-              const isSelected = selectedOrLast?.time === pt.time;
+            {/* Horizontal Grid lines */}
+            {[0, 1, 2, 3].map((level) => {
+              const y = getY(level);
               return (
-                <Circle
-                  key={`point-${i}`}
-                  cx={cx}
-                  cy={cy}
-                  r={isSelected ? 6 : 4}
-                  fill={isSelected ? '#F8FAFC' : '#38BDF8'}
-                  stroke="#0F172A"
-                  strokeWidth="2"
-                  onPress={() => setSelectedPoint(pt)}
-                />
+                <React.Fragment key={level}>
+                  <Line
+                    x1={paddingLeft}
+                    y1={y}
+                    x2={CHART_WIDTH - paddingRight}
+                    y2={y}
+                    stroke="#1E293B"
+                    strokeWidth="1"
+                    strokeDasharray="4 4"
+                  />
+                  <SvgText
+                    x={paddingLeft - 8}
+                    y={y + 4}
+                    fill="#64748B"
+                    fontSize="10"
+                    textAnchor="end"
+                  >
+                    {level.toFixed(1)}
+                  </SvgText>
+                </React.Fragment>
               );
             })}
 
-            {/* AI Horizon Target Point */}
-            <Circle
-              cx={forecastX}
-              cy={forecastY}
-              r="6"
-              fill="#F43F5E"
-              stroke="#FFFFFF"
-              strokeWidth="2"
+            {/* Area Fill */}
+            <Path d={fillD} fill="url(#chartGrad)" />
+
+            {/* Main Blue Curve */}
+            <Path d={pathD} stroke="#0284C7" strokeWidth="3" fill="none" />
+
+            {/* Data Points */}
+            {points.map((p, i) => (
+              <Circle
+                key={i}
+                cx={getX(i)}
+                cy={getY(p.levelM)}
+                r={i === 3 ? 5 : 3.5}
+                fill={i === 3 ? '#00F0FF' : '#0284C7'}
+                stroke="#0B132B"
+                strokeWidth={2}
+              />
+            ))}
+
+            {/* Active Tooltip above 2.04 m */}
+            <Rect
+              x={currentX - 26}
+              y={currentY - 26}
+              width={52}
+              height={20}
+              rx={6}
+              fill="#0284C7"
             />
             <SvgText
-              x={forecastX}
-              y={forecastY - 9}
-              fill="#F43F5E"
-              fontSize="10"
+              x={currentX}
+              y={currentY - 12}
+              fill="#FFFFFF"
+              fontSize="11"
               fontWeight="bold"
               textAnchor="middle"
             >
-              +{aiForecast.horizonMin}m ({aiForecast.predictedLevel}%)
+              2.04 m
             </SvgText>
 
             {/* X-Axis Time Labels */}
-            {dataPoints.map((pt, i) => {
-              if (i % 2 === 0 || i === dataPoints.length - 1) {
-                return (
-                  <SvgText
-                    key={`label-${i}`}
-                    x={getX(i, numPoints)}
-                    y={CHART_HEIGHT - 6}
-                    fill="#94A3B8"
-                    fontSize="9"
-                    textAnchor="middle"
-                  >
-                    {pt.time}
-                  </SvgText>
-                );
-              }
-              return null;
-            })}
+            {points.map((p, i) => (
+              <SvgText
+                key={i}
+                x={getX(i)}
+                y={CHART_HEIGHT - 6}
+                fill="#64748B"
+                fontSize="10"
+                textAnchor="middle"
+              >
+                {p.time}
+              </SvgText>
+            ))}
           </Svg>
         </View>
 
-        <Text style={styles.chartTip}>
-          💡 Tap any circular node along the curve to inspect historic sensor readings and gate state.
-        </Text>
-      </View>
-
-      {/* AI Inflow Predictive Intelligence Card */}
-      <View style={styles.aiCard}>
-        <View style={styles.aiHeaderRow}>
-          <View>
-            <Text style={styles.aiBadgeLabel}>AI INFLOW PREDICTOR • 60-MIN HORIZON</Text>
-            <Text style={styles.aiModelSub}>Dual-Stage XGBoost + LSTM Ensemble</Text>
-          </View>
-          <View
-            style={[
-              styles.riskBadge,
-              {
-                backgroundColor:
-                  aiForecast.riskClass === 'DANGER'
-                    ? '#7F1D1D'
-                    : aiForecast.riskClass === 'CLEAR_AREA'
-                    ? '#7C2D12'
-                    : '#064E3B'
-              }
-            ]}
-          >
-            <Text
-              style={[
-                styles.riskBadgeText,
-                {
-                  color:
-                    aiForecast.riskClass === 'DANGER'
-                      ? '#FCA5A5'
-                      : aiForecast.riskClass === 'CLEAR_AREA'
-                      ? '#FDBA74'
-                      : '#6EE7B7'
-                }
-              ]}
-            >
-              RISK: {aiForecast.riskClass}
-            </Text>
-          </View>
-        </View>
-
-        {/* Prediction Metrics Grid */}
-        <View style={styles.aiMetricsRow}>
-          <View style={styles.aiMetricBox}>
-            <Text style={styles.aiMetricLabel}>Projected Level</Text>
-            <Text style={styles.aiMetricValue}>{aiForecast.predictedLevel.toFixed(1)}%</Text>
-            <Text style={styles.aiMetricSub}>
-              {(aiForecast.predictedLevel - aiForecast.currentLevel).toFixed(1)}% rise expected
+        {/* 3 Summary Statistics Cards */}
+        <View style={styles.statsContainer}>
+          {/* Current Level */}
+          <View style={styles.summaryCard}>
+            <View>
+              <Text style={styles.summaryLabel}>Current Level</Text>
+              <Text style={styles.summarySub}>Live Hydrometric Reading</Text>
+            </View>
+            <Text style={[styles.summaryValue, { color: '#00F0FF' }]}>
+              {currentLevelM.toFixed(2)} m <Text style={styles.summaryPct}>({currentPct}%)</Text>
             </Text>
           </View>
 
-          <View style={styles.aiMetricBox}>
-            <Text style={styles.aiMetricLabel}>Model Confidence</Text>
-            <Text style={styles.aiMetricValue}>
-              {(aiForecast.confidence * 100).toFixed(1)}%
+          {/* Highest Level */}
+          <View style={styles.summaryCard}>
+            <View>
+              <Text style={styles.summaryLabel}>Highest Level</Text>
+              <Text style={styles.summarySub}>Peak Rainfall Surge Inflow</Text>
+            </View>
+            <Text style={[styles.summaryValue, { color: '#EF4444' }]}>
+              {highestLevelM.toFixed(2)} m <Text style={styles.summaryPct}>({highestPct}%)</Text>
             </Text>
-            <Text style={styles.aiMetricSub}>Validated on 5y rain</Text>
           </View>
 
-          <View style={styles.aiMetricBox}>
-            <Text style={styles.aiMetricLabel}>Inflow Rate</Text>
-            <Text style={styles.aiMetricValue}>+3.4 cm/h</Text>
-            <Text style={styles.aiMetricSub}>Catchment Runoff</Text>
-          </View>
-        </View>
-
-        {/* Engineering Action Recommendation */}
-        <View style={styles.recommendationBox}>
-          <Text style={styles.recTitle}>OPERATIONAL RECOMMENDATION:</Text>
-          <Text style={styles.recText}>{aiForecast.recommendation}</Text>
-        </View>
-      </View>
-
-      {/* Dual Ultrasonic Sensor Agreement & Anomaly Log */}
-      <View style={styles.sensorIntegrityCard}>
-        <Text style={styles.integrityTitle}>SENSOR INTEGRITY & ACOUSTIC HEALTH</Text>
-        <Text style={styles.integritySub}>
-          Cross-sensor correlation index between HC-SR04 and JSN-SR04T
-        </Text>
-
-        <View style={styles.integrityRow}>
-          <View style={styles.statCol}>
-            <Text style={styles.statLabel}>Sensor Agreement</Text>
-            <Text style={styles.statVal}>99.6% ✓</Text>
-          </View>
-          <View style={styles.statCol}>
-            <Text style={styles.statLabel}>Avg Discrepancy</Text>
-            <Text style={styles.statVal}>0.23 cm</Text>
-          </View>
-          <View style={styles.statCol}>
-            <Text style={styles.statLabel}>Dropped Echoes</Text>
-            <Text style={styles.statVal}>0 / 2,400</Text>
+          {/* Lowest Level */}
+          <View style={styles.summaryCard}>
+            <View>
+              <Text style={styles.summaryLabel}>Lowest Level</Text>
+              <Text style={styles.summarySub}>Base Dry Weather Baseline</Text>
+            </View>
+            <Text style={[styles.summaryValue, { color: '#10B981' }]}>
+              {lowestLevelM.toFixed(2)} m <Text style={styles.summaryPct}>({lowestPct}%)</Text>
+            </Text>
           </View>
         </View>
-
-        <View style={styles.anomalyBanner}>
-          <Text style={styles.anomalyIcon}>🛡️</Text>
-          <Text style={styles.anomalyText}>
-            Dual ultrasonic sensors in tight consensus. No transducer fouling or turbulence anomalies detected.
-          </Text>
-        </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#0B1120'
+    backgroundColor: '#0B132B'
   },
-  content: {
-    padding: 16,
-    paddingBottom: 40
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#0B132B',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B'
   },
   headerTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    letterSpacing: 0.5
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF'
   },
-  headerSubtitle: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginTop: 2,
-    marginBottom: 14
+  container: {
+    flex: 1
   },
-  filterRow: {
+  scrollContent: {
+    padding: 18,
+    paddingBottom: 40
+  },
+  pillRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14
-  },
-  filterBtn: {
-    flex: 1,
     backgroundColor: '#1E293B',
-    paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 20
+  },
+  rangePill: {
+    flex: 1,
+    paddingVertical: 10,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155'
+    borderRadius: 12
   },
-  filterBtnActive: {
-    borderColor: '#38BDF8',
-    backgroundColor: '#0F172A'
+  rangePillActive: {
+    backgroundColor: '#0284C7'
   },
-  filterText: {
-    color: '#94A3B8',
-    fontSize: 11,
+  rangePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8'
+  },
+  rangePillTextActive: {
+    color: '#FFFFFF',
     fontWeight: '700'
-  },
-  filterTextActive: {
-    color: '#38BDF8',
-    fontWeight: '800'
   },
   chartCard: {
     backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 14
-  },
-  chartHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8
-  },
-  chartTitle: {
-    color: '#38BDF8',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.8
-  },
-  chartSub: {
-    color: '#64748B',
-    fontSize: 10,
-    marginTop: 1
-  },
-  legendRow: {
-    flexDirection: 'row',
-    gap: 10
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4
-  },
-  legendLabel: {
-    color: '#CBD5E1',
-    fontSize: 10,
-    fontWeight: '600'
-  },
-  inspectorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0F172A',
-    paddingVertical: 6,
+    borderRadius: 20,
+    paddingVertical: 16,
     paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#38BDF8',
-    marginBottom: 8,
-    gap: 8
-  },
-  inspectorTime: {
-    color: '#94A3B8',
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  inspectorValue: {
-    color: '#F8FAFC',
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  inspectorGate: {
-    color: '#38BDF8',
-    fontSize: 11,
-    fontWeight: '700'
-  },
-  inspectorStage: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-    marginLeft: 'auto'
-  },
-  inspectorStageText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800'
-  },
-  svgContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: 4
-  },
-  chartTip: {
-    color: '#64748B',
-    fontSize: 10,
-    textAlign: 'center',
-    marginTop: 6
-  },
-  aiCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
     borderWidth: 1,
     borderColor: '#334155',
-    marginBottom: 14
+    marginBottom: 20
   },
-  aiHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12
-  },
-  aiBadgeLabel: {
-    color: '#F43F5E',
+  chartAxisLabel: {
     fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.6
-  },
-  aiModelSub: {
     color: '#64748B',
-    fontSize: 10,
-    marginTop: 1
-  },
-  riskBadge: {
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 6
-  },
-  riskBadgeText: {
-    fontSize: 10,
-    fontWeight: '900'
-  },
-  aiMetricsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12
-  },
-  aiMetricBox: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#334155',
-    alignItems: 'center'
-  },
-  aiMetricLabel: {
-    color: '#94A3B8',
-    fontSize: 10,
+    paddingLeft: 12,
+    marginBottom: 6,
     fontWeight: '600'
   },
-  aiMetricValue: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: '900',
-    marginTop: 2
+  statsContainer: {
+    gap: 12
   },
-  aiMetricSub: {
-    color: '#64748B',
-    fontSize: 9,
-    marginTop: 2,
-    textAlign: 'center'
-  },
-  recommendationBox: {
-    backgroundColor: '#450A0A',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#991B1B'
-  },
-  recTitle: {
-    color: '#FCA5A5',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5
-  },
-  recText: {
-    color: '#FEE2E2',
-    fontSize: 11,
-    marginTop: 2,
-    lineHeight: 15
-  },
-  sensorIntegrityCard: {
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     borderWidth: 1,
     borderColor: '#334155'
   },
-  integrityTitle: {
-    color: '#38BDF8',
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  summarySub: {
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6
-  },
-  integritySub: {
     color: '#64748B',
-    fontSize: 10,
-    marginTop: 1,
-    marginBottom: 10
-  },
-  integrityRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    backgroundColor: '#0F172A',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10
-  },
-  statCol: {
-    alignItems: 'center'
-  },
-  statLabel: {
-    color: '#94A3B8',
-    fontSize: 10
-  },
-  statVal: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '800',
     marginTop: 2
   },
-  anomalyBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#064E3B',
-    borderRadius: 8,
-    padding: 8
+  summaryValue: {
+    fontSize: 17,
+    fontWeight: '800'
   },
-  anomalyIcon: {
-    fontSize: 16
-  },
-  anomalyText: {
-    flex: 1,
-    color: '#D1FAE5',
-    fontSize: 11,
-    lineHeight: 15
+  summaryPct: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8'
   }
 });

@@ -5,13 +5,19 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  Alert,
-  ActivityIndicator
+  Alert
 } from 'react-native';
-import { supabase, SUPABASE_CONFIG } from '../supabaseClient';
-import { checkAppVersion, APP_VERSION, COMMAND_SCHEMA_VERSION } from '../updateService';
+import { supabase } from '../supabaseClient';
+import { checkAppVersion, APP_VERSION } from '../updateService';
 
-export default function SettingsScreen({ operatorUser, onLogout, onTriggerUpdateCheck }) {
+export default function SettingsScreen({
+  operatorUser,
+  onLogout,
+  onTriggerUpdateCheck,
+  onNavigateToHistory,
+  onNavigateToWeather,
+  onNavigateToContacts
+}) {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   const handleManualCheckUpdate = async () => {
@@ -51,7 +57,7 @@ export default function SettingsScreen({ operatorUser, onLogout, onTriggerUpdate
                 {
                   action: 'OPERATOR_LOGOUT',
                   payload: {
-                    operator: operatorUser?.email || 'operator@tabbowa.gov.lk',
+                    operator: operatorUser?.email || 'operator@kantalai.gov.lk',
                     timestamp: new Date().toISOString()
                   }
                 }
@@ -68,23 +74,23 @@ export default function SettingsScreen({ operatorUser, onLogout, onTriggerUpdate
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.headerTitle}>CONSOLE SETTINGS & SECURITY</Text>
-      <Text style={styles.headerSubtitle}>Operator Credentials & Firmware Connectivity</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Text style={styles.headerTitle}>Operator Settings & Tools</Text>
+      <Text style={styles.headerSubtitle}>Kantalai Hydro-Barrage Station Console</Text>
 
       {/* Operator Profile Card */}
       <View style={styles.card}>
         <Text style={styles.cardHeader}>ACTIVE OPERATOR CREDENTIALS</Text>
         <View style={styles.profileRow}>
           <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>👷</Text>
+            <Text style={{ fontSize: 24 }}>👷</Text>
           </View>
           <View style={styles.profileDetails}>
             <Text style={styles.profileName}>
-              {operatorUser?.fullName || 'Duty Irrigation Engineer'}
+              {operatorUser?.fullName || 'Chief Disaster Officer'}
             </Text>
             <Text style={styles.profileEmail}>
-              {operatorUser?.email || 'operator@tabbowa.gov.lk'}
+              {operatorUser?.email || 'operator@kantalai.gov.lk'}
             </Text>
             <View style={styles.roleTag}>
               <Text style={styles.roleTagText}>
@@ -95,59 +101,87 @@ export default function SettingsScreen({ operatorUser, onLogout, onTriggerUpdate
         </View>
       </View>
 
-      {/* App Version & OTA Update Check */}
+      {/* Quick Navigation to Dedicated Screens */}
       <View style={styles.card}>
-        <Text style={styles.cardHeader}>SOFTWARE VERSION & CONTRACTS</Text>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Console Version</Text>
-          <Text style={styles.infoValue}>v{APP_VERSION}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Command Schema</Text>
-          <Text style={styles.infoValue}>Version {COMMAND_SCHEMA_VERSION}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Expo SDK Target</Text>
-          <Text style={styles.infoValue}>SDK 57.0.28 (Hermes)</Text>
-        </View>
+        <Text style={styles.cardHeader}>MONITORING & TELEMETRY SCREENS</Text>
 
         <TouchableOpacity
-          style={styles.btnUpdate}
-          onPress={handleManualCheckUpdate}
-          disabled={checkingUpdate}
+          style={styles.navRow}
+          onPress={onNavigateToHistory}
+          activeOpacity={0.7}
         >
-          {checkingUpdate ? (
-            <ActivityIndicator color="#0B1120" />
-          ) : (
-            <Text style={styles.btnUpdateText}>🔄 Check for Console Updates</Text>
-          )}
+          <View style={styles.navRowLeft}>
+            <Text style={styles.navRowIcon}>📈</Text>
+            <View>
+              <Text style={styles.navRowTitle}>Water Level History</Text>
+              <Text style={styles.navRowSub}>Time-series hydrograph & reservoir trends</Text>
+            </View>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity
+          style={styles.navRow}
+          onPress={onNavigateToWeather}
+          activeOpacity={0.7}
+        >
+          <View style={styles.navRowLeft}>
+            <Text style={styles.navRowIcon}>🌧️</Text>
+            <View>
+              <Text style={styles.navRowTitle}>Weather & Forecast Outlook</Text>
+              <Text style={styles.navRowSub}>Doppler radar, 5-day catchment predictions</Text>
+            </View>
+          </View>
+          <Text style={styles.chevron}>›</Text>
+        </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        <TouchableOpacity
+          style={styles.navRow}
+          onPress={onNavigateToContacts}
+          activeOpacity={0.7}
+        >
+          <View style={styles.navRowLeft}>
+            <Text style={styles.navRowIcon}>📞</Text>
+            <View>
+              <Text style={styles.navRowTitle}>Contacts & Messaging</Text>
+              <Text style={styles.navRowSub}>Emergency phone directory & broadcast SMS</Text>
+            </View>
+          </View>
+          <Text style={styles.chevron}>›</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Backend & Cloud Connectivity */}
+      {/* App Version & OTA Update Check */}
       <View style={styles.card}>
-        <Text style={styles.cardHeader}>BACKEND INFRASTRUCTURE</Text>
+        <Text style={styles.cardHeader}>FIRMWARE & APPLICATION VERSION</Text>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Station Node ID</Text>
-          <Text style={styles.infoValue}>SDAS-NODE-01</Text>
+          <Text style={styles.infoLabel}>App Version:</Text>
+          <Text style={styles.infoValue}>v{APP_VERSION}</Text>
         </View>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Supabase Region</Text>
-          <Text style={styles.infoValue}>ap-southeast-1</Text>
+          <Text style={styles.infoLabel}>ESP32 Node:</Text>
+          <Text style={styles.infoValue}>SDAS-NODE-01 (Online)</Text>
         </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Realtime Channel</Text>
-          <Text style={styles.infoValue}>WebSocket WAL v2</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>SIM800L Modem</Text>
-          <Text style={styles.infoValue}>UART2 (GPIO 16/17)</Text>
-        </View>
+
+        <TouchableOpacity
+          style={styles.updateButton}
+          onPress={handleManualCheckUpdate}
+          disabled={checkingUpdate}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.updateButtonText}>
+            {checkingUpdate ? 'Checking Server...' : 'Check for System Updates'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Logout Action */}
-      <TouchableOpacity style={styles.btnLogout} onPress={handleSignOut}>
-        <Text style={styles.btnLogoutText}>🚪 End Session & Sign Out</Text>
+      {/* Sign Out Button */}
+      <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut} activeOpacity={0.85}>
+        <Text style={styles.logoutButtonText}>Sign Out from Hardware Console</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -156,123 +190,154 @@ export default function SettingsScreen({ operatorUser, onLogout, onTriggerUpdate
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B1120'
+    backgroundColor: '#0B132B'
   },
   content: {
-    padding: 16,
+    padding: 18,
     paddingBottom: 40
   },
   headerTitle: {
-    fontSize: 14,
+    fontSize: 20,
     fontWeight: '800',
-    color: '#F8FAFC',
-    letterSpacing: 0.5
+    color: '#FFFFFF',
+    letterSpacing: -0.3
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#94A3B8',
     marginTop: 2,
-    marginBottom: 16
+    marginBottom: 18
   },
   card: {
     backgroundColor: '#1E293B',
-    borderRadius: 14,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
     borderColor: '#334155',
-    marginBottom: 14
+    marginBottom: 16
   },
   cardHeader: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#38BDF8',
-    letterSpacing: 0.8,
+    color: '#64748B',
+    letterSpacing: 0.5,
     marginBottom: 12
   },
   profileRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12
+    alignItems: 'center'
   },
   avatarCircle: {
     width: 48,
     height: 48,
     borderRadius: 24,
     backgroundColor: '#0F172A',
-    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#38BDF8',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#38BDF8'
-  },
-  avatarText: {
-    fontSize: 24
+    justifyContent: 'center',
+    marginRight: 14
   },
   profileDetails: {
     flex: 1
   },
   profileName: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '800'
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF'
   },
   profileEmail: {
-    color: '#94A3B8',
     fontSize: 12,
+    color: '#94A3B8',
     marginTop: 1
   },
   roleTag: {
-    backgroundColor: '#064E3B',
-    paddingVertical: 2,
-    paddingHorizontal: 8,
-    borderRadius: 6,
     alignSelf: 'flex-start',
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
     marginTop: 6
   },
   roleTagText: {
-    color: '#34D399',
     fontSize: 10,
-    fontWeight: '800'
+    fontWeight: '800',
+    color: '#38BDF8'
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12
+  },
+  navRowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  navRowIcon: {
+    fontSize: 24,
+    marginRight: 14
+  },
+  navRowTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  navRowSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 1
+  },
+  chevron: {
+    fontSize: 22,
+    color: '#64748B',
+    fontWeight: '300'
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#334155'
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155'
+    paddingVertical: 6
   },
   infoLabel: {
-    color: '#94A3B8',
-    fontSize: 12
+    fontSize: 13,
+    color: '#94A3B8'
   },
   infoValue: {
-    color: '#F8FAFC',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  btnUpdate: {
-    backgroundColor: '#38BDF8',
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 12
-  },
-  btnUpdateText: {
-    color: '#0B1120',
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  btnLogout: {
-    backgroundColor: '#7F1D1D',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#EF4444'
-  },
-  btnLogoutText: {
-    color: '#FEE2E2',
     fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF'
+  },
+  updateButton: {
+    backgroundColor: '#0F172A',
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0284C7',
+    marginTop: 10
+  },
+  updateButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#38BDF8'
+  },
+  logoutButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 18,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    marginTop: 6
+  },
+  logoutButtonText: {
+    color: '#EF4444',
+    fontSize: 14,
     fontWeight: '800'
   }
 });

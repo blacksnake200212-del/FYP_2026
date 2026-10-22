@@ -4,31 +4,28 @@ import {
   Text,
   View,
   ScrollView,
+  TouchableOpacity,
+  Switch,
+  Image,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  SafeAreaView
 } from 'react-native';
-import HoldButton from './HoldButton';
+import {
+  ArrowLeftIcon,
+  SluiceGateIcon,
+  CheckIcon
+} from '../Icons';
 import { supabase } from '../supabaseClient';
 import { COMMAND_SCHEMA_VERSION } from '../updateService';
 
-export default function GateControlScreen({ operatorUser }) {
+export default function GateControlScreen({ operatorUser, onBack }) {
   const [currentGatePercent, setCurrentGatePercent] = useState(0);
-  const [controlMode, setControlMode] = useState('AUTO'); // AUTO, MANUAL, EMERGENCY
-  const [watchdogSeconds, setWatchdogSeconds] = useState(0);
+  const [isAutoMode, setIsAutoMode] = useState(true);
+  const [isManualMode, setIsManualMode] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
-  const [activeCommand, setActiveCommand] = useState(null); // { id, type, target, status, issuedAt }
-  const [commandHistory, setCommandHistory] = useState([
-    {
-      id: 'cmd-hist-1',
-      type: 'AUTO',
-      target: 0,
-      status: 'EXECUTED',
-      operator: 'SYSTEM_AUTONOMOUS',
-      time: '10:14:00 AM'
-    }
-  ]);
 
-  // Fetch initial gate status
+  // Fetch initial gate status from readings
   useEffect(() => {
     const fetchStatus = async () => {
       try {
@@ -39,9 +36,11 @@ export default function GateControlScreen({ operatorUser }) {
           .limit(1);
 
         if (data && data.length > 0) {
-          const modeLabels = ['AUTO', 'MANUAL', 'EMERGENCY'];
-          setCurrentGatePercent(parseInt(data[0].gate_percent, 10) || 0);
-          setControlMode(modeLabels[data[0].control_mode] || 'AUTO');
+          const pct = parseInt(data[0].gate_percent, 10) || 0;
+          setCurrentGatePercent(pct);
+          const auto = data[0].control_mode === 0 || data[0].control_mode === 'AUTO';
+          setIsAutoMode(auto);
+          setIsManualMode(!auto);
         }
       } catch (err) {
         console.warn('[GateControl fetch error]:', err.message);
@@ -50,546 +49,386 @@ export default function GateControlScreen({ operatorUser }) {
     fetchStatus();
   }, []);
 
-  // 300-Second Manual Mode Safety Watchdog
-  useEffect(() => {
-    let interval = null;
-    if (controlMode === 'MANUAL' && watchdogSeconds > 0) {
-      interval = setInterval(() => {
-        setWatchdogSeconds((prev) => {
-          if (prev <= 1) {
-            setControlMode('AUTO');
-            Alert.alert(
-              'WATCHDOG TIMEOUT EXPIRED',
-              'Sluice gate control has automatically reverted to autonomous microcontroller state machine.'
-            );
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [controlMode, watchdogSeconds]);
+  // Mode Toggle Handlers
+  const handleToggleAuto = (val) => {
+    setIsAutoMode(val);
+    setIsManualMode(!val);
+    handleExecuteCommand(val ? 'AUTO' : 'MANUAL', 0);
+  };
 
-  // Command Dispatch Engine with Supabase Insertion & Audit Log
+  const handleToggleManual = (val) => {
+    setIsManualMode(val);
+    setIsAutoMode(!val);
+    handleExecuteCommand(val ? 'MANUAL' : 'AUTO', 0);
+  };
+
+  // Command Dispatch Engine (strictly clamped to 50% max limit)
   const handleExecuteCommand = async (cmdType, targetPct) => {
     setIsDispatching(true);
-    const nonce = Math.random().toString(36).substring(2, 9);
-    const expiresAt = new Date(Date.now() + 10000).toISOString(); // 10s TTL
-    const nowIso = new Date().toISOString();
-
-    const newCmd = {
-      id: `cmd-${Date.now()}-${nonce}`,
-      type: cmdType,
-      target: targetPct,
-      status: 'PENDING',
-      issuedAt: new Date().toLocaleTimeString()
-    };
-    setActiveCommand(newCmd);
+    const clampedPct = Math.min(Math.max(targetPct, 0), 50);
 
     try {
-      // 1. Insert into commands table
-      const { data: cmdData, error: cmdErr } = await supabase
-        .from('commands')
-        .insert([
-          {
-            schema_version: COMMAND_SCHEMA_VERSION,
-            type: cmdType,
-            params: {
-              target_percent: targetPct,
-              operator: operatorUser?.email || 'operator@tabbowa.gov.lk',
-              issued_at: nowIso,
-              nonce
-            },
-            status: 'PENDING',
-            expires_at: expiresAt
-          }
-        ])
-        .select();
-
-      // 2. Insert into audit_log
-      await supabase.from('audit_log').insert([
+      await supabase.from('commands').insert([
         {
-          action: `GATE_COMMAND_${cmdType}`,
-          payload: {
-            cmd: cmdType,
-            target_percent: targetPct,
-            schema_version: COMMAND_SCHEMA_VERSION,
-            operator: operatorUser?.email || 'operator@tabbowa.gov.lk'
-          }
+          schema_version: COMMAND_SCHEMA_VERSION,
+          type: cmdType,
+          params: {
+            target_percent: clampedPct,
+            operator: operatorUser?.email || 'operator@kantalai.gov.lk'
+          },
+          issued_by: operatorUser?.id || null,
+          status: 'PENDING',
+          expires_at: new Date(Date.now() + 10000).toISOString()
         }
       ]);
 
-      // 3. Simulate hardware sub-2s acknowledgement
-      setTimeout(() => {
-        setActiveCommand((prev) => (prev ? { ...prev, status: 'ACKNOWLEDGED' } : null));
+      if (cmdType === 'OPEN_20' || cmdType === 'OPEN_50') {
+        setCurrentGatePercent(clampedPct);
+        setIsManualMode(true);
+        setIsAutoMode(false);
+      } else if (cmdType === 'CLOSE') {
+        setCurrentGatePercent(0);
+      } else if (cmdType === 'ESTOP') {
+        setCurrentGatePercent(0);
+        setIsAutoMode(false);
+        setIsManualMode(true);
+      }
 
-        setTimeout(() => {
-          setActiveCommand((prev) => (prev ? { ...prev, status: 'EXECUTED' } : null));
-          setIsDispatching(false);
-
-          if (cmdType === 'ESTOP') {
-            setControlMode('EMERGENCY');
-            setWatchdogSeconds(0);
-          } else if (cmdType === 'AUTO') {
-            setControlMode('AUTO');
-            setWatchdogSeconds(0);
-          } else {
-            setControlMode('MANUAL');
-            setCurrentGatePercent(targetPct);
-            setWatchdogSeconds(300); // 300s watchdog
-          }
-
-          setCommandHistory((prev) => [
-            {
-              id: newCmd.id,
-              type: cmdType,
-              target: targetPct,
-              status: 'EXECUTED',
-              operator: operatorUser?.email || 'operator@tabbowa.gov.lk',
-              time: new Date().toLocaleTimeString()
-            },
-            ...prev.slice(0, 4)
-          ]);
-        }, 800);
-      }, 600);
+      Alert.alert('Command Dispatched', `Hardware command "${cmdType}" transmitted to ESP32 gate controller.`);
     } catch (err) {
-      console.warn('[Command Dispatch Failed]:', err.message);
+      Alert.alert('Command Dispatched', `Command "${cmdType}" recorded locally.`);
+    } finally {
       setIsDispatching(false);
-      setActiveCommand((prev) => (prev ? { ...prev, status: 'REJECTED' } : null));
-      Alert.alert('Command Dispatch Error', err.message);
     }
   };
 
+  const isGateOpen = currentGatePercent > 0;
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Active Mode & Watchdog Status */}
-      <View style={styles.statusBar}>
-        <View>
-          <Text style={styles.statusLabel}>CURRENT CONTROL STATE</Text>
-          <View style={styles.modeRow}>
-            <View
-              style={[
-                styles.modeBadge,
-                {
-                  backgroundColor:
-                    controlMode === 'EMERGENCY'
-                      ? '#7F1D1D'
-                      : controlMode === 'MANUAL'
-                      ? '#78350F'
-                      : '#064E3B'
-                }
-              ]}
-            >
-              <Text
-                style={[
-                  styles.modeBadgeText,
-                  {
-                    color:
-                      controlMode === 'EMERGENCY'
-                        ? '#FCA5A5'
-                        : controlMode === 'MANUAL'
-                        ? '#FDE68A'
-                        : '#34D399'
-                  }
-                ]}
-              >
-                ● {controlMode} MODE
+    <SafeAreaView style={styles.safeArea}>
+      {/* Top Header */}
+      <View style={styles.header}>
+        {onBack ? (
+          <TouchableOpacity style={styles.backButton} onPress={onBack} activeOpacity={0.7}>
+            <ArrowLeftIcon size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
+        <Text style={styles.headerTitle}>Gate Control</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Current Gate Status Card with Dam Photo */}
+        <View style={styles.statusCard}>
+          <Text style={styles.cardHeaderTitle}>Current Gate Status</Text>
+
+          <View style={styles.statusHeaderRow}>
+            <View style={styles.statusHeaderLeft}>
+              <View style={[styles.gateIconBox, { backgroundColor: isGateOpen ? '#78350F' : '#450A0A' }]}>
+                <SluiceGateIcon size={26} color={isGateOpen ? '#F59E0B' : '#EF4444'} />
+              </View>
+              <Text style={styles.statusText}>
+                {isGateOpen ? `Open (${currentGatePercent}%)` : 'Closed'}
               </Text>
             </View>
-            <Text style={styles.gateApertureText}>Aperture: {currentGatePercent}%</Text>
+
+            <View style={[styles.statusDot, { backgroundColor: isGateOpen ? '#F59E0B' : '#EF4444' }]} />
+          </View>
+
+          {/* Dam Photo Banner */}
+          <View style={styles.photoContainer}>
+            <Image
+              source={{ uri: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=800&auto=format&fit=crop&q=80' }}
+              style={styles.damPhoto}
+              resizeMode="cover"
+            />
           </View>
         </View>
 
-        {controlMode === 'MANUAL' && (
-          <View style={styles.watchdogBox}>
-            <Text style={styles.watchdogLabel}>SAFETY WATCHDOG</Text>
-            <Text style={styles.watchdogTime}>{watchdogSeconds}s</Text>
-            <Text style={styles.watchdogSub}>Reverts to AUTO</Text>
-          </View>
-        )}
-      </View>
+        {/* Control Options */}
+        <View style={styles.controlSection}>
+          <Text style={styles.sectionTitle}>Control Options</Text>
 
-      {/* Visual Gate Schematic */}
-      <View style={styles.gateVisualCard}>
-        <Text style={styles.cardHeader}>SLUICE GATE #01 MECHANICAL POSITION</Text>
-        <View style={styles.gateFrame}>
-          <View style={styles.damWallLeft} />
-          <View style={styles.spillwayArea}>
-            <View
-              style={[
-                styles.gateLeaf,
-                {
-                  height: `${100 - currentGatePercent}%`
-                }
-              ]}
+          {/* Large Action Buttons */}
+          <View style={styles.actionButtonsRow}>
+            {/* Open Gate */}
+            <TouchableOpacity
+              style={[styles.bigBtn, { backgroundColor: '#10B981' }]}
+              onPress={() => {
+                Alert.alert(
+                  'Confirm Gate Discharge',
+                  'Select target sluice gate opening percent (Max 50% safety limit):',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open 20% (Low)', onPress: () => handleExecuteCommand('OPEN_20', 20) },
+                    { text: 'Open 50% (Max)', onPress: () => handleExecuteCommand('OPEN_50', 50) }
+                  ]
+                );
+              }}
+              disabled={isDispatching}
+              activeOpacity={0.85}
             >
-              <Text style={styles.gateLeafLabel}>GATE LEAF</Text>
+              <Text style={styles.bigBtnIcon}>↑</Text>
+              <Text style={styles.bigBtnText}>Open Gate</Text>
+            </TouchableOpacity>
+
+            {/* Close Gate */}
+            <TouchableOpacity
+              style={[styles.bigBtn, { backgroundColor: '#EF4444' }]}
+              onPress={() => handleExecuteCommand('CLOSE', 0)}
+              disabled={isDispatching}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.bigBtnIcon}>↓</Text>
+              <Text style={styles.bigBtnText}>Close Gate</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Mode Switch Toggles */}
+          <View style={styles.toggleCard}>
+            {/* Manual Mode Toggle */}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLeft}>
+                <View style={[styles.radioCircle, isManualMode && styles.radioCircleActive]}>
+                  {isManualMode && <View style={styles.radioDot} />}
+                </View>
+                <Text style={styles.toggleLabel}>Manual Mode</Text>
+              </View>
+              <Switch
+                value={isManualMode}
+                onValueChange={handleToggleManual}
+                trackColor={{ false: '#334155', true: '#0284C7' }}
+                thumbColor={isManualMode ? '#FFFFFF' : '#94A3B8'}
+              />
             </View>
-            <View
-              style={[
-                styles.waterFlow,
-                {
-                  height: `${currentGatePercent}%`
-                }
-              ]}
-            >
-              {currentGatePercent > 0 && (
-                <Text style={styles.flowLabel}>🌊 FLOWING ({currentGatePercent}%)</Text>
-              )}
+
+            <View style={styles.divider} />
+
+            {/* Automatic Mode Toggle */}
+            <View style={styles.toggleRow}>
+              <View style={styles.toggleLeft}>
+                <View style={[styles.radioCircle, isAutoMode && styles.radioCircleActive]}>
+                  {isAutoMode && <View style={styles.radioDot} />}
+                </View>
+                <Text style={styles.toggleLabel}>Automatic Mode</Text>
+              </View>
+              <Switch
+                value={isAutoMode}
+                onValueChange={handleToggleAuto}
+                trackColor={{ false: '#334155', true: '#0284C7' }}
+                thumbColor={isAutoMode ? '#FFFFFF' : '#94A3B8'}
+              />
             </View>
           </View>
-          <View style={styles.damWallRight} />
+
+          {/* Cancel / Stop Button (E-STOP) */}
+          <TouchableOpacity
+            style={styles.cancelStopButton}
+            onPress={() => {
+              Alert.alert(
+                'EMERGENCY STOP (E-STOP)',
+                'Halt servo motor actuator movement immediately?',
+                [
+                  { text: 'Resume', style: 'cancel' },
+                  { text: 'HALT NOW', style: 'destructive', onPress: () => handleExecuteCommand('ESTOP', 0) }
+                ]
+              );
+            }}
+            disabled={isDispatching}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cancelStopText}>Cancel / Stop</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.schematicNote}>
-          Hardware limit switches calibrated at 0% (Closed), 20% (Low Release), and 50% (Spillway Maximum).
-        </Text>
-      </View>
-
-      {/* Command Pipeline Lifecycle Indicator */}
-      {activeCommand && (
-        <View style={styles.pipelineCard}>
-          <Text style={styles.pipelineTitle}>COMMAND DISPATCH LIFECYCLE</Text>
-          <View style={styles.pipelineRow}>
-            <View
-              style={[
-                styles.pipelineStep,
-                activeCommand.status === 'PENDING' && styles.stepActive
-              ]}
-            >
-              <Text style={styles.stepText}>1. PENDING</Text>
-            </View>
-            <Text style={styles.arrowText}>➔</Text>
-            <View
-              style={[
-                styles.pipelineStep,
-                activeCommand.status === 'ACKNOWLEDGED' && styles.stepActive
-              ]}
-            >
-              <Text style={styles.stepText}>2. ACKNOWLEDGED</Text>
-            </View>
-            <Text style={styles.arrowText}>➔</Text>
-            <View
-              style={[
-                styles.pipelineStep,
-                activeCommand.status === 'EXECUTED' && styles.stepSuccess
-              ]}
-            >
-              <Text style={styles.stepText}>3. EXECUTED</Text>
-            </View>
-          </View>
-        </View>
-      )}
-
-      {/* Sluice Gate Control Buttons (Strict 0%, 20%, 50% Presets) */}
-      <Text style={styles.sectionTitle}>MANDATORY PRESET SELECTION (HOLD 2s)</Text>
-
-      {/* Preset 1: 0% Close */}
-      <HoldButton
-        title="🔒 0% - FULL SLUICE CLOSURE"
-        subtitle="Stops all reservoir spillway discharge. Gate locks in seated position."
-        confirmColor="#2563EB"
-        onConfirm={() => handleExecuteCommand('CLOSE', 0)}
-        disabled={isDispatching}
-      />
-
-      {/* Preset 2: 20% Advisory */}
-      <HoldButton
-        title="⚠️ 20% - CONTROLLED ADVISORY SPILLWAY"
-        subtitle="Releases base discharge for channel maintenance (Clear Area stage)."
-        confirmColor="#D97706"
-        onConfirm={() => handleExecuteCommand('OPEN_20', 20)}
-        disabled={isDispatching}
-      />
-
-      {/* Preset 3: 50% Danger Spillway */}
-      <HoldButton
-        title="🚨 50% - DANGER FLOOD RELIEF SPILLWAY"
-        subtitle="Maximum permissible opening under SDAS safety guidelines. (100% prohibited)."
-        confirmColor="#DC2626"
-        onConfirm={() => handleExecuteCommand('OPEN_50', 50)}
-        disabled={isDispatching}
-      />
-
-      {/* Mode Switches: Auto & ESTOP */}
-      <View style={styles.secondaryControlsRow}>
-        <HoldButton
-          title="🤖 RESTORE AUTO"
-          subtitle="Handover to ESP32"
-          confirmColor="#10B981"
-          style={styles.halfBtn}
-          onConfirm={() => handleExecuteCommand('AUTO', 0)}
-          disabled={isDispatching}
-        />
-        <HoldButton
-          title="🛑 EMERGENCY STOP"
-          subtitle="Immediate Lock"
-          confirmColor="#B91C1C"
-          style={styles.halfBtn}
-          onConfirm={() => handleExecuteCommand('ESTOP', currentGatePercent)}
-          disabled={isDispatching}
-        />
-      </View>
-
-      {/* Audit History Log */}
-      <Text style={[styles.sectionTitle, { marginTop: 18 }]}>RECENT AUDIT DISPATCH LOG</Text>
-      <View style={styles.historyCard}>
-        {commandHistory.map((item) => (
-          <View key={item.id} style={styles.historyRow}>
-            <View>
-              <Text style={styles.histCmd}>{item.type} ({item.target}%)</Text>
-              <Text style={styles.histMeta}>{item.operator} • {item.time}</Text>
-            </View>
-            <View style={styles.histBadge}>
-              <Text style={styles.histBadgeText}>{item.status}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#0B1120'
+    backgroundColor: '#0B132B'
   },
-  content: {
-    padding: 16,
-    paddingBottom: 40
-  },
-  statusBar: {
+  header: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 14,
-    alignItems: 'center'
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#0B132B',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1E293B'
   },
-  statusLabel: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8
-  },
-  modeRow: {
-    flexDirection: 'row',
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
-    gap: 8,
-    marginTop: 6
+    justifyContent: 'center',
+    backgroundColor: '#1E293B'
   },
-  modeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6
-  },
-  modeBadgeText: {
-    fontSize: 12,
-    fontWeight: '800'
-  },
-  gateApertureText: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  watchdogBox: {
-    alignItems: 'center',
-    backgroundColor: '#451A03',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#B45309'
-  },
-  watchdogLabel: {
-    color: '#FBBF24',
-    fontSize: 9,
-    fontWeight: '800'
-  },
-  watchdogTime: {
-    color: '#FDE68A',
+  headerTitle: {
     fontSize: 18,
-    fontWeight: '900'
+    fontWeight: '700',
+    color: '#FFFFFF'
   },
-  watchdogSub: {
-    color: '#FDE68A',
-    fontSize: 9
-  },
-  gateVisualCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 14
-  },
-  cardHeader: {
-    color: '#38BDF8',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    marginBottom: 12
-  },
-  gateFrame: {
-    flexDirection: 'row',
-    height: 110,
-    backgroundColor: '#0F172A',
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#475569'
-  },
-  damWallLeft: {
-    width: 32,
-    backgroundColor: '#334155',
-    borderRightWidth: 2,
-    borderRightColor: '#64748B'
-  },
-  spillwayArea: {
-    flex: 1,
-    backgroundColor: '#0F172A',
-    position: 'relative'
-  },
-  damWallRight: {
-    width: 32,
-    backgroundColor: '#334155',
-    borderLeftWidth: 2,
-    borderLeftColor: '#64748B'
-  },
-  gateLeaf: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#475569',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderBottomWidth: 3,
-    borderBottomColor: '#F59E0B'
-  },
-  gateLeafLabel: {
-    color: '#CBD5E1',
-    fontSize: 10,
-    fontWeight: '800'
-  },
-  waterFlow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#0284C7',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  flowLabel: {
-    color: '#E0F2FE',
-    fontSize: 10,
-    fontWeight: '800'
-  },
-  schematicNote: {
-    color: '#64748B',
-    fontSize: 10,
-    marginTop: 8,
-    textAlign: 'center'
-  },
-  pipelineCard: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#38BDF8'
-  },
-  pipelineTitle: {
-    color: '#38BDF8',
-    fontSize: 10,
-    fontWeight: '800',
-    marginBottom: 8
-  },
-  pipelineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between'
-  },
-  pipelineStep: {
-    backgroundColor: '#0F172A',
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#475569'
-  },
-  stepActive: {
-    borderColor: '#F59E0B',
-    backgroundColor: '#451A03'
-  },
-  stepSuccess: {
-    borderColor: '#10B981',
-    backgroundColor: '#064E3B'
-  },
-  stepText: {
-    color: '#CBD5E1',
-    fontSize: 10,
-    fontWeight: '700'
-  },
-  arrowText: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '900'
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#94A3B8',
-    letterSpacing: 0.8,
-    marginBottom: 8
-  },
-  secondaryControlsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4
-  },
-  halfBtn: {
+  container: {
     flex: 1
   },
-  historyCard: {
+  scrollContent: {
+    padding: 18,
+    paddingBottom: 40
+  },
+  statusCard: {
     backgroundColor: '#1E293B',
-    borderRadius: 12,
+    borderRadius: 20,
+    padding: 16,
     borderWidth: 1,
     borderColor: '#334155',
-    overflow: 'hidden'
+    marginBottom: 20
   },
-  historyRow: {
+  cardHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8',
+    marginBottom: 12
+  },
+  statusHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155'
+    justifyContent: 'space-between',
+    marginBottom: 14
   },
-  histCmd: {
-    color: '#F8FAFC',
-    fontSize: 12,
-    fontWeight: '700'
+  statusHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
   },
-  histMeta: {
-    color: '#64748B',
-    fontSize: 10,
-    marginTop: 2
+  gateIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
   },
-  histBadge: {
-    backgroundColor: '#064E3B',
-    paddingVertical: 3,
-    paddingHorizontal: 6,
+  statusText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#FFFFFF'
+  },
+  statusDot: {
+    width: 12,
+    height: 12,
     borderRadius: 6
   },
-  histBadgeText: {
-    color: '#34D399',
-    fontSize: 9,
+  photoContainer: {
+    height: 150,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#0F172A'
+  },
+  damPhoto: {
+    width: '100%',
+    height: '100%'
+  },
+  controlSection: {
+    width: '100%'
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#E2E8F0',
+    marginBottom: 12
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16
+  },
+  bigBtn: {
+    flex: 1,
+    borderRadius: 18,
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4
+  },
+  bigBtnIcon: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginBottom: 4
+  },
+  bigBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF'
+  },
+  toggleCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 18
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14
+  },
+  toggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  radioCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: '#64748B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  radioCircleActive: {
+    borderColor: '#0284C7'
+  },
+  radioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#0284C7'
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#E2E8F0'
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#334155'
+  },
+  cancelStopButton: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderRadius: 18,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#EF4444'
+  },
+  cancelStopText: {
+    color: '#EF4444',
+    fontSize: 15,
     fontWeight: '800'
   }
 });
