@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { WaterDropIcon } from './Icons';
 
-export default function WelcomeScreen({ onGetStarted, onLogin, currentLang, onSelectLang }) {
+export default function WelcomeScreen({ onGetStarted, currentLang, onSelectLang }) {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
@@ -44,15 +44,7 @@ export default function WelcomeScreen({ onGetStarted, onLogin, currentLang, onSe
             onPress={onGetStarted}
             activeOpacity={0.85}
           >
-            <Text style={styles.getStartedText}>Get Started</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.loginButton}
-            onPress={onLogin}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.loginText}>Login</Text>
+            <Text style={styles.getStartedText}>Enter Live Portal</Text>
           </TouchableOpacity>
 
           {/* Trilingual Flag Selector */}
@@ -166,24 +158,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
-    marginBottom: 12
+    marginBottom: 20
   },
   getStartedText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700'
-  },
-  loginButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    paddingVertical: 15,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#0284C7',
-    marginBottom: 20
-  },
-  loginText: {
-    color: '#0284C7',
     fontSize: 16,
     fontWeight: '700'
   },

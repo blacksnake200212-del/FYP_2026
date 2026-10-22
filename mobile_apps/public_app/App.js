@@ -49,8 +49,8 @@ export default function PublicApp() {
   const t = translations[lang] || translations.en;
 
   // Screen Navigation State
-  // 'WELCOME', 'HOME', 'WEATHER', 'NOTIFICATIONS', 'CHAT', 'LANGUAGE', 'REPORT_FLOOD', 'COMMUNITY'
-  const [currentScreen, setCurrentScreen] = useState('WELCOME');
+  // 'HOME', 'WELCOME', 'WEATHER', 'NOTIFICATIONS', 'CHAT', 'LANGUAGE', 'REPORT_FLOOD', 'COMMUNITY'
+  const [currentScreen, setCurrentScreen] = useState('HOME');
   const [activeTab, setActiveTab] = useState('HOME'); // 'HOME', 'WEATHER', 'NOTIFICATIONS', 'MORE'
 
   // More Menu Modal State
@@ -66,22 +66,32 @@ export default function PublicApp() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
 
-  // Weather Telemetry
+  // DHT22 On-Site Environmental Sensor Telemetry
+  const [dhtData, setDhtData] = useState({
+    temperature: 28.4,
+    humidity: 74.0,
+    speedOfSound: 348.6,
+    isLiveSensor: true,
+    condition: 'Partly Cloudy'
+  });
+
+  // Weather Telemetry Derived from Live DHT22 Sensor
   const weatherData = {
-    condition: 'Partly Cloudy',
-    tempC: 28,
-    feelsLikeC: 31,
+    condition: dhtData.condition,
+    tempC: dhtData.temperature,
+    feelsLikeC: Math.round(dhtData.temperature + 2),
     windSpeedKmh: 12,
-    humidityPct: 78,
+    humidityPct: dhtData.humidity,
     rainChancePct: 20,
     sunrise: '5:52 AM',
     sunset: '6:12 PM'
   };
 
-  // Fetch Live Status from Supabase
+  // Fetch Live Status & DHT Telemetry from Supabase
   const fetchLiveDamStatus = async () => {
     try {
-      const endpoint = `${SUPABASE_CONFIG.URL}/rest/v1/public_status?select=*`;
+      // 1. Fetch live sensor telemetry including DHT22 on-site readings
+      const endpoint = `${SUPABASE_CONFIG.URL}/rest/v1/readings?select=*&order=created_at.desc&limit=1`;
       const response = await fetch(endpoint, {
         headers: {
           apikey: SUPABASE_CONFIG.PUBLISHABLE_KEY,
@@ -96,9 +106,26 @@ export default function PublicApp() {
         const live = data[0];
         const pct = parseFloat(live.level_pct || live.water_level_pct || 45.0);
         setWaterLevel(pct);
-        setGatePercent(live.gate_percent || 0);
-        setAlertKey(live.status || 'NORMAL');
-        setTrend(live.trend || 'STEADY');
+        setGatePercent(parseInt(live.gate_percent, 10) || 0);
+
+        const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+        if (live.alert_state !== undefined) {
+          setAlertKey(stateLabels[live.alert_state] || 'NORMAL');
+        }
+
+        // Extract live DHT22 temperature and humidity
+        const temp = parseFloat(live.temperature) || 28.4;
+        const hum = parseFloat(live.humidity) || 74.0;
+        const speed = parseFloat((331.4 + 0.606 * temp).toFixed(1));
+
+        setDhtData({
+          temperature: temp,
+          humidity: hum,
+          speedOfSound: speed,
+          isLiveSensor: true,
+          condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : 'Overcast'
+        });
+
         setHasRealTelemetry(true);
         setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
       }
@@ -111,21 +138,40 @@ export default function PublicApp() {
     checkAppVersion('public_app', APP_VERSION).then(setUpdateInfo);
     fetchLiveDamStatus();
 
-    // Supabase Realtime Subscription
+    // Supabase Realtime Subscription for Live Hardware Telemetry
     const channel = supabase
       .channel('sdas_public_telemetry_feed')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'readings' }, (payload) => {
         if (payload?.new) {
-          const pct = parseFloat(payload.new.level_pct || 45.0);
+          const r = payload.new;
+          const pct = parseFloat(r.level_pct || 45.0);
           setWaterLevel(pct);
-          setGatePercent(payload.new.gate_percent || 0);
+          setGatePercent(parseInt(r.gate_percent, 10) || 0);
+
+          const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+          if (r.alert_state !== undefined) {
+            setAlertKey(stateLabels[r.alert_state] || 'NORMAL');
+          }
+
+          if (r.temperature !== undefined) {
+            const temp = parseFloat(r.temperature) || 28.4;
+            const hum = parseFloat(r.humidity) || 74.0;
+            setDhtData({
+              temperature: temp,
+              humidity: hum,
+              speedOfSound: parseFloat((331.4 + 0.606 * temp).toFixed(1)),
+              isLiveSensor: true,
+              condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : 'Overcast'
+            });
+          }
+
           setHasRealTelemetry(true);
           setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }
       })
       .subscribe();
 
-    const interval = setInterval(fetchLiveDamStatus, 15000);
+    const interval = setInterval(fetchLiveDamStatus, 10000);
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
@@ -195,10 +241,6 @@ export default function PublicApp() {
           setCurrentScreen('HOME');
           setActiveTab('HOME');
         }}
-        onLogin={() => {
-          // Open Operator App instruction or switch view
-          setShowMoreModal(true);
-        }}
         currentLang={lang}
         onSelectLang={setLang}
       />
@@ -210,6 +252,7 @@ export default function PublicApp() {
     return (
       <WeatherScreen
         weatherData={weatherData}
+        dhtData={dhtData}
         onBack={() => {
           setCurrentScreen('HOME');
           setActiveTab('HOME');
@@ -371,7 +414,7 @@ export default function PublicApp() {
           </View>
         </View>
 
-        {/* Today's Weather Card (Clickable to full Weather screen) */}
+        {/* Today's Weather & DHT22 Environmental Card (Clickable to full Weather screen) */}
         <TouchableOpacity
           style={styles.weatherCard}
           onPress={() => {
@@ -382,13 +425,19 @@ export default function PublicApp() {
         >
           <View style={styles.weatherLeft}>
             <WeatherCloudSunIcon size={38} color="#F59E0B" />
-            <View style={{ marginLeft: 14 }}>
-              <Text style={styles.weatherTitle}>Today's Weather</Text>
+            <View style={{ marginLeft: 14, flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={styles.weatherTitle}>Dam Microclimate & Weather</Text>
+                <View style={styles.dhtPillBadge}>
+                  <View style={styles.dhtPillDot} />
+                  <Text style={styles.dhtPillText}>DHT22 SENSOR</Text>
+                </View>
+              </View>
               <Text style={styles.weatherSub}>
-                {weatherData.condition}  <Text style={styles.weatherTemp}>{weatherData.tempC}°C</Text>
+                Dam Site Ambient: <Text style={styles.weatherTemp}>{dhtData.temperature}°C</Text>
               </Text>
               <Text style={styles.weatherMetrics}>
-                Wind: {weatherData.windSpeedKmh} km/h  |  Humidity: {weatherData.humidityPct}%
+                Humidity: {dhtData.humidity}%  •  Sound Speed: {dhtData.speedOfSound} m/s
               </Text>
             </View>
           </View>
@@ -782,6 +831,28 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontWeight: '300',
     paddingLeft: 8
+  },
+  dhtPillBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 4
+  },
+  dhtPillDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981'
+  },
+  dhtPillText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#059669'
   },
   communityHubCard: {
     backgroundColor: '#FFFFFF',

@@ -626,13 +626,21 @@
           </div>
         </div>
 
-        <!-- Today's Weather Card -->
+        <!-- Today's Weather & DHT22 Environmental Card -->
         <div class="pub-card" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="setPublicScreen('weather')">
-          <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
             <span style="font-size: 32px;">⛅</span>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; color: #0F172A;">Today's Weather</div>
-              <div style="font-size: 12px; color: #475569; margin-top: 1px;">Partly Cloudy <strong style="color: #0284C7;">28°C</strong></div>
+            <div style="flex: 1;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 13px; font-weight: 700; color: #0F172A;">Dam Microclimate & Weather</span>
+                <span style="background: #ECFDF5; border: 1px solid #A7F3D0; color: #059669; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px;">● DHT22 LIVE</span>
+              </div>
+              <div style="font-size: 12px; color: #475569; margin-top: 1px;">Dam Site Ambient: <strong style="color: #0284C7;">28.4°C</strong></div>
+              <div style="font-size: 10px; color: #94A3B8; margin-top: 2px;">Humidity: 74% • Sound Speed: 348.6 m/s</div>
+            </div>
+          </div>
+          <span style="color: #94A3B8; font-size: 18px; margin-left: 8px;">›</span>
+        </div>
               <div style="font-size: 10px; color: #94A3B8; margin-top: 2px;">Wind: 12 km/h | Humidity: 78%</div>
             </div>
           </div>
@@ -1225,6 +1233,38 @@
               <div style="font-size: 13px; font-weight: 800; color: ${gateMode === 'AUTO' ? '#10B981' : '#F59E0B'};">
                 ${gateMode === 'AUTO' ? 'Automatic' : 'Manual'}
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DHT22 Microclimate & Acoustic Compensation Telemetry Card -->
+        <div class="op-card" style="padding: 12px 14px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 16px;">🌡️</span>
+              <span style="font-size: 12px; font-weight: 800; color: #FFFFFF;">DHT22 Climate & Acoustic Telemetry</span>
+            </div>
+            <span style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10B981; color: #10B981; padding: 2px 8px; border-radius: 8px; font-size: 9px; font-weight: 800;">
+              ● GPIO 4 LIVE
+            </span>
+          </div>
+          <div style="display: flex; justify-content: space-around; background: #0F172A; border-radius: 10px; padding: 10px 6px; border: 1px solid #1E293B;">
+            <div style="text-align: center;">
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Ambient Temp</div>
+              <div style="font-size: 15px; font-weight: 900; color: #F59E0B; margin: 2px 0;">28.4°C</div>
+              <div style="font-size: 9px; color: #64748B;">DHT22 Sensor</div>
+            </div>
+            <div style="width: 1px; height: 32px; background: #334155;"></div>
+            <div style="text-align: center;">
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Rel. Humidity</div>
+              <div style="font-size: 15px; font-weight: 900; color: var(--cyan-neon); margin: 2px 0;">74.0%</div>
+              <div style="font-size: 9px; color: #64748B;">Moisture Index</div>
+            </div>
+            <div style="width: 1px; height: 32px; background: #334155;"></div>
+            <div style="text-align: center;">
+              <div style="font-size: 10px; color: #94A3B8; font-weight: 600;">Sound Velocity</div>
+              <div style="font-size: 15px; font-weight: 900; color: #10B981; margin: 2px 0;">348.6 m/s</div>
+              <div style="font-size: 9px; color: #64748B;">Compensated</div>
             </div>
           </div>
         </div>

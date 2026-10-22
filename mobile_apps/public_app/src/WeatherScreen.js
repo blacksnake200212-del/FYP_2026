@@ -14,20 +14,22 @@ import {
   CloudRainIcon,
   SunriseIcon,
   SunsetIcon,
-  WeatherCloudSunIcon
+  WeatherCloudSunIcon,
+  ThermometerIcon
 } from './Icons';
 
-export default function WeatherScreen({ onBack, weatherData }) {
+export default function WeatherScreen({ onBack, weatherData, dhtData }) {
   const weather = weatherData || {
     condition: 'Partly Cloudy',
-    tempC: 28,
+    tempC: 28.4,
     feelsLikeC: 31,
     windSpeedKmh: 12,
-    humidityPct: 78,
+    humidityPct: 74,
     rainChancePct: 20,
     sunrise: '5:52 AM',
     sunset: '6:12 PM'
   };
+  const dht = dhtData || { temperature: weather.tempC, humidity: weather.humidityPct, speedOfSound: (331.4 + 0.606 * weather.tempC).toFixed(1) };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -49,6 +51,46 @@ export default function WeatherScreen({ onBack, weatherData }) {
           <Text style={styles.heroCondition}>{weather.condition}</Text>
           <Text style={styles.heroTemp}>{weather.tempC}°C</Text>
           <Text style={styles.heroFeelsLike}>Feels like {weather.feelsLikeC}°C</Text>
+        </View>
+
+        {/* On-Site DHT22 Microclimate Hardware Sensor */}
+        <View style={styles.dhtCard}>
+          <View style={styles.dhtHeader}>
+            <View style={styles.dhtTitleRow}>
+              <ThermometerIcon size={20} color="#D97706" />
+              <Text style={styles.dhtTitle}>DHT22 On-Site Microclimate Telemetry</Text>
+            </View>
+            <View style={styles.dhtLiveBadge}>
+              <View style={styles.dhtDot} />
+              <Text style={styles.dhtLiveText}>SENSOR LIVE</Text>
+            </View>
+          </View>
+
+          <Text style={styles.dhtDesc}>
+            Real-time thermal and humidity data captured directly at Kantalai Reservoir. Powers dynamic speed-of-sound acoustic compensation for ultrasonic distance sensors.
+          </Text>
+
+          <View style={styles.dhtGrid}>
+            <View style={styles.dhtItem}>
+              <Text style={styles.dhtItemLabel}>Temperature</Text>
+              <Text style={[styles.dhtItemVal, { color: '#D97706' }]}>{dht?.temperature || weather.tempC}°C</Text>
+              <Text style={styles.dhtItemSub}>DHT22 Calibrated</Text>
+            </View>
+            <View style={styles.dhtDivider} />
+            <View style={styles.dhtItem}>
+              <Text style={styles.dhtItemLabel}>Relative Humidity</Text>
+              <Text style={[styles.dhtItemVal, { color: '#0284C7' }]}>{dht?.humidity || weather.humidityPct}%</Text>
+              <Text style={styles.dhtItemSub}>Ambient Moisture</Text>
+            </View>
+            <View style={styles.dhtDivider} />
+            <View style={styles.dhtItem}>
+              <Text style={styles.dhtItemLabel}>Sound Velocity</Text>
+              <Text style={[styles.dhtItemVal, { color: '#059669' }]}>
+                {dht?.speedOfSound || (331.4 + 0.606 * (weather.tempC || 28.4)).toFixed(1)} m/s
+              </Text>
+              <Text style={styles.dhtItemSub}>v = 331.4 + 0.606·T</Text>
+            </View>
+          </View>
         </View>
 
         {/* Detailed Weather Metrics Card */}
@@ -264,5 +306,99 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#3B82F6',
     lineHeight: 18
+  },
+  dhtCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2
+  },
+  dhtHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10
+  },
+  dhtTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  dhtTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginLeft: 8
+  },
+  dhtLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 4
+  },
+  dhtDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981'
+  },
+  dhtLiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#059669'
+  },
+  dhtDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+    marginBottom: 14
+  },
+  dhtGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9'
+  },
+  dhtItem: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  dhtItemLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  dhtItemVal: {
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 2
+  },
+  dhtItemSub: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '600'
+  },
+  dhtDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E2E8F0'
   }
 });

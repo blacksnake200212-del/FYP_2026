@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -11,10 +11,29 @@ import {
   ArrowLeftIcon,
   CloudRainIcon,
   AlertTriangleIcon,
-  WeatherCloudSunIcon
+  WeatherCloudSunIcon,
+  ThermometerIcon
 } from '../Icons';
+import { supabase } from '../supabaseClient';
 
 export default function WeatherForecastScreen({ onBack }) {
+  const [dht, setDht] = useState({ temp: 28.4, humidity: 74.0 });
+
+  useEffect(() => {
+    supabase
+      .from('readings')
+      .select('temperature,humidity')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data[0]) {
+          setDht({
+            temp: parseFloat(data[0].temperature) || 28.4,
+            humidity: parseFloat(data[0].humidity) || 74.0
+          });
+        }
+      });
+  }, []);
   const fiveDay = [
     { day: 'Wed', icon: '☀️', temp: '28°' },
     { day: 'Thu', icon: '☀️', temp: '27°' },
@@ -44,8 +63,8 @@ export default function WeatherForecastScreen({ onBack }) {
           <View style={styles.heroIconBox}>
             <CloudRainIcon size={64} color="#00F0FF" />
           </View>
-          <Text style={styles.heroTitle}>Rainy  28°C</Text>
-          <Text style={styles.heroSub}>Wind: 15 km/h  |  Humidity: 82%</Text>
+          <Text style={styles.heroTitle}>Kantalai Site {dht.temp}°C</Text>
+          <Text style={styles.heroSub}>DHT22 Sensor: {dht.temp}°C  |  Humidity: {dht.humidity}%  |  Compensated</Text>
         </View>
 
         {/* 5-Day Forecast Row */}

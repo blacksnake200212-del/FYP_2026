@@ -434,3 +434,29 @@ export function SlidersIcon({ size = 24, color = '#64748B' }) {
     </Svg>
   );
 }
+
+export function ThermometerIcon({ size = 24, color = '#EF4444' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="11.5" cy="17.5" r="2" fill={color} />
+      <Line x1="11.5" y1="8" x2="11.5" y2="15.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+export function SensorIcon({ size = 24, color = '#10B981' }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="4" y="4" width="16" height="16" rx="2" stroke={color} strokeWidth="2" />
+      <Rect x="9" y="9" width="6" height="6" fill={color} fillOpacity="0.3" stroke={color} strokeWidth="1.5" />
+      <Path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" stroke={color} strokeWidth="2" strokeLinecap="round" />
+    </Svg>
+  );
+}

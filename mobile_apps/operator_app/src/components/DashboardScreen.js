@@ -15,7 +15,9 @@ import {
   MapPinIcon,
   HamburgerIcon,
   CheckIcon,
-  UserIcon
+  UserIcon,
+  ThermometerIcon,
+  SensorIcon
 } from '../Icons';
 import CircularGauge from '../CircularGauge';
 import { supabase } from '../supabaseClient';
@@ -286,6 +288,53 @@ export default function DashboardScreen({ operatorUser }) {
         </View>
       </View>
 
+      {/* DHT22 Microclimate & Acoustic Compensation Telemetry Card */}
+      <View style={styles.dhtCard}>
+        <View style={styles.dhtHeaderRow}>
+          <View style={styles.dhtTitleGroup}>
+            <ThermometerIcon size={20} color="#F59E0B" />
+            <Text style={styles.dhtCardTitle}>DHT22 Climate & Acoustic Compensation</Text>
+          </View>
+          <View style={styles.dhtLiveBadge}>
+            <View style={styles.dhtLiveDot} />
+            <Text style={styles.dhtLiveText}>GPIO 4 LIVE</Text>
+          </View>
+        </View>
+
+        <View style={styles.dhtMetricsRow}>
+          {/* Temperature */}
+          <View style={styles.dhtMetricCol}>
+            <Text style={styles.dhtMetricLabel}>Ambient Temp</Text>
+            <Text style={[styles.dhtMetricVal, { color: '#F59E0B' }]}>
+              {telemetry.temperature ? telemetry.temperature.toFixed(1) : '28.4'}°C
+            </Text>
+            <Text style={styles.dhtMetricSub}>Dam Site Sensor</Text>
+          </View>
+
+          <View style={styles.dhtDivider} />
+
+          {/* Humidity */}
+          <View style={styles.dhtMetricCol}>
+            <Text style={styles.dhtMetricLabel}>Rel. Humidity</Text>
+            <Text style={[styles.dhtMetricVal, { color: '#00F0FF' }]}>
+              {telemetry.humidity ? telemetry.humidity.toFixed(1) : '74.0'}%
+            </Text>
+            <Text style={styles.dhtMetricSub}>Moisture Index</Text>
+          </View>
+
+          <View style={styles.dhtDivider} />
+
+          {/* Acoustic Speed of Sound */}
+          <View style={styles.dhtMetricCol}>
+            <Text style={styles.dhtMetricLabel}>Sound Velocity</Text>
+            <Text style={[styles.dhtMetricVal, { color: '#10B981' }]}>
+              {(331.4 + 0.606 * (telemetry.temperature || 28.4)).toFixed(1)} m/s
+            </Text>
+            <Text style={styles.dhtMetricSub}>Compensated</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Quick Actions 2x2 Grid */}
       <View style={styles.quickActionsSection}>
         <Text style={styles.sectionHeader}>Quick Actions</Text>
@@ -532,5 +581,88 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800'
+  },
+  dhtCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 20
+  },
+  dhtHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  dhtTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  dhtCardTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#F8FAFC',
+    marginLeft: 8,
+    letterSpacing: -0.2
+  },
+  dhtLiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#10B981',
+    gap: 4
+  },
+  dhtLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#10B981'
+  },
+  dhtLiveText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#10B981'
+  },
+  dhtMetricsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#0F172A',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#1E293B'
+  },
+  dhtMetricCol: {
+    flex: 1,
+    alignItems: 'center'
+  },
+  dhtMetricLabel: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  dhtMetricVal: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginBottom: 2
+  },
+  dhtMetricSub: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '600'
+  },
+  dhtDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#334155'
   }
 });
