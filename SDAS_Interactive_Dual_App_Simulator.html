@@ -474,24 +474,21 @@
       try { localStorage.setItem('sdas_sim_reports', JSON.stringify(reports)); } catch(e) {}
     }
 
-    // Operator Contacts State (Persisted in localStorage with the 3 Required Test Numbers)
-    let opContactsTab = 'EMERGENCY';
+    // Operator Contacts State (Exclusively the 3 designated testing numbers)
+    let opContactsTab = 'ALL';
     let showSimAddContactModal = false;
-    let simContacts = JSON.parse(localStorage.getItem('sdas_sim_contacts') || 'null');
+    let simContacts = JSON.parse(localStorage.getItem('sdas_sim_contacts_v3') || 'null');
     if (!simContacts || simContacts.length === 0) {
       simContacts = [
-        { id: 1, name: "District Secretariat", phone: "+94740099235", category: "EMERGENCY", role: "DISTRICT_SECRETARIAT", tier: 1 },
-        { id: 2, name: "Police Emergency", phone: "+94712833936", category: "EMERGENCY", role: "POLICE", tier: 1 },
-        { id: 3, name: "Fire & Rescue", phone: "+94781099235", category: "EMERGENCY", role: "FIRE_RESCUE", tier: 1 },
-        { id: 4, name: "Meteorological Department", phone: "+94 11 268 6688", category: "EMERGENCY", role: "MET_DEPT", tier: 2 },
-        { id: 5, name: "Kantalai Grama Niladhari", phone: "+94 26 222 2111", category: "PUBLIC", role: "PUBLIC_ADMIN", tier: 3 },
-        { id: 6, name: "Community Disaster Committee", phone: "+94 26 222 4555", category: "PUBLIC", role: "COMMUNITY", tier: 3 }
+        { id: 1, name: "District Secretariat & DMC", phone: "+94740099235", category: "EMERGENCY", role: "DISTRICT_SECRETARIAT", tier: 1 },
+        { id: 2, name: "Police Emergency Operations", phone: "+94712833936", category: "EMERGENCY", role: "POLICE", tier: 1 },
+        { id: 3, name: "Fire & Rescue Service Command", phone: "+94781099235", category: "EMERGENCY", role: "FIRE_RESCUE", tier: 1 }
       ];
-      try { localStorage.setItem('sdas_sim_contacts', JSON.stringify(simContacts)); } catch(e) {}
+      try { localStorage.setItem('sdas_sim_contacts_v3', JSON.stringify(simContacts)); } catch(e) {}
     }
 
     function saveSimContacts() {
-      try { localStorage.setItem('sdas_sim_contacts', JSON.stringify(simContacts)); } catch(e) {}
+      try { localStorage.setItem('sdas_sim_contacts_v3', JSON.stringify(simContacts)); } catch(e) {}
     }
 
     // Community Sub-Tab state ('alerts', 'chat', 'report')
@@ -1457,14 +1454,14 @@
     }
 
     function renderOpContacts(vp) {
-      const activeContacts = simContacts.filter(c => c.category === opContactsTab);
+      const activeContacts = opContactsTab === 'ALL' ? simContacts : simContacts.filter(c => c.category === opContactsTab);
 
       vp.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
           <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
           <div style="text-align: center;">
             <div style="font-size: 15px; font-weight: 800; color: #FFFFFF;">Contacts & Messaging</div>
-            <div style="font-size: 10px; color: #38BDF8; font-weight: 600;">Database Sync • SIM800L Gateway</div>
+            <div style="font-size: 10px; color: #38BDF8; font-weight: 600;">Demo Directory (3 Dedicated Numbers)</div>
           </div>
           <button onclick="toggleSimAddContact(!showSimAddContactModal)" style="background: #0284C7; border: none; color: #FFF; border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer;">
             + Add
@@ -1473,6 +1470,9 @@
 
         <!-- Tabs -->
         <div style="display: flex; background: #1E293B; border-radius: 12px; padding: 3px; margin-bottom: 12px;">
+          <button onclick="setOpContactsTab('ALL')" style="flex: 1; text-align: center; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; ${opContactsTab === 'ALL' ? 'background: #0284C7; color: #FFF;' : 'background: transparent; color: #94A3B8;'}">
+            All (${simContacts.length})
+          </button>
           <button onclick="setOpContactsTab('EMERGENCY')" style="flex: 1; text-align: center; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; ${opContactsTab === 'EMERGENCY' ? 'background: #0284C7; color: #FFF;' : 'background: transparent; color: #94A3B8;'}">
             Emergency (${simContacts.filter(c => c.category === 'EMERGENCY').length})
           </button>
@@ -1568,12 +1568,12 @@
         alert("Please enter a message to broadcast.");
         return;
       }
-      const activeContacts = simContacts.filter(c => c.category === opContactsTab);
+      const activeContacts = opContactsTab === 'ALL' ? simContacts : simContacts.filter(c => c.category === opContactsTab);
       alert(`✓ Emergency Broadcast Dispatched & Queued in Database!\n\n` +
             `• Target Group: ${opContactsTab} (${activeContacts.length} saved contacts)\n` +
             `• SIM800L Cellular Modem: SMS job QUEUED in database\n` +
             `• Public Mobile App: Alert banner broadcasted\n\n` +
-            `Recipients: ${activeContacts.map(c => c.name).join(', ')}`);
+            `Recipients: ${activeContacts.map(c => c.name + ' (' + c.phone + ')').join(', ')}`);
     }
 
     function renderOpReports(vp) {

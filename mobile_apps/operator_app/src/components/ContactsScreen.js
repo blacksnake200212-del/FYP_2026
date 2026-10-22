@@ -28,13 +28,13 @@ import {
 } from '../Icons';
 import { supabase } from '../supabaseClient';
 
-const STORAGE_KEY = 'sdas_operator_contacts_v2';
+const STORAGE_KEY = 'sdas_operator_contacts_v3';
 
-// Seed emergency contacts strictly preserving the 3 designated user testing numbers
+// EXCLUSIVELY the 3 designated user demo testing numbers
 const DEFAULT_CONTACTS = [
   {
     id: 'c-1',
-    name: 'District Secretariat',
+    name: 'District Secretariat & DMC',
     phone: '+94740099235', // Testing Contact 1 (Adrian)
     role: 'DISTRICT_SECRETARIAT',
     category: 'EMERGENCY',
@@ -52,44 +52,17 @@ const DEFAULT_CONTACTS = [
   },
   {
     id: 'c-3',
-    name: 'Fire & Rescue Service',
+    name: 'Fire & Rescue Service Command',
     phone: '+94781099235', // Testing Contact 3 (Dilshan)
     role: 'FIRE_RESCUE',
     category: 'EMERGENCY',
     tier: 1,
     synced: true
-  },
-  {
-    id: 'c-4',
-    name: 'Meteorological Department',
-    phone: '+94 11 268 6688',
-    role: 'MET_DEPT',
-    category: 'EMERGENCY',
-    tier: 2,
-    synced: true
-  },
-  {
-    id: 'c-5',
-    name: 'Kantalai Grama Niladhari',
-    phone: '+94 26 222 2111',
-    role: 'PUBLIC_ADMIN',
-    category: 'PUBLIC',
-    tier: 3,
-    synced: true
-  },
-  {
-    id: 'c-6',
-    name: 'Community Disaster Committee',
-    phone: '+94 26 222 4555',
-    role: 'COMMUNITY',
-    category: 'PUBLIC',
-    tier: 3,
-    synced: true
   }
 ];
 
 export default function ContactsScreen({ onBack, operatorUser }) {
-  const [activeTab, setActiveTab] = useState('EMERGENCY'); // 'EMERGENCY', 'PUBLIC'
+  const [activeTab, setActiveTab] = useState('ALL'); // 'ALL', 'EMERGENCY', 'PUBLIC'
   const [contacts, setContacts] = useState(DEFAULT_CONTACTS);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -134,11 +107,20 @@ export default function ContactsScreen({ onBack, operatorUser }) {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setContacts(parsed);
+          // Strictly keep only the designated testing contacts and any newly added user contacts
+          const cleaned = parsed.filter(
+            (c) =>
+              !c.phone.includes('268 6688') &&
+              !c.phone.includes('222 2111') &&
+              !c.phone.includes('222 4555')
+          );
+          setContacts(cleaned.length > 0 ? cleaned : DEFAULT_CONTACTS);
+          return;
         }
       }
+      setContacts(DEFAULT_CONTACTS);
     } catch (e) {
-      // Local cache empty
+      setContacts(DEFAULT_CONTACTS);
     }
   };
 
@@ -326,7 +308,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
 
   // 7. Dispatch Alert & Cellular SMS to All Group Contacts
   const handleDispatchAlertToContacts = async () => {
-    const targetContacts = contacts.filter((c) => c.category === activeTab);
+    const targetContacts = activeTab === 'ALL' ? contacts : contacts.filter((c) => c.category === activeTab);
     if (targetContacts.length === 0) {
       Alert.alert('No Recipients', `There are no contacts registered under ${activeTab}. Please add contacts first.`);
       return;
@@ -348,7 +330,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
         .insert([
           {
             message: msg,
-            recipient_group: activeTab === 'EMERGENCY' ? 'TIER_1_ENGINEERS' : 'PUBLIC_BROADCAST',
+            recipient_group: activeTab === 'EMERGENCY' ? 'TIER_1_ENGINEERS' : activeTab === 'PUBLIC' ? 'PUBLIC_BROADCAST' : 'ALL_RECIPIENTS',
             status: 'QUEUED',
             delivered_count: 0
           }
@@ -393,10 +375,10 @@ export default function ContactsScreen({ onBack, operatorUser }) {
 
       Alert.alert(
         '✓ Emergency Alert Dispatched',
-        `Dispatched to ${targetContacts.length} saved contacts in the database!\n\n` +
+        `Dispatched to ${targetContacts.length} saved demo contacts in the database!\n\n` +
           `• GSM SIM800L Job: ${jobQueued ? 'QUEUED in Database' : 'Logged Locally'}\n` +
-          `• Public Community Alert: Broadcasted\n` +
-          `• Target Recipients: ${targetContacts.map((c) => c.name).join(', ')}`,
+          `• Target Recipients: ${targetContacts.map((c) => c.name).join(', ')}\n` +
+          `• Phone Numbers: ${targetContacts.map((c) => c.phone).join(', ')}`,
         [
           { text: 'Done', style: 'cancel' },
           {
@@ -431,7 +413,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
     });
   };
 
-  const filteredContacts = contacts.filter((c) => c.category === activeTab);
+  const filteredContacts = activeTab === 'ALL' ? contacts : contacts.filter((c) => c.category === activeTab);
 
   const getRoleIcon = (role) => {
     switch (role) {
@@ -475,7 +457,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
         )}
         <View style={{ alignItems: 'center' }}>
           <Text style={styles.headerTitle}>Emergency Contacts & Messaging</Text>
-          <Text style={styles.headerSub}>Database Sync • SIM800L Cellular Dispatch</Text>
+          <Text style={styles.headerSub}>Demo Testing Directory (3 Dedicated Numbers)</Text>
         </View>
         <TouchableOpacity
           style={styles.refreshButton}
@@ -498,12 +480,22 @@ export default function ContactsScreen({ onBack, operatorUser }) {
         {/* Tab Switcher Pills */}
         <View style={styles.tabPillsRow}>
           <TouchableOpacity
+            style={[styles.tabPill, activeTab === 'ALL' && styles.tabPillActive]}
+            onPress={() => setActiveTab('ALL')}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabPillText, activeTab === 'ALL' && styles.tabPillTextActive]}>
+              All ({contacts.length})
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.tabPill, activeTab === 'EMERGENCY' && styles.tabPillActive]}
             onPress={() => setActiveTab('EMERGENCY')}
             activeOpacity={0.8}
           >
             <Text style={[styles.tabPillText, activeTab === 'EMERGENCY' && styles.tabPillTextActive]}>
-              Emergency Contacts ({contacts.filter((c) => c.category === 'EMERGENCY').length})
+              Emergency ({contacts.filter((c) => c.category === 'EMERGENCY').length})
             </Text>
           </TouchableOpacity>
 
@@ -513,7 +505,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
             activeOpacity={0.8}
           >
             <Text style={[styles.tabPillText, activeTab === 'PUBLIC' && styles.tabPillTextActive]}>
-              Public Contacts ({contacts.filter((c) => c.category === 'PUBLIC').length})
+              Public ({contacts.filter((c) => c.category === 'PUBLIC').length})
             </Text>
           </TouchableOpacity>
         </View>
@@ -522,17 +514,21 @@ export default function ContactsScreen({ onBack, operatorUser }) {
         <View style={styles.directoryHeaderRow}>
           <View>
             <Text style={styles.directoryTitle}>
-              {activeTab === 'EMERGENCY' ? 'First Responders Directory' : 'Public & Community Leaders'}
+              {activeTab === 'ALL'
+                ? 'Demo Testing Directory (3 Numbers)'
+                : activeTab === 'EMERGENCY'
+                ? 'First Responders Directory'
+                : 'Public & Community Leaders'}
             </Text>
             <Text style={styles.directorySub}>
-              Stored in Supabase database for autonomous alert broadcast
+              Stored in Supabase database for cellular SMS & alert dispatch
             </Text>
           </View>
 
           <TouchableOpacity
             style={styles.addContactBtn}
             onPress={() => {
-              setNewCategory(activeTab);
+              setNewCategory(activeTab === 'PUBLIC' ? 'PUBLIC' : 'EMERGENCY');
               setShowAddModal(true);
             }}
             activeOpacity={0.8}
