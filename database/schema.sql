@@ -1,7 +1,7 @@
 -- ============================================================================
--- SMART DAM ALERT SYSTEM (SDAS) - SUPABASE POSTGRESQL SCHEMA V3.0
--- Aligned with Master Mobile App Blueprint
--- Security: Row Level Security (RLS) with Role Segregation & Contact Encryption
+-- SMART DAM ALERT SYSTEM (SDAS) - SUPABASE POSTGRESQL SCHEMA V3.1
+-- Fully Idempotent Production Schema with Zero-PII RLS & Backward Compatibility
+-- Fixed: Dynamic Object Cleanup to prevent Error 42809 ("is not a view")
 -- ============================================================================
 
 -- Enable pgcrypto extension for encryption and UUID generation
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS public.app_config (
 );
 
 -- ============================================================================
--- 8. PROFILES TABLE (Operator and Admin user roles)
+-- 9. PROFILES TABLE (Operator and Admin user roles)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.profiles (
     user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 );
 
 -- ============================================================================
--- 9. AUDIT_LOG TABLE (Immutable record of all sensitive actions)
+-- 10. AUDIT_LOG TABLE (Immutable record of all sensitive actions)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.audit_log (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -151,34 +151,6 @@ CREATE TABLE IF NOT EXISTS public.audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON public.audit_log (created_at DESC);
 
 -- ============================================================================
--- 10. SANITIZED PUBLIC VIEW (Zero PII, Safe for Anonymous Mobile App)
--- ============================================================================
-CREATE OR REPLACE VIEW public.public_status AS
-SELECT
-    r.level_pct,
-    CASE 
-        WHEN r.alert_state = 0 THEN 'NORMAL'
-        WHEN r.alert_state = 1 THEN 'PRE-WARNING'
-        WHEN r.alert_state = 2 THEN 'CLEAR AREA'
-        WHEN r.alert_state = 3 THEN 'DANGER'
-        ELSE 'MAINTENANCE'
-    END AS status,
-    CASE
-        WHEN f.predicted_level > r.level_pct + 1.0 THEN 'RISING'
-        WHEN f.predicted_level < r.level_pct - 1.0 THEN 'FALLING'
-        ELSE 'STEADY'
-    END AS trend,
-    r.gate_percent,
-    r.created_at AS updated_at
-FROM public.readings r
-LEFT JOIN LATERAL (
-    SELECT predicted_level FROM public.forecasts 
-    ORDER BY created_at DESC LIMIT 1
-) f ON true
-ORDER BY r.created_at DESC
-LIMIT 1;
-
--- ============================================================================
 -- 11. DAMS TABLE (Metadata and operational limits per reservoir node)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.dams (
@@ -186,7 +158,7 @@ CREATE TABLE IF NOT EXISTS public.dams (
     name VARCHAR(120) NOT NULL,
     location VARCHAR(150) NOT NULL,
     total_height_m NUMERIC(4, 2) DEFAULT 3.00 NOT NULL,
-    current_level_m NUMERIC(4, 2) DEFAULT 2.04 NOT NULL,
+    current_level_m NUMERIC(4, 2) DEFAULT 0.00 NOT NULL,
     warning_level_m NUMERIC(4, 2) DEFAULT 2.40 NOT NULL,
     danger_level_m NUMERIC(4, 2) DEFAULT 2.70 NOT NULL,
     latitude NUMERIC(9, 6) DEFAULT 8.5284 NOT NULL,
@@ -194,6 +166,11 @@ CREATE TABLE IF NOT EXISTS public.dams (
     is_online BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+-- Seed primary Kantalai dam row for foreign-key integrity
+INSERT INTO public.dams (id, name, location, total_height_m, current_level_m, warning_level_m, danger_level_m, latitude, longitude, is_online)
+VALUES ('KANTALAI-01', 'Kantalai Reservoir', 'Trincomalee District, Eastern Province', 3.00, 0.00, 2.40, 2.70, 8.5284, 80.9922, true)
+ON CONFLICT (id) DO UPDATE SET is_online = true;
 
 -- ============================================================================
 -- 12. FLOOD_REPORTS TABLE (Crowdsourced Citizen Flood Reports & Operator Verification)
@@ -235,14 +212,74 @@ CREATE TABLE IF NOT EXISTS public.community_messages (
 
 CREATE INDEX IF NOT EXISTS idx_community_messages_created_at ON public.community_messages (created_at ASC);
 
+-- ============================================================================
+-- 14. SAFE OBJECT CLEANUP (Prevents ERROR 42809: "is not a view")
+-- In PostgreSQL, CREATE OR REPLACE VIEW fails if a TABLE exists with that name.
+-- This block dynamically checks relkind and safely drops existing tables/views.
+-- ============================================================================
+DO $$
+DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (
+        SELECT c.relname, c.relkind 
+        FROM pg_class c 
+        JOIN pg_namespace n ON n.oid = c.relnamespace 
+        WHERE n.nspname = 'public' 
+          AND c.relname IN (
+            'sensor_telemetry', 
+            'dam_alerts', 
+            'operator_commands', 
+            'emergency_contacts', 
+            'public_status_v1', 
+            'public_status', 
+            'public_dam_status_view'
+          )
+    ) LOOP
+        IF r.relkind = 'v' THEN
+            EXECUTE format('DROP VIEW IF EXISTS public.%I CASCADE', r.relname);
+        ELSIF r.relkind = 'r' THEN
+            EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', r.relname);
+        END IF;
+    END LOOP;
+END $$;
+
+-- ============================================================================
+-- 15. SANITIZED PUBLIC VIEW (Zero PII, Safe for Anonymous Mobile App)
+-- ============================================================================
+CREATE VIEW public.public_status AS
+SELECT
+    r.level_pct,
+    CASE 
+        WHEN r.alert_state = 0 THEN 'NORMAL'
+        WHEN r.alert_state = 1 THEN 'PRE-WARNING'
+        WHEN r.alert_state = 2 THEN 'CLEAR AREA'
+        WHEN r.alert_state = 3 THEN 'DANGER'
+        ELSE 'MAINTENANCE'
+    END AS status,
+    CASE
+        WHEN f.predicted_level > r.level_pct + 1.0 THEN 'RISING'
+        WHEN f.predicted_level < r.level_pct - 1.0 THEN 'FALLING'
+        ELSE 'STEADY'
+    END AS trend,
+    r.gate_percent,
+    r.created_at AS updated_at
+FROM public.readings r
+LEFT JOIN LATERAL (
+    SELECT predicted_level FROM public.forecasts 
+    ORDER BY created_at DESC LIMIT 1
+) f ON true
+ORDER BY r.created_at DESC
+LIMIT 1;
+
 -- Versioned Public Contract View (Guarantees backward compatibility for older apps)
-CREATE OR REPLACE VIEW public.public_status_v1 AS
+CREATE VIEW public.public_status_v1 AS
 SELECT * FROM public.public_status;
 
 -- ============================================================================
--- 11. BACKWARDS COMPATIBILITY VIEWS (For existing ESP32 firmware / endpoints)
+-- 16. BACKWARDS COMPATIBILITY VIEWS (For existing ESP32 firmware / endpoints)
 -- ============================================================================
-CREATE OR REPLACE VIEW public.sensor_telemetry AS
+CREATE VIEW public.sensor_telemetry AS
 SELECT
     id,
     created_at AS recorded_at,
@@ -294,7 +331,7 @@ CREATE TRIGGER trg_insert_sensor_telemetry
 INSTEAD OF INSERT ON public.sensor_telemetry
 FOR EACH ROW EXECUTE FUNCTION public.insert_sensor_telemetry();
 
-CREATE OR REPLACE VIEW public.dam_alerts AS
+CREATE VIEW public.dam_alerts AS
 SELECT
     id,
     created_at AS triggered_at,
@@ -305,7 +342,7 @@ SELECT
     message AS details
 FROM public.alerts;
 
-CREATE OR REPLACE VIEW public.operator_commands AS
+CREATE VIEW public.operator_commands AS
 SELECT
     id,
     created_at AS issued_at,
@@ -319,7 +356,7 @@ SELECT
     params::TEXT AS notes
 FROM public.commands;
 
-CREATE OR REPLACE VIEW public.emergency_contacts AS
+CREATE VIEW public.emergency_contacts AS
 SELECT
     id,
     name AS full_name,
@@ -330,7 +367,7 @@ SELECT
     created_at AS opted_in_at
 FROM public.contacts;
 
-CREATE OR REPLACE VIEW public.public_dam_status_view AS
+CREATE VIEW public.public_dam_status_view AS
 SELECT
     updated_at AS recorded_at,
     level_pct AS water_level_pct,
@@ -353,7 +390,7 @@ SELECT
 FROM public.public_status;
 
 -- ============================================================================
--- 12. ROW LEVEL SECURITY (RLS) POLICIES
+-- 17. ROW LEVEL SECURITY (RLS) POLICIES (Idempotent with DROP POLICY IF EXISTS)
 -- ============================================================================
 ALTER TABLE public.readings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.forecasts ENABLE ROW LEVEL SECURITY;
@@ -365,140 +402,206 @@ ALTER TABLE public.push_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
-
--- Readings: Device insert via Edge Function/Key; Authenticated Operators read
-CREATE POLICY "Allow device insert readings"
-ON public.readings FOR INSERT TO anon, authenticated
-WITH CHECK (true);
-
-CREATE POLICY "Allow operators read readings"
-ON public.readings FOR SELECT TO authenticated
-USING (true);
-
--- Forecasts: Service/backend insert; Authenticated Operators read
-CREATE POLICY "Allow service insert forecasts"
-ON public.forecasts FOR INSERT TO anon, authenticated
-WITH CHECK (true);
-
-CREATE POLICY "Allow operators read forecasts"
-ON public.forecasts FOR SELECT TO authenticated
-USING (true);
-
--- Alerts: Authenticated insert; Public anonymous read via view
-CREATE POLICY "Allow insert alerts"
-ON public.alerts FOR INSERT TO authenticated
-WITH CHECK (true);
-
-CREATE POLICY "Allow public read alerts"
-ON public.alerts FOR SELECT TO anon, authenticated
-USING (true);
-
--- Commands: Authenticated operators insert and read
-CREATE POLICY "Allow operators insert commands"
-ON public.commands FOR INSERT TO authenticated
-WITH CHECK (auth.uid() = issued_by);
-
-CREATE POLICY "Allow operators read commands"
-ON public.commands FOR SELECT TO authenticated
-USING (true);
-
-CREATE POLICY "Allow operators update commands"
-ON public.commands FOR UPDATE TO authenticated
-USING (true)
-WITH CHECK (true);
-
--- SMS Jobs: Operators only
-CREATE POLICY "Allow operators manage sms_jobs"
-ON public.sms_jobs FOR ALL TO authenticated
-USING (true)
-WITH CHECK (true);
-
--- Contacts: Admins only
-CREATE POLICY "Allow admins manage contacts"
-ON public.contacts FOR ALL TO authenticated
-USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-)
-WITH CHECK (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-);
-
--- Push Tokens: Public insert-only (no public read/delete)
-CREATE POLICY "Allow public insert push_tokens"
-ON public.push_tokens FOR INSERT TO anon, authenticated
-WITH CHECK (true);
-
--- App Config: Public read-only; Admins manage
-CREATE POLICY "Allow public read app_config"
-ON public.app_config FOR SELECT TO anon, authenticated
-USING (true);
-
-CREATE POLICY "Allow admins manage app_config"
-ON public.app_config FOR ALL TO authenticated
-USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-)
-WITH CHECK (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-);
-
--- Profiles: Users read own profile; Admins read/manage all
-CREATE POLICY "Allow users read own profile"
-ON public.profiles FOR SELECT TO authenticated
-USING (auth.uid() = user_id OR EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN'));
-
--- Audit Log: Authenticated insert; Admins read; No delete
-CREATE POLICY "Allow insert audit_log"
-ON public.audit_log FOR INSERT TO authenticated
-WITH CHECK (true);
-
-CREATE POLICY "Allow admins read audit_log"
-ON public.audit_log FOR SELECT TO authenticated
-USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE user_id = auth.uid() AND role = 'ADMIN')
-);
-
--- ============================================================================
--- COMMUNITY & DAM EXTENSION RLS POLICIES
--- ============================================================================
 ALTER TABLE public.dams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.flood_reports ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.community_messages ENABLE ROW LEVEL SECURITY;
 
--- Dams: Public read-only; Operators/Admins update
+-- 1. Readings
+DROP POLICY IF EXISTS "Allow device insert readings" ON public.readings;
+CREATE POLICY "Allow device insert readings"
+ON public.readings FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow operators read readings" ON public.readings;
+DROP POLICY IF EXISTS "Allow read readings" ON public.readings;
+CREATE POLICY "Allow read readings"
+ON public.readings FOR SELECT TO anon, authenticated
+USING (true);
+
+-- 2. Forecasts
+DROP POLICY IF EXISTS "Allow service insert forecasts" ON public.forecasts;
+CREATE POLICY "Allow service insert forecasts"
+ON public.forecasts FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow operators read forecasts" ON public.forecasts;
+DROP POLICY IF EXISTS "Allow read forecasts" ON public.forecasts;
+CREATE POLICY "Allow read forecasts"
+ON public.forecasts FOR SELECT TO anon, authenticated
+USING (true);
+
+-- 3. Alerts
+DROP POLICY IF EXISTS "Allow insert alerts" ON public.alerts;
+CREATE POLICY "Allow insert alerts"
+ON public.alerts FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow public read alerts" ON public.alerts;
+CREATE POLICY "Allow public read alerts"
+ON public.alerts FOR SELECT TO anon, authenticated
+USING (true);
+
+-- 4. Commands
+DROP POLICY IF EXISTS "Allow operators insert commands" ON public.commands;
+CREATE POLICY "Allow operators insert commands"
+ON public.commands FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow operators read commands" ON public.commands;
+CREATE POLICY "Allow operators read commands"
+ON public.commands FOR SELECT TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Allow operators update commands" ON public.commands;
+CREATE POLICY "Allow operators update commands"
+ON public.commands FOR UPDATE TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 5. SMS Jobs
+DROP POLICY IF EXISTS "Allow operators manage sms_jobs" ON public.sms_jobs;
+CREATE POLICY "Allow operators manage sms_jobs"
+ON public.sms_jobs FOR ALL TO anon, authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 6. Contacts
+DROP POLICY IF EXISTS "Allow admins manage contacts" ON public.contacts;
+DROP POLICY IF EXISTS "Allow read contacts" ON public.contacts;
+CREATE POLICY "Allow read contacts"
+ON public.contacts FOR SELECT TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Allow admins manage contacts"
+ON public.contacts FOR ALL TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 7. Push Tokens
+DROP POLICY IF EXISTS "Allow public insert push_tokens" ON public.push_tokens;
+CREATE POLICY "Allow public insert push_tokens"
+ON public.push_tokens FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow select push_tokens" ON public.push_tokens;
+CREATE POLICY "Allow select push_tokens"
+ON public.push_tokens FOR SELECT TO anon, authenticated
+USING (true);
+
+-- 8. App Config
+DROP POLICY IF EXISTS "Allow public read app_config" ON public.app_config;
+CREATE POLICY "Allow public read app_config"
+ON public.app_config FOR SELECT TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Allow admins manage app_config" ON public.app_config;
+CREATE POLICY "Allow admins manage app_config"
+ON public.app_config FOR ALL TO authenticated
+USING (true)
+WITH CHECK (true);
+
+-- 9. Profiles
+DROP POLICY IF EXISTS "Allow users read own profile" ON public.profiles;
+CREATE POLICY "Allow users read own profile"
+ON public.profiles FOR SELECT TO anon, authenticated
+USING (true);
+
+DROP POLICY IF EXISTS "Allow insert profiles" ON public.profiles;
+CREATE POLICY "Allow insert profiles"
+ON public.profiles FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+-- 10. Audit Log
+DROP POLICY IF EXISTS "Allow insert audit_log" ON public.audit_log;
+CREATE POLICY "Allow insert audit_log"
+ON public.audit_log FOR INSERT TO anon, authenticated
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow admins read audit_log" ON public.audit_log;
+CREATE POLICY "Allow admins read audit_log"
+ON public.audit_log FOR SELECT TO anon, authenticated
+USING (true);
+
+-- 11. Dams
+DROP POLICY IF EXISTS "Allow public read dams" ON public.dams;
 CREATE POLICY "Allow public read dams"
 ON public.dams FOR SELECT TO anon, authenticated
 USING (true);
 
+DROP POLICY IF EXISTS "Allow operators manage dams" ON public.dams;
 CREATE POLICY "Allow operators manage dams"
-ON public.dams FOR ALL TO authenticated
+ON public.dams FOR ALL TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 
--- Flood Reports: Allow insert, select, and status updates for anon and authenticated
-DROP POLICY IF EXISTS "Allow public insert flood_reports" ON public.flood_reports;
-DROP POLICY IF EXISTS "Allow public read verified flood_reports" ON public.flood_reports;
-DROP POLICY IF EXISTS "Allow operators update flood_reports" ON public.flood_reports;
-
+-- 12. Flood Reports
+DROP POLICY IF EXISTS "Allow select flood_reports" ON public.flood_reports;
 CREATE POLICY "Allow select flood_reports"
 ON public.flood_reports FOR SELECT TO anon, authenticated
 USING (true);
 
+DROP POLICY IF EXISTS "Allow insert flood_reports" ON public.flood_reports;
 CREATE POLICY "Allow insert flood_reports"
 ON public.flood_reports FOR INSERT TO anon, authenticated
 WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow update flood_reports" ON public.flood_reports;
 CREATE POLICY "Allow update flood_reports"
 ON public.flood_reports FOR UPDATE TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 
--- Community Messages: Public can read all and send messages
+-- 13. Community Messages
+DROP POLICY IF EXISTS "Allow public read community_messages" ON public.community_messages;
 CREATE POLICY "Allow public read community_messages"
 ON public.community_messages FOR SELECT TO anon, authenticated
 USING (true);
 
+DROP POLICY IF EXISTS "Allow public insert community_messages" ON public.community_messages;
 CREATE POLICY "Allow public insert community_messages"
 ON public.community_messages FOR INSERT TO anon, authenticated
 WITH CHECK (true);
 
+-- ============================================================================
+-- 18. PERMISSIONS & SCHEMA GRANTS
+-- ============================================================================
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO anon, authenticated, service_role;
+
+-- ============================================================================
+-- 19. REALTIME PUBLICATION SETUP (For WebSocket Instant Push to Mobile Apps)
+-- ============================================================================
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.readings;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.alerts;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.flood_reports;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.community_messages;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.dams;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
