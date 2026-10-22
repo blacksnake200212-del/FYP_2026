@@ -15,21 +15,22 @@ import { supabase } from '../supabaseClient';
 
 export default function DashboardScreen({ operatorUser }) {
   const [telemetry, setTelemetry] = useState({
-    levelPct: 68.0,
-    depthCm: 204.0, // In cm
-    depthM: 2.04,   // In meters
+    levelPct: 0.0,
+    depthCm: 0.0,
+    depthM: 0.0,
     totalHeightM: 3.00,
     gatePercent: 0,
     alertState: 'NORMAL',
     controlMode: 'AUTO',
-    distance1: 32.4,
-    distance2: 32.7,
+    distance1: 0.0,
+    distance2: 0.0,
     sensorAgreed: true,
-    temperature: 28.6,
-    humidity: 74.2,
-    csq: 24,
-    batteryVoltage: 12.4,
-    updatedAt: new Date().toISOString()
+    temperature: 0.0,
+    humidity: 0.0,
+    csq: 0,
+    batteryVoltage: 0.0,
+    updatedAt: null,
+    hasRealData: false
   });
 
   const [isStale, setIsStale] = useState(false);
@@ -76,7 +77,8 @@ export default function DashboardScreen({ operatorUser }) {
           sensorAgreed: agreed,
           temperature: parseFloat(r.temperature) || 28.0,
           humidity: parseFloat(r.humidity) || 75.0,
-          updatedAt: r.created_at || new Date().toISOString()
+          updatedAt: r.created_at || new Date().toISOString(),
+          hasRealData: true
         }));
       }
     } catch (err) {
@@ -118,7 +120,8 @@ export default function DashboardScreen({ operatorUser }) {
               sensorAgreed: agreed,
               temperature: parseFloat(r.temperature) || 28.0,
               humidity: parseFloat(r.humidity) || 75.0,
-              updatedAt: r.created_at || new Date().toISOString()
+              updatedAt: r.created_at || new Date().toISOString(),
+          hasRealData: true
             }));
           }
         }
@@ -261,9 +264,9 @@ export default function DashboardScreen({ operatorUser }) {
           {/* Centered Gauge Data */}
           <View style={styles.gaugeCenterText}>
             <Text style={styles.waterLevelLabel}>Water Level</Text>
-            <Text style={styles.gaugePercentage}>{telemetry.levelPct.toFixed(0)}%</Text>
+            <Text style={styles.gaugePercentage}>{telemetry.hasRealData ? `${telemetry.levelPct.toFixed(0)}%` : '--%'}</Text>
             <Text style={styles.gaugeDepth}>
-              {telemetry.depthM} m ({telemetry.depthCm} cm)
+              {telemetry.hasRealData ? `${telemetry.depthM} m (${telemetry.depthCm} cm)` : 'Awaiting Sensors'}
             </Text>
           </View>
         </View>

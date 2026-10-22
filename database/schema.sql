@@ -475,17 +475,21 @@ ON public.dams FOR ALL TO authenticated
 USING (true)
 WITH CHECK (true);
 
--- Flood Reports: Public can insert and read verified; Operators can view all and verify/update
-CREATE POLICY "Allow public insert flood_reports"
+-- Flood Reports: Allow insert, select, and status updates for anon and authenticated
+DROP POLICY IF EXISTS "Allow public insert flood_reports" ON public.flood_reports;
+DROP POLICY IF EXISTS "Allow public read verified flood_reports" ON public.flood_reports;
+DROP POLICY IF EXISTS "Allow operators update flood_reports" ON public.flood_reports;
+
+CREATE POLICY "Allow select flood_reports"
+ON public.flood_reports FOR SELECT TO anon, authenticated
+USING (true);
+
+CREATE POLICY "Allow insert flood_reports"
 ON public.flood_reports FOR INSERT TO anon, authenticated
 WITH CHECK (true);
 
-CREATE POLICY "Allow public read verified flood_reports"
-ON public.flood_reports FOR SELECT TO anon, authenticated
-USING (status = 'VERIFIED' OR auth.role() = 'authenticated');
-
-CREATE POLICY "Allow operators update flood_reports"
-ON public.flood_reports FOR UPDATE TO authenticated
+CREATE POLICY "Allow update flood_reports"
+ON public.flood_reports FOR UPDATE TO anon, authenticated
 USING (true)
 WITH CHECK (true);
 

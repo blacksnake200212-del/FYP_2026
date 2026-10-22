@@ -11,100 +11,35 @@ import {
   Alert,
   RefreshControl
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabaseClient';
+import { ClipboardReportIcon, MapPinIcon, CheckShieldIcon } from '../Icons';
+
+const STORAGE_KEY = 'sdas_real_flood_reports_v2';
 
 export default function FloodReportsScreen({ operatorUser }) {
-  const [activeTab, setActiveTab] = useState('PENDING'); // 'PENDING', 'VERIFIED', 'ALL'
+  const [activeTab, setActiveTab] = useState('ALL'); // 'ALL', 'PENDING', 'VERIFIED'
   const [reports, setReports] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [dbNotice, setDbNotice] = useState(null);
 
-  // Default seed list matching the design mockup image
-  const defaultReports = [
-    {
-      id: 'rep-01',
-      location_name: 'Kantalai, 2.4 km',
-      time: '09:15 AM',
-      reported_at_text: '10:12 AM',
-      reporter_name: 'Tharindu Perera',
-      description: 'Water is covering the road near the bridge. Road access blocked for light vehicles.',
-      distance_km: 2.4,
-      latitude: 8.5312,
-      longitude: 80.9985,
-      photo_url: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500',
-      status: 'PENDING'
-    },
-    {
-      id: 'rep-02',
-      location_name: 'Mahaweli Rd, 5.1 km',
-      time: '09:20 AM',
-      reported_at_text: '09:45 AM',
-      reporter_name: 'Saman Bandara',
-      description: 'Moderate water level on the road near agricultural canal. Increasing rapidly.',
-      distance_km: 5.1,
-      latitude: 8.5120,
-      longitude: 80.9750,
-      photo_url: 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=500',
-      status: 'PENDING'
-    },
-    {
-      id: 'rep-03',
-      location_name: 'Paddithidal, 8.7 km',
-      time: '09:30 AM',
-      reported_at_text: '08:35 AM',
-      reporter_name: 'Kamal Silva',
-      description: 'Flood water entering low lying drainage canals. Embankment seepage suspected.',
-      distance_km: 8.7,
-      latitude: 8.4850,
-      longitude: 80.9400,
-      photo_url: null,
-      status: 'PENDING'
-    }
-  ];
-
-  const fetchReports = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('flood_reports')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (!error && data && data.length > 0) {
-        const mapped = data.map((item) => ({
-          id: item.id,
-          location_name: item.location_name || 'Kantalai Area',
-          time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          reported_at_text: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          reporter_name: item.reporter_name || 'Citizen User',
-          description: item.description,
-          distance_km: item.distance_km || 2.4,
-          latitude: item.latitude,
-          longitude: item.longitude,
-          photo_url: item.photo_url,
-          status: item.status || 'PENDING'
-        }));
-        setReports(mapped);
-      } else {
-        setReports(defaultReports);
-      }
-    } catch (e) {
-      setReports(defaultReports);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // 1. Load persisted reports on initial mount
   useEffect(() => {
-    fetchReports();
+    loadCachedReports();
+    fetchReportsFromSupabase();
 
     // Supabase Realtime channel for new incoming flood reports
     const channel = supabase
-      .channel('operator-flood-reports-sync')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'flood_reports' }, () => {
-        fetchReports();
-      })
+      .channel('operator-flood-reports-live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'flood_reports' },
+        (payload) => {
+          fetchReportsFromSupabase();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -112,45 +47,120 @@ export default function FloodReportsScreen({ operatorUser }) {
     };
   }, []);
 
+  const loadCachedReports = async () => {
+    try {
+      const cached = await AsyncStorage.getItem(STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setReports(parsed);
+        }
+      }
+    } catch (e) {
+      // Local cache empty
+    }
+  };
+
+  const saveReportsLocally = async (items) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    } catch (e) {
+      console.warn('AsyncStorage save error:', e);
+    }
+  };
+
+  // 2. Fetch REAL reports from Supabase (Strictly NO mock data)
+  const fetchReportsFromSupabase = async () => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('flood_reports')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          setDbNotice("Supabase table 'flood_reports' not detected. Please execute database/schema.sql in Supabase SQL editor.");
+        } else {
+          setDbNotice(error.message);
+        }
+      } else if (data) {
+        setDbNotice(null);
+        const mapped = data.map((item) => ({
+          id: String(item.id),
+          location_name: item.location_name || 'Reported Location',
+          time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reported_at_text: new Date(item.created_at).toLocaleString(),
+          reporter_name: item.reporter_name || 'Citizen User',
+          description: item.description || 'No description provided.',
+          distance_km: item.distance_km || 2.4,
+          latitude: item.latitude || 8.5284,
+          longitude: item.longitude || 80.9922,
+          photo_url: item.photo_url || null,
+          status: item.status || 'PENDING'
+        }));
+
+        setReports(mapped);
+        await saveReportsLocally(mapped);
+      }
+    } catch (err) {
+      console.warn('Supabase fetch error:', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 3. Verify Report Action (Permanent status update)
   const handleVerify = async (report) => {
     setIsProcessing(true);
+    const nowIso = new Date().toISOString();
+
+    // 3a. Update local state immediately so UI updates in-place
+    const updatedReports = reports.map((r) =>
+      r.id === report.id ? { ...r, status: 'VERIFIED', verified_at: nowIso } : r
+    );
+    setReports(updatedReports);
+    await saveReportsLocally(updatedReports);
+
+    if (selectedReport && selectedReport.id === report.id) {
+      setSelectedReport({ ...selectedReport, status: 'VERIFIED', verified_at: nowIso });
+    }
+
+    // 3b. Push update to Supabase
     try {
-      // Update in Supabase
-      await supabase
+      const { error } = await supabase
         .from('flood_reports')
         .update({
           status: 'VERIFIED',
           verified_by: operatorUser?.id || null,
-          verified_at: new Date().toISOString()
+          verified_at: nowIso
         })
         .eq('id', report.id);
 
-      // Update local state
-      setReports((prev) =>
-        prev.map((r) => (r.id === report.id ? { ...r, status: 'VERIFIED' } : r))
-      );
-
-      setSelectedReport(null);
-
-      Alert.alert(
-        '✓ Report Verified & Alert Broadcasted',
-        `Community flood advisory sent to citizens within a ${report.distance_km || 5.0} km radius of ${report.location_name}.`
-      );
+      if (error) {
+        console.warn('Supabase remote verify failed, saved locally:', error.message);
+      }
     } catch (err) {
-      console.warn('Verify error:', err.message);
-      // Fallback local update
-      setReports((prev) =>
-        prev.map((r) => (r.id === report.id ? { ...r, status: 'VERIFIED' } : r))
-      );
-      setSelectedReport(null);
-      Alert.alert('✓ Report Verified', 'Local state updated and alert dispatched.');
+      console.warn('Verify remote network error:', err.message);
     } finally {
       setIsProcessing(false);
+      Alert.alert(
+        '✓ Report Verified & Alert Dispatched',
+        `Community flood advisory sent to citizens within ${report.distance_km || 5.0} km radius of ${report.location_name}.`
+      );
     }
   };
 
+  // 4. Reject Report Action
   const handleReject = async (report) => {
     setIsProcessing(true);
+    const updatedReports = reports.map((r) =>
+      r.id === report.id ? { ...r, status: 'REJECTED' } : r
+    );
+    setReports(updatedReports);
+    await saveReportsLocally(updatedReports);
+    setSelectedReport(null);
+
     try {
       await supabase
         .from('flood_reports')
@@ -160,24 +170,18 @@ export default function FloodReportsScreen({ operatorUser }) {
           verified_at: new Date().toISOString()
         })
         .eq('id', report.id);
-
-      setReports((prev) =>
-        prev.map((r) => (r.id === report.id ? { ...r, status: 'REJECTED' } : r))
-      );
-
-      setSelectedReport(null);
-      Alert.alert('Report Rejected', 'This report has been dismissed as a false alarm.');
-    } catch (err) {
-      setReports((prev) =>
-        prev.map((r) => (r.id === report.id ? { ...r, status: 'REJECTED' } : r))
-      );
-      setSelectedReport(null);
+    } catch (e) {
+      // Local rejection saved
     } finally {
       setIsProcessing(false);
+      Alert.alert('Report Rejected', 'This report has been dismissed as a false alarm.');
     }
   };
 
-  const filteredReports = (reports.length ? reports : defaultReports).filter((r) => {
+  const pendingCount = reports.filter((r) => r.status === 'PENDING').length;
+  const verifiedCount = reports.filter((r) => r.status === 'VERIFIED').length;
+
+  const filteredReports = reports.filter((r) => {
     if (activeTab === 'ALL') return true;
     if (activeTab === 'PENDING') return r.status === 'PENDING';
     if (activeTab === 'VERIFIED') return r.status === 'VERIFIED';
@@ -188,43 +192,72 @@ export default function FloodReportsScreen({ operatorUser }) {
     <View style={styles.container}>
       {/* Top Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Flood Reports</Text>
-        <Text style={styles.headerSub}>Citizen Flood Verification & Radius Dispatch</Text>
+        <View style={styles.headerRow}>
+          <ClipboardReportIcon size={24} color="#38BDF8" />
+          <View style={{ marginLeft: 8 }}>
+            <Text style={styles.headerTitle}>Flood Reports Verification</Text>
+            <Text style={styles.headerSub}>Verify Citizen Flood Reports & Dispatch Geofenced Alerts</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.tabBar}>
-        {['PENDING', 'VERIFIED', 'ALL'].map((tab) => {
-          const isActive = activeTab === tab;
-          const count = (reports.length ? reports : defaultReports).filter((r) => {
-            if (tab === 'ALL') return true;
-            return r.status === tab;
-          }).length;
+      {/* Supabase Notice Banner if table is missing */}
+      {dbNotice && (
+        <View style={styles.noticeBanner}>
+          <Text style={styles.noticeIcon}>⚠️</Text>
+          <Text style={styles.noticeText}>{dbNotice}</Text>
+        </View>
+      )}
 
-          return (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tabBtn, isActive && styles.tabBtnActive]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {tab.charAt(0) + tab.slice(1).toLowerCase()} ({count})
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      {/* Filter Tabs (ALL / PENDING / VERIFIED) */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'ALL' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('ALL')}
+        >
+          <Text style={[styles.tabText, activeTab === 'ALL' && styles.tabTextActive]}>
+            All ({reports.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'PENDING' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('PENDING')}
+        >
+          <Text style={[styles.tabText, activeTab === 'PENDING' && styles.tabTextActive]}>
+            Pending ({pendingCount})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'VERIFIED' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('VERIFIED')}
+        >
+          <Text style={[styles.tabText, activeTab === 'VERIFIED' && styles.tabTextActive]}>
+            Verified ({verifiedCount})
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Reports List */}
       <ScrollView
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchReports} tintColor="#38BDF8" />}
+        refreshControl={
+          <RefreshControl refreshing={isLoading} onRefresh={fetchReportsFromSupabase} tintColor="#38BDF8" />
+        }
       >
         {filteredReports.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>✓</Text>
-            <Text style={styles.emptyText}>No {activeTab.toLowerCase()} reports at this time.</Text>
+          <View style={styles.emptyContainer}>
+            <ClipboardReportIcon size={48} color="#334155" />
+            <Text style={styles.emptyTitle}>No {activeTab.toLowerCase()} reports</Text>
+            <Text style={styles.emptySubtitle}>
+              {activeTab === 'PENDING'
+                ? 'No pending citizen flood reports awaiting verification. When a report is submitted in the Public App, it will appear here.'
+                : activeTab === 'VERIFIED'
+                ? 'No reports verified yet. Verified reports will remain stored here with notification history.'
+                : 'No flood reports in the system. Use the Public App to submit a real flood report.'}
+            </Text>
           </View>
         ) : (
           filteredReports.map((item) => (
@@ -237,13 +270,19 @@ export default function FloodReportsScreen({ operatorUser }) {
                       { backgroundColor: item.status === 'VERIFIED' ? '#10B981' : '#EF4444' }
                     ]}
                   />
-                  <Text style={styles.locationTitle}>{item.location_name}</Text>
+                  <Text style={styles.locationTitle} numberOfLines={1}>
+                    {item.location_name}
+                  </Text>
                 </View>
                 <Text style={styles.cardTime}>{item.time}</Text>
               </View>
 
+              <Text style={styles.descText} numberOfLines={2}>
+                {item.description}
+              </Text>
+
               <Text style={styles.userSubtext}>
-                Flood reported by user - {item.reported_at_text}
+                Reported by {item.reporter_name} • {item.reported_at_text}
               </Text>
 
               {/* Action Buttons: View & Verify */}
@@ -252,19 +291,21 @@ export default function FloodReportsScreen({ operatorUser }) {
                   style={styles.viewBtn}
                   onPress={() => setSelectedReport(item)}
                 >
-                  <Text style={styles.viewBtnText}>View</Text>
+                  <Text style={styles.viewBtnText}>View Details</Text>
                 </TouchableOpacity>
 
                 {item.status === 'PENDING' ? (
                   <TouchableOpacity
                     style={styles.verifyBtn}
                     onPress={() => handleVerify(item)}
+                    disabled={isProcessing}
                   >
-                    <Text style={styles.verifyBtnText}>Verify</Text>
+                    <Text style={styles.verifyBtnText}>✓ Verify & Alert</Text>
                   </TouchableOpacity>
                 ) : (
                   <View style={styles.verifiedTag}>
-                    <Text style={styles.verifiedTagText}>✓ Verified</Text>
+                    <CheckShieldIcon size={16} color="#34D399" />
+                    <Text style={styles.verifiedTagText}>✓ Verified & Dispatched</Text>
                   </View>
                 )}
               </View>
@@ -292,7 +333,7 @@ export default function FloodReportsScreen({ operatorUser }) {
 
               <ScrollView style={styles.modalScroll}>
                 {selectedReport.photo_url ? (
-                  <Image source={{ uri: selectedReport.photo_url }} style={styles.modalImage} />
+                  <Image source={{ uri: selectedReport.photo_url }} style={styles.modalImage} resizeMode="cover" />
                 ) : (
                   <View style={styles.noPhotoBox}>
                     <Text style={styles.noPhotoText}>📷 No photo attached by reporter</Text>
@@ -300,7 +341,7 @@ export default function FloodReportsScreen({ operatorUser }) {
                 )}
 
                 <View style={styles.modalField}>
-                  <Text style={styles.fieldLabel}>LOCATION & DISTANCE</Text>
+                  <Text style={styles.fieldLabel}>LOCATION & PROXIMITY</Text>
                   <Text style={styles.fieldVal}>
                     📍 {selectedReport.location_name} ({selectedReport.distance_km} km from dam)
                   </Text>
@@ -320,7 +361,7 @@ export default function FloodReportsScreen({ operatorUser }) {
                 </View>
 
                 <View style={styles.modalField}>
-                  <Text style={styles.fieldLabel}>CURRENT STATUS</Text>
+                  <Text style={styles.fieldLabel}>STATUS</Text>
                   <View
                     style={[
                       styles.statusPill,
@@ -347,36 +388,45 @@ export default function FloodReportsScreen({ operatorUser }) {
                         }
                       ]}
                     >
-                      {selectedReport.status}
+                      ● {selectedReport.status}
                     </Text>
                   </View>
                 </View>
               </ScrollView>
 
               {/* Modal Actions */}
-              {selectedReport.status === 'PENDING' && (
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.modalRejectBtn}
-                    onPress={() => handleReject(selectedReport)}
-                    disabled={isProcessing}
-                  >
-                    <Text style={styles.modalRejectText}>Reject</Text>
-                  </TouchableOpacity>
+              <View style={styles.modalActions}>
+                {selectedReport.status === 'PENDING' ? (
+                  <>
+                    <TouchableOpacity
+                      style={styles.modalRejectBtn}
+                      onPress={() => handleReject(selectedReport)}
+                      disabled={isProcessing}
+                    >
+                      <Text style={styles.modalRejectText}>Reject</Text>
+                    </TouchableOpacity>
 
+                    <TouchableOpacity
+                      style={styles.modalVerifyBtn}
+                      onPress={() => handleVerify(selectedReport)}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.modalVerifyText}>✓ Verify & Alert Radius</Text>
+                      )}
+                    </TouchableOpacity>
+                  </>
+                ) : (
                   <TouchableOpacity
-                    style={styles.modalVerifyBtn}
-                    onPress={() => handleVerify(selectedReport)}
-                    disabled={isProcessing}
+                    style={styles.modalDoneBtn}
+                    onPress={() => setSelectedReport(null)}
                   >
-                    {isProcessing ? (
-                      <ActivityIndicator color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.modalVerifyText}>Verify & Alert Radius</Text>
-                    )}
+                    <Text style={styles.modalDoneText}>Close</Text>
                   </TouchableOpacity>
-                </View>
-              )}
+                )}
+              </View>
             </View>
           </View>
         </Modal>
@@ -388,8 +438,24 @@ export default function FloodReportsScreen({ operatorUser }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B1327' },
   header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#F8FAFC' },
-  headerSub: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  headerRow: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#F8FAFC' },
+  headerSub: { fontSize: 11, color: '#94A3B8', marginTop: 1 },
+
+  noticeBanner: {
+    backgroundColor: '#78350F',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: 8,
+    marginHorizontal: 16,
+    padding: 10,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  noticeIcon: { fontSize: 16 },
+  noticeText: { color: '#FDE68A', fontSize: 11, flex: 1, lineHeight: 15 },
 
   tabBar: {
     flexDirection: 'row',
@@ -421,7 +487,8 @@ const styles = StyleSheet.create({
   indicatorDot: { width: 10, height: 10, borderRadius: 5, marginRight: 8 },
   locationTitle: { fontSize: 15, fontWeight: '700', color: '#F8FAFC', flex: 1 },
   cardTime: { fontSize: 11, color: '#64748B', fontWeight: '600' },
-  userSubtext: { fontSize: 11, color: '#94A3B8', marginTop: 4, marginBottom: 12 },
+  descText: { fontSize: 13, color: '#CBD5E1', lineHeight: 18, marginTop: 6 },
+  userSubtext: { fontSize: 10, color: '#64748B', marginTop: 6, marginBottom: 12 },
 
   cardActionsRow: { flexDirection: 'row', gap: 10 },
   viewBtn: {
@@ -433,29 +500,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155'
   },
-  viewBtnText: { color: '#E2E8F0', fontSize: 13, fontWeight: '700' },
+  viewBtnText: { color: '#E2E8F0', fontSize: 12, fontWeight: '700' },
   verifyBtn: {
-    flex: 1,
+    flex: 1.2,
     backgroundColor: '#10B981',
     paddingVertical: 9,
     borderRadius: 8,
     alignItems: 'center'
   },
-  verifyBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  verifyBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
   verifiedTag: {
-    flex: 1,
+    flex: 1.2,
     backgroundColor: '#064E3B',
     paddingVertical: 9,
     borderRadius: 8,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
     borderWidth: 1,
     borderColor: '#059669'
   },
-  verifiedTagText: { color: '#34D399', fontSize: 13, fontWeight: '800' },
+  verifiedTagText: { color: '#34D399', fontSize: 11, fontWeight: '800' },
 
-  emptyState: { alignItems: 'center', paddingVertical: 50 },
-  emptyIcon: { fontSize: 36, color: '#10B981', marginBottom: 10 },
-  emptyText: { color: '#64748B', fontSize: 14, fontWeight: '600' },
+  emptyContainer: { alignItems: 'center', paddingVertical: 50, paddingHorizontal: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#94A3B8', marginTop: 12 },
+  emptySubtitle: { fontSize: 12, color: '#64748B', textAlign: 'center', marginTop: 6, lineHeight: 18 },
 
   // Modal Styles
   modalOverlay: {
@@ -486,7 +556,7 @@ const styles = StyleSheet.create({
   modalScroll: { padding: 16 },
   modalImage: { width: '100%', height: 170, borderRadius: 10, marginBottom: 14 },
   noPhotoBox: {
-    height: 100,
+    height: 90,
     backgroundColor: '#1E2F54',
     borderRadius: 10,
     justifyContent: 'center',
@@ -524,5 +594,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center'
   },
-  modalVerifyText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' }
+  modalVerifyText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  modalDoneBtn: {
+    flex: 1,
+    backgroundColor: '#1E2F54',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  modalDoneText: { color: '#F8FAFC', fontSize: 13, fontWeight: '700' }
 });

@@ -1,53 +1,81 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   ScrollView,
-  TouchableOpacity
+  TouchableOpacity,
+  RefreshControl
 } from 'react-native';
+import { supabase } from './supabaseClient';
+import { BellAlertIcon } from './Icons';
 
 export default function NotificationsScreen({ t, onBack }) {
   const [activeFilter, setActiveFilter] = useState('ALL'); // 'ALL', 'EMERGENCY', 'COMMUNITY'
+  const [notifications, setNotifications] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const notifications = [
-    {
-      id: 'notif-1',
-      category: 'EMERGENCY',
-      title: t.emergencyAlert,
-      time: 'Today, 10:15 AM',
-      body: 'Dam water level has reached 85%. Sluice gates will open automatically. Embankment clearance in effect.',
-      cardBg: '#FEF2F2',
-      borderBg: '#FECACA',
-      iconBg: '#EF4444',
-      icon: '🚨',
-      titleColor: '#991B1B'
-    },
-    {
-      id: 'notif-2',
-      category: 'COMMUNITY',
-      title: t.nearbyFloodReport,
-      time: 'Today, 09:32 AM',
-      body: 'Verified flood reported near Kantalai (2.4 km). Bridge road covered in water. Please avoid the area.',
-      cardBg: '#FFFBEB',
-      borderBg: '#FDE68A',
-      iconBg: '#F59E0B',
-      icon: '⚠️',
-      titleColor: '#92400E'
-    },
-    {
-      id: 'notif-3',
-      category: 'COMMUNITY',
-      title: t.weatherUpdate,
-      time: 'Today, 08:15 AM',
-      body: 'Heavy convective rainfall expected today in catchment basin. Precipitation surge probability 78%.',
-      cardBg: '#F0F9FF',
-      borderBg: '#BAE6FD',
-      iconBg: '#0284C7',
-      icon: '🌧️',
-      titleColor: '#075985'
+  const fetchRealNotifications = async () => {
+    setIsLoading(true);
+    const list = [];
+    try {
+      // 1. Fetch real alerts from public.alerts
+      const { data: alerts } = await supabase
+        .from('alerts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (alerts && alerts.length > 0) {
+        alerts.forEach((a) => {
+          const isDanger = a.stage === 'DANGER' || a.stage === 'CLEAR_AREA';
+          list.push({
+            id: 'alert-' + a.id,
+            category: 'EMERGENCY',
+            title: isDanger ? '🚨 Dam Emergency Alert' : 'ℹ️ Dam Advisory Alert',
+            time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            body: a.message,
+            cardBg: isDanger ? '#FEF2F2' : '#FFFBEB',
+            borderBg: isDanger ? '#FECACA' : '#FDE68A',
+            titleColor: isDanger ? '#991B1B' : '#92400E'
+          });
+        });
+      }
+
+      // 2. Fetch real verified flood reports from public.flood_reports
+      const { data: verifiedFloods } = await supabase
+        .from('flood_reports')
+        .select('*')
+        .eq('status', 'VERIFIED')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (verifiedFloods && verifiedFloods.length > 0) {
+        verifiedFloods.forEach((f) => {
+          list.push({
+            id: 'flood-' + f.id,
+            category: 'COMMUNITY',
+            title: `⚠️ Verified Flood Report: ${f.location_name}`,
+            time: new Date(f.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            body: `${f.description} (Evacuation radius: ${f.radius_km || 5.0} km)`,
+            cardBg: '#FFFBEB',
+            borderBg: '#FDE68A',
+            titleColor: '#92400E'
+          });
+        });
+      }
+
+      setNotifications(list);
+    } catch (e) {
+      console.warn('Notifications fetch err:', e);
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
+
+  useEffect(() => {
+    fetchRealNotifications();
+  }, []);
 
   const filtered = notifications.filter((item) => {
     if (activeFilter === 'ALL') return true;
@@ -57,7 +85,11 @@ export default function NotificationsScreen({ t, onBack }) {
   });
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={isLoading} onRefresh={fetchRealNotifications} tintColor="#2563EB" />}
+    >
       {/* Header */}
       <View style={styles.headerRow}>
         {onBack && (
@@ -65,13 +97,13 @@ export default function NotificationsScreen({ t, onBack }) {
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.headerTitle}>{t.notifications}</Text>
+        <Text style={styles.headerTitle}>{t.notifications || 'Notifications'}</Text>
       </View>
 
       {/* Filter Tabs */}
       <View style={styles.tabBar}>
         {['ALL', 'EMERGENCY', 'COMMUNITY'].map((tab) => {
-          const label = tab === 'ALL' ? t.all : tab === 'EMERGENCY' ? t.emergency : t.community;
+          const label = tab === 'ALL' ? t.all || 'All' : tab === 'EMERGENCY' ? t.emergency || 'Emergency' : t.community || 'Community';
           const isActive = activeFilter === tab;
           return (
             <TouchableOpacity
@@ -89,29 +121,36 @@ export default function NotificationsScreen({ t, onBack }) {
 
       {/* Notifications Cards */}
       <View style={styles.cardsList}>
-        {filtered.map((item) => (
-          <View
-            key={item.id}
-            style={[
-              styles.card,
-              { backgroundColor: item.cardBg, borderColor: item.borderBg }
-            ]}
-          >
-            <View style={styles.cardHeader}>
-              <View style={[styles.iconWrapper, { backgroundColor: item.iconBg }]}>
-                <Text style={styles.iconText}>{item.icon}</Text>
-              </View>
-              <View style={styles.titleWrapper}>
-                <Text style={[styles.cardTitle, { color: item.titleColor }]}>
-                  {item.title}
-                </Text>
-                <Text style={styles.cardTime}>{item.time}</Text>
-              </View>
-            </View>
-
-            <Text style={styles.cardBody}>{item.body}</Text>
+        {filtered.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <BellAlertIcon size={44} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>No Active Notifications</Text>
+            <Text style={styles.emptySubtitle}>
+              There are no active {activeFilter.toLowerCase()} emergency broadcasts or flood advisories. Normal reservoir safety operation in progress.
+            </Text>
           </View>
-        ))}
+        ) : (
+          filtered.map((item) => (
+            <View
+              key={item.id}
+              style={[
+                styles.card,
+                { backgroundColor: item.cardBg, borderColor: item.borderBg }
+              ]}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.titleWrapper}>
+                  <Text style={[styles.cardTitle, { color: item.titleColor }]}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.cardTime}>{item.time}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.cardBody}>{item.body}</Text>
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -147,18 +186,13 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  iconWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12
-  },
-  iconText: { fontSize: 18 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   titleWrapper: { flex: 1 },
-  cardTitle: { fontSize: 15, fontWeight: '800' },
+  cardTitle: { fontSize: 14, fontWeight: '800' },
   cardTime: { fontSize: 11, color: '#64748B', marginTop: 2, fontWeight: '600' },
-  cardBody: { fontSize: 13, color: '#334155', lineHeight: 19 }
+  cardBody: { fontSize: 13, color: '#334155', lineHeight: 19 },
+
+  emptyContainer: { alignItems: 'center', paddingVertical: 50, paddingHorizontal: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#64748B', marginTop: 12 },
+  emptySubtitle: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 6, lineHeight: 18 }
 });

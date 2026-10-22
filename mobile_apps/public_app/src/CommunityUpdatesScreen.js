@@ -9,105 +9,90 @@ import {
   Image
 } from 'react-native';
 import { supabase } from './supabaseClient';
+import { ClipboardReportIcon, CheckShieldIcon } from './Icons';
 
 export default function CommunityUpdatesScreen({ t, onBack }) {
-  const [activeFilter, setActiveFilter] = useState('ALL'); // 'ALL', 'REPORTS', 'ALERTS', 'NEARBY'
-  const [reports, setReports] = useState([]);
+  const [activeFilter, setActiveFilter] = useState('ALL'); // 'ALL', 'REPORTS', 'ALERTS'
+  const [items, setItems] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [dbNotice, setDbNotice] = useState(null);
 
-  // Default seed updates matching the design image
-  const defaultUpdates = [
-    {
-      id: 'up-1',
-      type: 'REPORTS',
-      tag: 'Flood Report',
-      tagColor: '#EF4444',
-      title: 'Kantalai, 2.4 km away',
-      time: '09:15 AM',
-      body: 'Water is covering the road near the bridge.',
-      relativeTime: '2 hours ago',
-      verified: true,
-      hasPhoto: true,
-      photoUrl: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500'
-    },
-    {
-      id: 'up-2',
-      type: 'ALERTS',
-      tag: 'Alert',
-      tagColor: '#F59E0B',
-      title: 'Danger Level Reached',
-      time: '08:45 AM',
-      body: 'Dam water level is 92% (1.84 m). Sluice gates open.',
-      relativeTime: '3 hours ago',
-      verified: true
-    },
-    {
-      id: 'up-3',
-      type: 'REPORTS',
-      tag: 'Community',
-      tagColor: '#3B82F6',
-      title: 'Flood reported near Mahaweli Rd',
-      time: '07:30 AM',
-      body: 'Moderate water level on the road. Drive cautiously.',
-      relativeTime: '4 hours ago',
-      verified: false
-    },
-    {
-      id: 'up-4',
-      type: 'ALERTS',
-      tag: 'Weather Update',
-      tagColor: '#0EA5E9',
-      title: 'Heavy rain expected',
-      time: '06:15 AM',
-      body: 'Rain possible in next 6 hours. Catchment basin surge predicted.',
-      relativeTime: '5 hours ago',
-      verified: true
-    }
-  ];
-
-  const fetchCommunityData = async () => {
+  const fetchCommunityUpdates = async () => {
     setIsRefreshing(true);
+    const combined = [];
+
     try {
-      const { data, error } = await supabase
+      // 1. Fetch VERIFIED Community Flood Reports (Real data from Supabase)
+      const { data: floodData, error: floodErr } = await supabase
         .from('flood_reports')
         .select('*')
+        .eq('status', 'VERIFIED')
         .order('created_at', { ascending: false })
         .limit(10);
 
-      if (!error && data && data.length > 0) {
-        const mapped = data.map((item) => ({
-          id: item.id,
-          type: 'REPORTS',
-          tag: 'Flood Report',
-          tagColor: item.status === 'VERIFIED' ? '#EF4444' : '#64748B',
-          title: item.location_name || 'Nearby Flood Point',
-          time: new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          body: item.description,
-          relativeTime: 'Recently',
-          verified: item.status === 'VERIFIED',
-          hasPhoto: !!item.photo_url,
-          photoUrl: item.photo_url
-        }));
-        setReports([...mapped, ...defaultUpdates.slice(1)]);
-      } else {
-        setReports(defaultUpdates);
+      if (floodErr) {
+        if (floodErr.code === 'PGRST205') {
+          setDbNotice("Supabase table 'flood_reports' not detected. Run database/schema.sql in Supabase SQL Editor.");
+        }
+      } else if (floodData) {
+        setDbNotice(null);
+        floodData.forEach((f) => {
+          combined.push({
+            id: 'flood-' + f.id,
+            type: 'REPORTS',
+            tag: 'Flood Report',
+            tagColor: '#EF4444',
+            title: f.location_name || 'Community Location',
+            time: new Date(f.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            body: f.description,
+            relativeTime: new Date(f.created_at).toLocaleDateString(),
+            verified: true,
+            hasPhoto: !!f.photo_url,
+            photoUrl: f.photo_url
+          });
+        });
       }
+
+      // 2. Fetch Automated Dam Alerts from Supabase
+      const { data: alertData } = await supabase
+        .from('alerts')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (alertData) {
+        alertData.forEach((a) => {
+          combined.push({
+            id: 'alert-' + a.id,
+            type: 'ALERTS',
+            tag: a.stage || 'Dam Alert',
+            tagColor: a.stage === 'DANGER' ? '#EF4444' : a.stage === 'CLEAR_AREA' ? '#F97316' : '#F59E0B',
+            title: `Dam Safety: ${a.stage?.replace('_', ' ')}`,
+            time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            body: a.message,
+            relativeTime: new Date(a.created_at).toLocaleDateString(),
+            verified: true,
+            hasPhoto: false
+          });
+        });
+      }
+
+      setItems(combined);
     } catch (e) {
-      setReports(defaultUpdates);
+      console.warn('Community Updates fetch err:', e);
     } finally {
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchCommunityData();
+    fetchCommunityUpdates();
   }, []);
 
-  const filteredUpdates = (reports.length ? reports : defaultUpdates).filter((item) => {
+  const filteredUpdates = items.filter((item) => {
     if (activeFilter === 'ALL') return true;
     if (activeFilter === 'REPORTS') return item.type === 'REPORTS';
     if (activeFilter === 'ALERTS') return item.type === 'ALERTS';
-    if (activeFilter === 'NEARBY') return item.title.includes('Kantalai') || item.title.includes('km');
     return true;
   });
 
@@ -115,7 +100,7 @@ export default function CommunityUpdatesScreen({ t, onBack }) {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={fetchCommunityData} />}
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={fetchCommunityUpdates} tintColor="#2563EB" />}
     >
       {/* Header */}
       <View style={styles.headerRow}>
@@ -124,13 +109,20 @@ export default function CommunityUpdatesScreen({ t, onBack }) {
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
         )}
-        <Text style={styles.headerTitle}>{t.communityUpdates}</Text>
+        <Text style={styles.headerTitle}>{t.communityUpdates || 'Community Updates'}</Text>
       </View>
+
+      {/* Database Setup Notice if table not found */}
+      {dbNotice && (
+        <View style={styles.noticeBanner}>
+          <Text style={styles.noticeText}>⚠️ {dbNotice}</Text>
+        </View>
+      )}
 
       {/* Filter Tabs */}
       <View style={styles.tabBar}>
-        {['ALL', 'REPORTS', 'ALERTS', 'NEARBY'].map((tab) => {
-          const label = tab === 'ALL' ? t.all : tab === 'REPORTS' ? t.reports : tab === 'ALERTS' ? t.alerts : t.nearby;
+        {['ALL', 'REPORTS', 'ALERTS'].map((tab) => {
+          const label = tab === 'ALL' ? t.all || 'All' : tab === 'REPORTS' ? t.reports || 'Reports' : t.alerts || 'Alerts';
           const isActive = activeFilter === tab;
           return (
             <TouchableOpacity
@@ -148,36 +140,45 @@ export default function CommunityUpdatesScreen({ t, onBack }) {
 
       {/* Updates Feed */}
       <View style={styles.feed}>
-        {filteredUpdates.map((item) => (
-          <View key={item.id} style={styles.card}>
-            {/* Top Tag and Time Row */}
-            <View style={styles.cardTopRow}>
-              <View style={[styles.tagBadge, { backgroundColor: item.tagColor }]}>
-                <Text style={styles.tagBadgeText}>{item.tag}</Text>
-              </View>
-              <Text style={styles.timeText}>{item.time}</Text>
-            </View>
-
-            {/* Title & Body */}
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardBody}>{item.body}</Text>
-
-            {/* Optional Photo Attachment */}
-            {item.hasPhoto && item.photoUrl && (
-              <Image source={{ uri: item.photoUrl }} style={styles.cardImage} />
-            )}
-
-            {/* Bottom Footer: Relative time & Verified badge */}
-            <View style={styles.cardFooter}>
-              <Text style={styles.relativeTimeText}>{item.relativeTime}</Text>
-              {item.verified && (
-                <View style={styles.verifiedBadge}>
-                  <Text style={styles.verifiedBadgeText}>✓ {t.verified}</Text>
-                </View>
-              )}
-            </View>
+        {filteredUpdates.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <ClipboardReportIcon size={44} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>No Community Alerts</Text>
+            <Text style={styles.emptySubtitle}>
+              {activeFilter === 'REPORTS'
+                ? 'No citizen flood reports have been verified by operators yet. When a report is submitted and verified, it will appear here.'
+                : 'No active flood alerts. Downstream channels and reservoir spillways are operating safely.'}
+            </Text>
           </View>
-        ))}
+        ) : (
+          filteredUpdates.map((item) => (
+            <View key={item.id} style={styles.card}>
+              <View style={styles.cardTopRow}>
+                <View style={[styles.tagBadge, { backgroundColor: item.tagColor }]}>
+                  <Text style={styles.tagBadgeText}>{item.tag}</Text>
+                </View>
+                <Text style={styles.timeText}>{item.time}</Text>
+              </View>
+
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.cardBody}>{item.body}</Text>
+
+              {item.hasPhoto && item.photoUrl && (
+                <Image source={{ uri: item.photoUrl }} style={styles.cardImage} resizeMode="cover" />
+              )}
+
+              <View style={styles.cardFooter}>
+                <Text style={styles.relativeTimeText}>{item.relativeTime}</Text>
+                {item.verified && (
+                  <View style={styles.verifiedBadge}>
+                    <CheckShieldIcon size={14} color="#15803D" />
+                    <Text style={styles.verifiedBadgeText}>✓ {t.verified || 'Verified by Ops'}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -190,6 +191,16 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: 12, padding: 6 },
   backArrow: { fontSize: 24, color: '#1E293B', fontWeight: '700' },
   headerTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
+
+  noticeBanner: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12
+  },
+  noticeText: { color: '#92400E', fontSize: 11, lineHeight: 16 },
 
   tabBar: {
     flexDirection: 'row',
@@ -222,7 +233,7 @@ const styles = StyleSheet.create({
 
   cardTitle: { fontSize: 15, fontWeight: '800', color: '#0F172A', marginBottom: 4 },
   cardBody: { fontSize: 13, color: '#475569', lineHeight: 18, marginBottom: 10 },
-  cardImage: { width: '100%', height: 130, borderRadius: 10, marginBottom: 10 },
+  cardImage: { width: '100%', height: 140, borderRadius: 10, marginBottom: 10 },
 
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   relativeTimeText: { fontSize: 11, color: '#94A3B8' },
@@ -232,7 +243,14 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#86EFAC'
+    borderColor: '#86EFAC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
   },
-  verifiedBadgeText: { color: '#15803D', fontSize: 11, fontWeight: '800' }
+  verifiedBadgeText: { color: '#15803D', fontSize: 11, fontWeight: '800' },
+
+  emptyContainer: { alignItems: 'center', paddingVertical: 50, paddingHorizontal: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#64748B', marginTop: 12 },
+  emptySubtitle: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 6, lineHeight: 18 }
 });

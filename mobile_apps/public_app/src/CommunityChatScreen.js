@@ -8,108 +8,121 @@ import {
   TouchableOpacity,
   Image,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { supabase } from './supabaseClient';
+import { ChatBubbleIcon } from './Icons';
 
 export default function CommunityChatScreen({ t, onBack }) {
   const [inputText, setInputText] = useState('');
-  const [messages, setMessages] = useState([
-    {
-      id: 'msg-1',
-      sender_name: 'Tharindu',
-      sender_role: 'CITIZEN',
-      message: 'Water is flowing near the old bridge.',
-      photo_url: 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500',
-      time: '09:15 AM',
-      is_system: false
-    },
-    {
-      id: 'msg-2',
-      sender_name: 'Saman',
-      sender_role: 'CITIZEN',
-      message: 'Be careful everyone. Avoid this area.',
-      photo_url: null,
-      time: '09:18 AM',
-      is_system: false
-    },
-    {
-      id: 'msg-3',
-      sender_name: 'System',
-      sender_role: 'SYSTEM',
-      message: t.reportUnderReview || 'This report is under verification by the operator.',
-      photo_url: null,
-      time: '09:20 AM',
-      is_system: true
-    }
-  ]);
-
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
   const scrollViewRef = useRef();
 
-  useEffect(() => {
-    // Fetch latest community messages from Supabase
-    const loadMessages = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('community_messages')
-          .select('*')
-          .order('created_at', { ascending: true })
-          .limit(20);
+  const loadMessages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('community_messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(50);
 
-        if (!error && data && data.length > 0) {
-          const mapped = data.map((d) => ({
-            id: d.id,
-            sender_name: d.sender_name,
-            sender_role: d.sender_role,
-            message: d.message,
-            photo_url: d.photo_url,
-            time: new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            is_system: d.is_system
-          }));
-          setMessages(mapped);
-        }
-      } catch (err) {
-        console.warn('Chat load err:', err.message);
+      if (!error && data) {
+        const mapped = data.map((d) => ({
+          id: String(d.id),
+          sender_name: d.sender_name || 'Neighbor',
+          sender_role: d.sender_role || 'CITIZEN',
+          message: d.message,
+          photo_url: d.photo_url || null,
+          time: new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          is_system: d.is_system || false
+        }));
+        setMessages(mapped);
       }
-    };
+    } catch (err) {
+      console.warn('Chat load err:', err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadMessages();
+
+    // Subscribe to realtime incoming chat messages
+    const channel = supabase
+      .channel('public-chat-room')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'community_messages' },
+        (payload) => {
+          if (payload.new) {
+            const d = payload.new;
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: String(d.id),
+                sender_name: d.sender_name || 'Neighbor',
+                sender_role: d.sender_role || 'CITIZEN',
+                message: d.message,
+                photo_url: d.photo_url || null,
+                time: new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                is_system: d.is_system || false
+              }
+            ]);
+            setTimeout(() => {
+              scrollViewRef.current?.scrollToEnd({ animated: true });
+            }, 100);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleSend = async () => {
-    if (!inputText.trim()) return;
+    const text = inputText.trim();
+    if (!text || isSending) return;
 
+    setIsSending(true);
+    setInputText('');
+
+    const tempId = 'local-' + Date.now();
     const newMsg = {
-      id: 'client-' + Date.now(),
+      id: tempId,
       sender_name: 'You',
       sender_role: 'CITIZEN',
-      message: inputText.trim(),
+      message: text,
       photo_url: null,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       is_system: false
     };
 
     setMessages((prev) => [...prev, newMsg]);
-    setInputText('');
 
-    // Attempt Supabase insert
     try {
       await supabase.from('community_messages').insert([
         {
           dam_id: 'KANTALAI-01',
-          sender_name: 'You',
+          sender_name: 'Community Member',
           sender_role: 'CITIZEN',
-          message: newMsg.message,
+          message: text,
           is_system: false
         }
       ]);
     } catch (e) {
-      // Local fallback active
+      console.warn('Remote chat insert err:', e);
+    } finally {
+      setIsSending(false);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
-
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
   };
 
   return (
@@ -127,13 +140,11 @@ export default function CommunityChatScreen({ t, onBack }) {
             </TouchableOpacity>
           )}
           <View>
-            <Text style={styles.channelTitle}>{t.communityChat}</Text>
-            <Text style={styles.channelSub}>Kantalai Community • 125 {t.communityMembers || 'members'}</Text>
+            <Text style={styles.channelTitle}>{t.communityChat || 'Community Discussion'}</Text>
+            <Text style={styles.channelSub}>Kantalai Reservoir Community Channel</Text>
           </View>
         </View>
-        <View style={styles.groupAvatar}>
-          <Text style={styles.groupAvatarText}>👥</Text>
-        </View>
+        <ChatBubbleIcon size={24} color="#2563EB" />
       </View>
 
       {/* Messages Scroll Feed */}
@@ -143,68 +154,88 @@ export default function CommunityChatScreen({ t, onBack }) {
         contentContainerStyle={styles.messagesContent}
         onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
       >
-        {messages.map((item) => {
-          if (item.is_system) {
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color="#2563EB" />
+            <Text style={styles.loadingText}>Loading community discussion...</Text>
+          </View>
+        ) : messages.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <ChatBubbleIcon size={40} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>No Messages Yet</Text>
+            <Text style={styles.emptySub}>
+              Be the first to post a message or question regarding local weather, water levels, or road conditions.
+            </Text>
+          </View>
+        ) : (
+          messages.map((item) => {
+            if (item.is_system) {
+              return (
+                <View key={item.id} style={styles.systemMsgContainer}>
+                  <View style={styles.systemBadge}>
+                    <Text style={styles.systemIcon}>ℹ️</Text>
+                    <Text style={styles.systemText}>{item.message}</Text>
+                  </View>
+                </View>
+              );
+            }
+
+            const isMe = item.sender_name === 'You';
             return (
-              <View key={item.id} style={styles.systemMsgContainer}>
-                <View style={styles.systemBadge}>
-                  <Text style={styles.systemIcon}>ℹ️</Text>
-                  <Text style={styles.systemText}>{item.message}</Text>
+              <View
+                key={item.id}
+                style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowOther]}
+              >
+                {!isMe && (
+                  <View style={styles.avatarCircle}>
+                    <Text style={styles.avatarText}>{item.sender_name.charAt(0)}</Text>
+                  </View>
+                )}
+
+                <View
+                  style={[
+                    styles.msgBubble,
+                    isMe ? styles.bubbleMe : styles.bubbleOther
+                  ]}
+                >
+                  {!isMe && (
+                    <Text style={styles.senderName}>{item.sender_name}</Text>
+                  )}
+
+                  {item.photo_url && (
+                    <Image source={{ uri: item.photo_url }} style={styles.chatImage} resizeMode="cover" />
+                  )}
+
+                  <Text style={[styles.msgText, isMe && styles.msgTextMe]}>
+                    {item.message}
+                  </Text>
+                  <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>
+                    {item.time}
+                  </Text>
                 </View>
               </View>
             );
-          }
-
-          const isMe = item.sender_name === 'You';
-          return (
-            <View
-              key={item.id}
-              style={[styles.msgRow, isMe ? styles.msgRowMe : styles.msgRowOther]}
-            >
-              {!isMe && (
-                <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarText}>{item.sender_name.charAt(0)}</Text>
-                </View>
-              )}
-
-              <View
-                style={[
-                  styles.msgBubble,
-                  isMe ? styles.bubbleMe : styles.bubbleOther
-                ]}
-              >
-                {!isMe && (
-                  <Text style={styles.senderName}>{item.sender_name}</Text>
-                )}
-
-                {item.photo_url && (
-                  <Image source={{ uri: item.photo_url }} style={styles.chatImage} />
-                )}
-
-                <Text style={[styles.msgText, isMe && styles.msgTextMe]}>
-                  {item.message}
-                </Text>
-                <Text style={[styles.msgTime, isMe && styles.msgTimeMe]}>
-                  {item.time}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
+          })
+        )}
       </ScrollView>
 
       {/* Input Bar */}
       <View style={styles.inputContainer}>
         <TextInput
           style={styles.input}
-          placeholder={t.typeMessage || 'Type a message...'}
+          placeholder={t.typeMessage || 'Type a message to community...'}
           placeholderTextColor="#94A3B8"
           value={inputText}
           onChangeText={setInputText}
           onSubmitEditing={handleSend}
+          editable={!isSending}
         />
-        <TouchableOpacity style={styles.sendBtn} onPress={handleSend}>
-          <Text style={styles.sendIcon}>➤</Text>
+        <TouchableOpacity style={styles.sendBtn} onPress={handleSend} disabled={isSending}>
+          {isSending ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.sendIcon}>➤</Text>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -228,18 +259,16 @@ const styles = StyleSheet.create({
   backArrow: { fontSize: 22, color: '#1E293B', fontWeight: '700' },
   channelTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
   channelSub: { fontSize: 11, color: '#64748B', marginTop: 1 },
-  groupAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  groupAvatarText: { fontSize: 16 },
 
   messagesList: { flex: 1 },
   messagesContent: { padding: 16, paddingBottom: 20 },
+
+  loadingContainer: { alignItems: 'center', paddingVertical: 40 },
+  loadingText: { color: '#64748B', fontSize: 12, marginTop: 8 },
+
+  emptyContainer: { alignItems: 'center', paddingVertical: 50, paddingHorizontal: 20 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#64748B', marginTop: 10 },
+  emptySub: { fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 4, lineHeight: 18 },
 
   msgRow: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end' },
   msgRowOther: { justifyContent: 'flex-start' },
@@ -257,7 +286,7 @@ const styles = StyleSheet.create({
   avatarText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
 
   msgBubble: {
-    maxWidth: '75%',
+    maxWidth: '78%',
     borderRadius: 14,
     padding: 10,
     shadowColor: '#000',

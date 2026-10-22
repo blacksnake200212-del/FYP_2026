@@ -49,11 +49,12 @@ export default function PublicApp() {
   const [pushRegistered, setPushRegistered] = useState(false);
 
   // Live Dam Status State (from Supabase public_status view)
-  const [waterLevel, setWaterLevel] = useState(81.5);
-  const [gatePercent, setGatePercent] = useState(30);
-  const [alertKey, setAlertKey] = useState('CLEAR_AREA'); // NORMAL, PRE_WARNING, CLEAR_AREA, DANGER
-  const [trend, setTrend] = useState('STEADY'); // RISING, STEADY, FALLING
-  const [lastSyncTime, setLastSyncTime] = useState('Just now');
+  const [waterLevel, setWaterLevel] = useState(0.0);
+  const [gatePercent, setGatePercent] = useState(0);
+  const [alertKey, setAlertKey] = useState('NORMAL');
+  const [trend, setTrend] = useState('STEADY');
+  const [lastSyncTime, setLastSyncTime] = useState('Connecting...');
+  const [hasRealTelemetry, setHasRealTelemetry] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // App Version & Update Strategy State
@@ -222,6 +223,7 @@ export default function PublicApp() {
           const diffSec = Math.floor((Date.now() - recTime.getTime()) / 1000);
           setStaleElapsedSec(diffSec);
           setIsDataStale(diffSec > 120);
+          setHasRealTelemetry(true);
 
           const now = new Date();
           setLastSyncTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -278,6 +280,7 @@ export default function PublicApp() {
         const diffSec = Math.floor((Date.now() - prev.getTime()) / 1000);
         setStaleElapsedSec(diffSec);
         setIsDataStale(diffSec > 120);
+          setHasRealTelemetry(true);
         return prev;
       });
     }, 5000);
@@ -454,10 +457,10 @@ export default function PublicApp() {
                 <View>
                   <Text style={styles.mwLabel}>{t.waterLevel || 'Water Level'}</Text>
                   <Text style={styles.mwValue}>
-                    {((waterLevel / 100.0) * 3.00).toFixed(2)} m
+                    {hasRealTelemetry ? `${((waterLevel / 100.0) * 3.00).toFixed(2)} m` : '0.00 m'}
                   </Text>
                   <Text style={styles.mwSubValue}>
-                    ({Math.round((waterLevel / 100.0) * 300)} cm)
+                    {hasRealTelemetry ? `(${Math.round((waterLevel / 100.0) * 300)} cm)` : '(Awaiting Sensors)'}
                   </Text>
                 </View>
               </View>
