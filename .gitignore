@@ -33,3 +33,5 @@ scratch/
 *.tmp
 *.log
 *.zip
+*.apk
+*.aab
