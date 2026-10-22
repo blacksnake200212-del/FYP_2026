@@ -474,6 +474,26 @@
       try { localStorage.setItem('sdas_sim_reports', JSON.stringify(reports)); } catch(e) {}
     }
 
+    // Operator Contacts State (Persisted in localStorage with the 3 Required Test Numbers)
+    let opContactsTab = 'EMERGENCY';
+    let showSimAddContactModal = false;
+    let simContacts = JSON.parse(localStorage.getItem('sdas_sim_contacts') || 'null');
+    if (!simContacts || simContacts.length === 0) {
+      simContacts = [
+        { id: 1, name: "District Secretariat", phone: "+94740099235", category: "EMERGENCY", role: "DISTRICT_SECRETARIAT", tier: 1 },
+        { id: 2, name: "Police Emergency", phone: "+94712833936", category: "EMERGENCY", role: "POLICE", tier: 1 },
+        { id: 3, name: "Fire & Rescue", phone: "+94781099235", category: "EMERGENCY", role: "FIRE_RESCUE", tier: 1 },
+        { id: 4, name: "Meteorological Department", phone: "+94 11 268 6688", category: "EMERGENCY", role: "MET_DEPT", tier: 2 },
+        { id: 5, name: "Kantalai Grama Niladhari", phone: "+94 26 222 2111", category: "PUBLIC", role: "PUBLIC_ADMIN", tier: 3 },
+        { id: 6, name: "Community Disaster Committee", phone: "+94 26 222 4555", category: "PUBLIC", role: "COMMUNITY", tier: 3 }
+      ];
+      try { localStorage.setItem('sdas_sim_contacts', JSON.stringify(simContacts)); } catch(e) {}
+    }
+
+    function saveSimContacts() {
+      try { localStorage.setItem('sdas_sim_contacts', JSON.stringify(simContacts)); } catch(e) {}
+    }
+
     // Community Sub-Tab state ('alerts', 'chat', 'report')
     let pubCommunitySubTab = 'alerts';
     let selectedSimDepth = '0.4m (Knee)';
@@ -1386,69 +1406,174 @@
       `;
     }
 
+    function setOpContactsTab(tab) {
+      opContactsTab = tab;
+      const vp = document.getElementById('op-viewport');
+      renderOpContacts(vp);
+    }
+
+    function toggleSimAddContact(show) {
+      showSimAddContactModal = show;
+      const vp = document.getElementById('op-viewport');
+      renderOpContacts(vp);
+    }
+
+    function saveSimNewContact() {
+      const name = document.getElementById('sim-new-name')?.value.trim();
+      const phone = document.getElementById('sim-new-phone')?.value.trim();
+      const role = document.getElementById('sim-new-role')?.value || 'OFFICER';
+      const category = opContactsTab;
+
+      if (!name || !phone) {
+        alert("Please enter both contact name and phone number.");
+        return;
+      }
+
+      const newC = {
+        id: Date.now(),
+        name: name,
+        phone: phone,
+        category: category,
+        role: role,
+        tier: 1
+      };
+
+      simContacts.unshift(newC);
+      saveSimContacts();
+      showSimAddContactModal = false;
+      const vp = document.getElementById('op-viewport');
+      renderOpContacts(vp);
+
+      alert(`✓ Contact Saved to Database!\n\n"${name}" (${phone}) has been registered in the SDAS Emergency Contacts database table.\nReady for automated cellular SMS dispatch.`);
+    }
+
+    function deleteSimContact(id, name) {
+      if (confirm(`Remove "${name}" from emergency directory database?`)) {
+        simContacts = simContacts.filter(c => c.id !== id);
+        saveSimContacts();
+        const vp = document.getElementById('op-viewport');
+        renderOpContacts(vp);
+      }
+    }
+
     function renderOpContacts(vp) {
+      const activeContacts = simContacts.filter(c => c.category === opContactsTab);
+
       vp.innerHTML = `
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
           <button style="background: none; border: none; font-size: 20px; color: #FFF; cursor: pointer;" onclick="setOperatorScreen('dashboard')">←</button>
-          <span style="font-size: 16px; font-weight: 800; color: #FFFFFF;">Contacts & Messaging</span>
-          <div style="width: 24px;"></div>
+          <div style="text-align: center;">
+            <div style="font-size: 15px; font-weight: 800; color: #FFFFFF;">Contacts & Messaging</div>
+            <div style="font-size: 10px; color: #38BDF8; font-weight: 600;">Database Sync • SIM800L Gateway</div>
+          </div>
+          <button onclick="toggleSimAddContact(!showSimAddContactModal)" style="background: #0284C7; border: none; color: #FFF; border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: 700; cursor: pointer;">
+            + Add
+          </button>
         </div>
 
         <!-- Tabs -->
-        <div style="display: flex; background: #1E293B; border-radius: 12px; padding: 3px; margin-bottom: 14px;">
-          <div style="flex: 1; text-align: center; padding: 8px; background: #0284C7; border-radius: 10px; font-size: 12px; font-weight: 700;">Emergency Contacts</div>
-          <div style="flex: 1; text-align: center; padding: 8px; color: #94A3B8; font-size: 12px; font-weight: 600; cursor: pointer;">Public Contacts</div>
+        <div style="display: flex; background: #1E293B; border-radius: 12px; padding: 3px; margin-bottom: 12px;">
+          <button onclick="setOpContactsTab('EMERGENCY')" style="flex: 1; text-align: center; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; ${opContactsTab === 'EMERGENCY' ? 'background: #0284C7; color: #FFF;' : 'background: transparent; color: #94A3B8;'}">
+            Emergency (${simContacts.filter(c => c.category === 'EMERGENCY').length})
+          </button>
+          <button onclick="setOpContactsTab('PUBLIC')" style="flex: 1; text-align: center; padding: 8px 4px; border: none; border-radius: 10px; font-size: 11px; font-weight: 700; cursor: pointer; ${opContactsTab === 'PUBLIC' ? 'background: #0284C7; color: #FFF;' : 'background: transparent; color: #94A3B8;'}">
+            Public (${simContacts.filter(c => c.category === 'PUBLIC').length})
+          </button>
         </div>
 
-        <!-- Contacts List with the 3 Required Testing Numbers -->
-        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 22px;">👤</span>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; color: #FFF;">District Secretariat</div>
-              <div style="font-size: 11px; color: #94A3B8;">+94740099235</div>
+        ${showSimAddContactModal ? `
+          <!-- Manual Add Contact Form (Saves to Database) -->
+          <div style="background: #0F172A; border: 1.5px solid #0284C7; border-radius: 14px; padding: 12px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span style="font-size: 12px; font-weight: 800; color: #38BDF8;">+ Add Contact to Database</span>
+              <button onclick="toggleSimAddContact(false)" style="background: none; border: none; color: #94A3B8; font-size: 14px; cursor: pointer;">✕</button>
+            </div>
+            <input type="text" id="sim-new-name" placeholder="Full Name or Authority (e.g. Hospital)" style="width: 100%; box-sizing: border-box; background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; color: #FFF; font-size: 11px; margin-bottom: 6px;" />
+            <input type="text" id="sim-new-phone" placeholder="Phone (e.g. +94771234567)" style="width: 100%; box-sizing: border-box; background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 6px 10px; color: #FFF; font-size: 11px; margin-bottom: 6px;" />
+            <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+              <select id="sim-new-role" style="flex: 1; background: #1E293B; border: 1px solid #334155; border-radius: 8px; padding: 6px; color: #FFF; font-size: 11px;">
+                <option value="OFFICER">OFFICER</option>
+                <option value="POLICE">POLICE</option>
+                <option value="FIRE_RESCUE">FIRE RESCUE</option>
+                <option value="MET_DEPT">MET DEPT</option>
+                <option value="HOSPITAL">HOSPITAL</option>
+                <option value="COMMUNITY">COMMUNITY</option>
+              </select>
+              <button onclick="saveSimNewContact()" style="flex: 1; background: #10B981; color: #FFF; border: none; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; padding: 6px;">
+                💾 Save to DB
+              </button>
             </div>
           </div>
-          <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" onclick="alert('Calling +94740099235...')">📞</button>
-        </div>
+        ` : ''}
 
-        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 22px;">🛡️</span>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; color: #FFF;">Police Emergency</div>
-              <div style="font-size: 11px; color: #94A3B8;">+94712833936</div>
+        <!-- Contacts List from Database -->
+        <div style="display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; margin-bottom: 12px; padding-right: 2px;">
+          ${activeContacts.length === 0 ? `
+            <div style="text-align: center; padding: 18px; color: #64748B; font-size: 11px;">No contacts in this category. Click "+ Add" above.</div>
+          ` : activeContacts.map(c => `
+            <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 0;">
+              <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                <span style="font-size: 18px;">${c.role === 'POLICE' ? '🛡️' : c.role === 'FIRE_RESCUE' ? '🔥' : c.role === 'MET_DEPT' ? '⛅' : '👤'}</span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #FFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.name}</span>
+                    <span style="background: rgba(16,185,129,0.2); color: #10B981; font-size: 8px; font-weight: 800; padding: 1px 4px; border-radius: 4px;">✓ DB</span>
+                  </div>
+                  <div style="font-size: 10px; color: #94A3B8;">${c.phone}</div>
+                </div>
+              </div>
+              <div style="display: flex; gap: 4px;">
+                <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 5px 8px; border-radius: 6px; font-size: 11px; cursor: pointer;" onclick="alert('Calling ${c.phone}...')">📞</button>
+                <button style="background: rgba(56,189,248,0.2); border: none; color: #38BDF8; padding: 5px 8px; border-radius: 6px; font-size: 11px; cursor: pointer;" onclick="alert('Direct SMS to ${c.name} (${c.phone}): Alert template prepared.')">💬</button>
+                <button style="background: rgba(239,68,68,0.2); border: none; color: #EF4444; padding: 5px 8px; border-radius: 6px; font-size: 11px; cursor: pointer;" onclick="deleteSimContact(${c.id}, '${c.name.replace(/'/g, "\\'")}')">🗑️</button>
+              </div>
             </div>
-          </div>
-          <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" onclick="alert('Calling +94712833936...')">📞</button>
+          `).join('')}
         </div>
 
-        <div class="op-card" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 22px;">🔥</span>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; color: #FFF;">Fire & Rescue</div>
-              <div style="font-size: 11px; color: #94A3B8;">+94781099235</div>
-            </div>
+        <!-- Emergency Broadcast Messaging Section -->
+        <div style="background: #1E293B; border: 1px solid #334155; border-radius: 14px; padding: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 800; color: #E2E8F0;">Send Alert to Saved Contacts</span>
+            <span style="background: #0284C7; color: #FFF; font-size: 9px; font-weight: 800; padding: 2px 6px; border-radius: 6px;">
+              ${activeContacts.length} Recipients
+            </span>
           </div>
-          <button style="background: rgba(16,185,129,0.2); border: none; color: #10B981; padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" onclick="alert('Calling +94781099235...')">📞</button>
-        </div>
 
-        <!-- Send Alert (To Public) -->
-        <div style="font-size: 12px; font-weight: 700; color: #94A3B8; margin: 14px 0 6px;">Send Alert (To Public)</div>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" id="alert-msg-input" placeholder="Emergency message..." style="flex: 1; background: #1E293B; border: 1px solid #334155; border-radius: 12px; padding: 10px 12px; color: #FFF; font-size: 12px;" />
-          <button style="background: #0284C7; color: #FFF; border: none; border-radius: 12px; padding: 10px 16px; font-weight: 700; font-size: 12px; cursor: pointer;" onclick="sendSimAlert()">Send ➤</button>
+          <!-- Quick Template Pills -->
+          <div style="display: flex; gap: 4px; margin-bottom: 6px; overflow-x: auto;">
+            <button onclick="setSimAlertText('🚨 [CRITICAL DANGER] Sluice gate opening to 50% flood relief. Immediate evacuation ordered for lowland riverbanks.')" style="background: #0B132B; border: 1px solid #EF4444; color: #F87171; font-size: 9px; font-weight: 700; padding: 3px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap;">🚨 Critical 50%</button>
+            <button onclick="setSimAlertText('⚠️ [PRE-WARNING] Water level rising rapidly. Gate in automatic standby. Engineers monitor telemetry.')" style="background: #0B132B; border: 1px solid #F59E0B; color: #FBBF24; font-size: 9px; font-weight: 700; padding: 3px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap;">⚠️ Pre-Warning</button>
+            <button onclick="setSimAlertText('✓ [ALL CLEAR] Water level stabilized. Spillways secure. Normal operations restored.')" style="background: #0B132B; border: 1px solid #10B981; color: #34D399; font-size: 9px; font-weight: 700; padding: 3px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap;">✓ All Clear</button>
+          </div>
+
+          <textarea id="alert-msg-input" rows="2" placeholder="Emergency broadcast text..." style="width: 100%; box-sizing: border-box; background: #0B132B; border: 1px solid #334155; border-radius: 8px; padding: 6px 8px; color: #FFF; font-size: 11px; margin-bottom: 8px; resize: none;">[SDAS CRITICAL DANGER] Sluice gate opening to 50% flood relief. Immediate evacuation ordered for lowland riverbanks.</textarea>
+
+          <button onclick="sendSimAlert()" style="width: 100%; background: #EF4444; color: #FFF; border: none; border-radius: 10px; padding: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            📡 Queue GSM SMS & Send Alert to Contacts (${activeContacts.length})
+          </button>
         </div>
       `;
     }
 
+    function setSimAlertText(text) {
+      const inp = document.getElementById('alert-msg-input');
+      if (inp) inp.value = text;
+    }
+
     function sendSimAlert() {
       const inp = document.getElementById('alert-msg-input');
-      const val = inp.value.trim();
-      if (!val) return;
-      alert(`Emergency Broadcast Dispatched: "${val}" sent to Public App and SMS Gateway.`);
-      inp.value = '';
+      const val = inp?.value.trim();
+      if (!val) {
+        alert("Please enter a message to broadcast.");
+        return;
+      }
+      const activeContacts = simContacts.filter(c => c.category === opContactsTab);
+      alert(`✓ Emergency Broadcast Dispatched & Queued in Database!\n\n` +
+            `• Target Group: ${opContactsTab} (${activeContacts.length} saved contacts)\n` +
+            `• SIM800L Cellular Modem: SMS job QUEUED in database\n` +
+            `• Public Mobile App: Alert banner broadcasted\n\n` +
+            `Recipients: ${activeContacts.map(c => c.name).join(', ')}`);
     }
 
     function renderOpReports(vp) {
