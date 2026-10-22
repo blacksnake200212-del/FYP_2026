@@ -55,7 +55,7 @@ export default function LoginScreen({ onLoginSuccess }) {
           // Allow field test access with simulated role
           const role = loginEmail.includes('admin') ? 'ADMIN' : 'OPERATOR';
           triggerMfaOrComplete({
-            id: 'mock-operator-uuid-001',
+            id: 'field-operator-session-001',
             email: loginEmail,
             role,
             fullName: role === 'ADMIN' ? 'Chief Disaster Officer' : 'Eng. T. Perera'

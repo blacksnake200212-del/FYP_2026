@@ -830,33 +830,31 @@
 
   <script>
     // State
-    let currentWaterPct = 68;
+    let currentWaterPct = 0;
     let gatePercent = 0;
     let systemMode = 'AUTO';
     let photoAttached = false;
 
-    let reports = [
-      {
-        id: 1,
-        loc: "Kantalai, 2.4 km",
-        time: "09:15 AM",
-        desc: "Water is covering the road near the bridge.",
-        verified: true,
-        photo: "https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500"
-      },
-      {
-        id: 2,
-        loc: "Mahaweli Rd, 5.1 km",
-        time: "09:20 AM",
-        desc: "Moderate water level on the road near agricultural canal.",
-        verified: false,
-        photo: null
-      }
-    ];
+    let reports = JSON.parse(localStorage.getItem('sdas_sim_reports') || '[]');
+
+    function saveSimReports() {
+      try { localStorage.setItem('sdas_sim_reports', JSON.stringify(reports)); } catch(e) {}
+    }
 
     function renderUpdatesFeed() {
       const feed = document.getElementById('updates-feed');
-      feed.innerHTML = reports.map(r => `
+      const verifiedReports = reports.filter(r => r.verified);
+      if (verifiedReports.length === 0) {
+        feed.innerHTML = `
+          <div style="background: #FFFFFF; border: 1px dashed #CBD5E1; border-radius: 12px; padding: 24px; text-align: center; margin-top: 10px;">
+            <div style="font-size: 24px; margin-bottom: 6px;">🛡️</div>
+            <strong style="font-size: 13px; color: #0F172A;">No Active Flood Alerts</strong>
+            <p style="font-size: 11px; color: #64748B; margin: 4px 0 0;">All waterways and downstream sectors are operating normally.</p>
+          </div>
+        `;
+        return;
+      }
+      feed.innerHTML = verifiedReports.map(r => `
         <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 12px; margin-bottom: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <span style="background: ${r.verified ? '#EF4444' : '#64748B'}; color: #fff; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 800;">
@@ -877,6 +875,17 @@
       const list = document.getElementById('op-reports-list');
       const pendingCount = reports.filter(r => !r.verified).length;
       document.getElementById('op-badge-pending').innerText = pendingCount;
+
+      if (reports.length === 0) {
+        list.innerHTML = `
+          <div style="background: #1E293B; border: 1px dashed #334155; border-radius: 10px; padding: 20px; text-align: center;">
+            <div style="font-size: 22px; margin-bottom: 6px;">📋</div>
+            <div style="font-size: 12px; font-weight: 700; color: #94A3B8;">No Reports Awaiting Action</div>
+            <div style="font-size: 10px; color: #64748B; margin-top: 4px;">Submit a flood report from the Public App on the left to test verification.</div>
+          </div>
+        `;
+        return;
+      }
 
       list.innerHTML = reports.map(r => `
         <div class="report-item">
@@ -913,6 +922,7 @@
       };
 
       reports.unshift(newRep);
+      saveSimReports();
       renderUpdatesFeed();
       renderOperatorReports();
 
@@ -925,6 +935,7 @@
       const r = reports.find(x => x.id === id);
       if (r) {
         r.verified = true;
+        saveSimReports();
         renderUpdatesFeed();
         renderOperatorReports();
         alert(`✓ Report for ${r.loc} Verified! Community push notification dispatched to nearby residents.`);
