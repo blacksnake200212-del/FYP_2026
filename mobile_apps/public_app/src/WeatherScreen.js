@@ -20,16 +20,16 @@ import {
 
 export default function WeatherScreen({ onBack, weatherData, dhtData }) {
   const weather = weatherData || {
-    condition: 'Partly Cloudy',
-    tempC: 28.4,
-    feelsLikeC: 31,
+    condition: 'Live Telemetry',
+    tempC: 0.0,
+    feelsLikeC: 0.0,
     windSpeedKmh: 12,
-    humidityPct: 74,
+    humidityPct: 0.0,
     rainChancePct: 20,
     sunrise: '5:52 AM',
     sunset: '6:12 PM'
   };
-  const dht = dhtData || { temperature: weather.tempC, humidity: weather.humidityPct, speedOfSound: (331.4 + 0.606 * weather.tempC).toFixed(1) };
+  const dht = dhtData || { temperature: weather.tempC, humidity: weather.humidityPct, speedOfSound: 331.4 };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -73,20 +73,24 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
           <View style={styles.dhtGrid}>
             <View style={styles.dhtItem}>
               <Text style={styles.dhtItemLabel}>Temperature</Text>
-              <Text style={[styles.dhtItemVal, { color: '#D97706' }]}>{dht?.temperature || weather.tempC}°C</Text>
+              <Text style={[styles.dhtItemVal, { color: '#D97706' }]}>
+                {dht?.temperature !== undefined && dht.temperature !== null ? `${dht.temperature}°C` : '--'}
+              </Text>
               <Text style={styles.dhtItemSub}>DHT22 Calibrated</Text>
             </View>
             <View style={styles.dhtDivider} />
             <View style={styles.dhtItem}>
               <Text style={styles.dhtItemLabel}>Relative Humidity</Text>
-              <Text style={[styles.dhtItemVal, { color: '#0284C7' }]}>{dht?.humidity || weather.humidityPct}%</Text>
+              <Text style={[styles.dhtItemVal, { color: '#0284C7' }]}>
+                {dht?.humidity !== undefined && dht.humidity !== null ? `${dht.humidity}%` : '--'}
+              </Text>
               <Text style={styles.dhtItemSub}>Ambient Moisture</Text>
             </View>
             <View style={styles.dhtDivider} />
             <View style={styles.dhtItem}>
               <Text style={styles.dhtItemLabel}>Sound Velocity</Text>
               <Text style={[styles.dhtItemVal, { color: '#059669' }]}>
-                {dht?.speedOfSound || (331.4 + 0.606 * (weather.tempC || 28.4)).toFixed(1)} m/s
+                {dht?.speedOfSound !== undefined && dht.speedOfSound !== null ? `${dht.speedOfSound} m/s` : '--'}
               </Text>
               <Text style={styles.dhtItemSub}>v = 331.4 + 0.606·T</Text>
             </View>

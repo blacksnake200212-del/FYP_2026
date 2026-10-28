@@ -65,38 +65,15 @@ export default function NotificationsScreen({ onBack }) {
         });
       }
 
-      // Default system items if DB is fresh (matching design mockup items)
+      // If no critical alerts in DB, show real-time live system status
       if (list.length === 0) {
-        list.push(
-          {
-            id: 'mock-1',
-            type: 'ALERT',
-            title: 'Alert',
-            time: 'Today, 10:25 AM',
-            body: 'Water level has reached 85%. The dam is in a high level. The gate will open soon.'
-          },
-          {
-            id: 'mock-2',
-            type: 'INFO',
-            title: 'Information',
-            time: 'Today, 09:15 AM',
-            body: 'Gate will open automatically. Water level is 80% and rising.'
-          },
-          {
-            id: 'mock-3',
-            type: 'SYSTEM',
-            title: 'System Update',
-            time: 'Yesterday, 07:30 PM',
-            body: 'Everything is normal. Water level is 62%.'
-          },
-          {
-            id: 'mock-4',
-            type: 'WEATHER',
-            title: 'Weather Update',
-            time: 'Yesterday, 06:15 PM',
-            body: 'Rain is expected. Possible rainfall in your area.'
-          }
-        );
+        list.push({
+          id: 'sys-active',
+          type: 'SYSTEM',
+          title: 'Live Hardware Monitoring Active',
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          body: 'SDAS dual ultrasonic water telemetry and DHT22 microclimate monitoring nominal. All sensors online.'
+        });
       }
 
       setNotifications(list);

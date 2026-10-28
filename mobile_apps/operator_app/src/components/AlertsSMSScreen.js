@@ -18,17 +18,7 @@ export default function AlertsSMSScreen({ operatorUser }) {
   const [customNotes, setCustomNotes] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  const [smsQueue, setSmsQueue] = useState([
-    {
-      id: 'sms-demo-1',
-      group: 'TIER_1_ENGINEERS',
-      stage: 'PRE_WARNING',
-      message: '[SDAS PRE-WARNING] Tabbowa Dam reservoir approaching 80%. Sluice gates closed. Duty officers monitor telemetry.',
-      status: 'COMPLETED',
-      deliveredCount: 4,
-      createdAt: '09:45 AM'
-    }
-  ]);
+  const [smsQueue, setSmsQueue] = useState([]);
 
   // Template generator
   const getTemplateText = () => {

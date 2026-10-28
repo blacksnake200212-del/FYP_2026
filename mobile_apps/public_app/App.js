@@ -56,30 +56,30 @@ export default function PublicApp() {
   // More Menu Modal State
   const [showMoreModal, setShowMoreModal] = useState(false);
 
-  // Live Dam Telemetry from Supabase (or baseline Kantalai Dam telemetry)
-  const [waterLevel, setWaterLevel] = useState(45.0); // 45% matching screen mockup
+  // Live Dam Telemetry from Supabase (Strictly REAL physical telemetry)
+  const [waterLevel, setWaterLevel] = useState(0.0);
   const [gatePercent, setGatePercent] = useState(0);
   const [alertKey, setAlertKey] = useState('NORMAL');
   const [trend, setTrend] = useState('STEADY');
-  const [lastSyncTime, setLastSyncTime] = useState('Live Telemetry Connected');
+  const [lastSyncTime, setLastSyncTime] = useState('Connecting...');
   const [hasRealTelemetry, setHasRealTelemetry] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
 
   // DHT22 On-Site Environmental Sensor Telemetry
   const [dhtData, setDhtData] = useState({
-    temperature: 28.4,
-    humidity: 74.0,
-    speedOfSound: 348.6,
-    isLiveSensor: true,
-    condition: 'Partly Cloudy'
+    temperature: 0.0,
+    humidity: 0.0,
+    speedOfSound: 331.4,
+    isLiveSensor: false,
+    condition: 'Awaiting Hardware'
   });
 
   // Weather Telemetry Derived from Live DHT22 Sensor
   const weatherData = {
     condition: dhtData.condition,
     tempC: dhtData.temperature,
-    feelsLikeC: Math.round(dhtData.temperature + 2),
+    feelsLikeC: dhtData.temperature > 0 ? Math.round(dhtData.temperature + 2) : 0,
     windSpeedKmh: 12,
     humidityPct: dhtData.humidity,
     rainChancePct: 20,
@@ -104,7 +104,7 @@ export default function PublicApp() {
       const data = await response.json();
       if (Array.isArray(data) && data.length > 0) {
         const live = data[0];
-        const pct = parseFloat(live.level_pct || live.water_level_pct || 45.0);
+        const pct = live.level_pct !== undefined && live.level_pct !== null ? parseFloat(live.level_pct) : 0.0;
         setWaterLevel(pct);
         setGatePercent(parseInt(live.gate_percent, 10) || 0);
 
@@ -114,8 +114,8 @@ export default function PublicApp() {
         }
 
         // Extract live DHT22 temperature and humidity
-        const temp = parseFloat(live.temperature) || 28.4;
-        const hum = parseFloat(live.humidity) || 74.0;
+        const temp = live.temperature !== undefined && live.temperature !== null ? parseFloat(live.temperature) : 0.0;
+        const hum = live.humidity !== undefined && live.humidity !== null ? parseFloat(live.humidity) : 0.0;
         const speed = parseFloat((331.4 + 0.606 * temp).toFixed(1));
 
         setDhtData({
@@ -123,7 +123,7 @@ export default function PublicApp() {
           humidity: hum,
           speedOfSound: speed,
           isLiveSensor: true,
-          condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : 'Overcast'
+          condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : temp > 0 ? 'Overcast' : 'Live Sync'
         });
 
         setHasRealTelemetry(true);
@@ -144,7 +144,7 @@ export default function PublicApp() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'readings' }, (payload) => {
         if (payload?.new) {
           const r = payload.new;
-          const pct = parseFloat(r.level_pct || 45.0);
+          const pct = r.level_pct !== undefined && r.level_pct !== null ? parseFloat(r.level_pct) : 0.0;
           setWaterLevel(pct);
           setGatePercent(parseInt(r.gate_percent, 10) || 0);
 
@@ -153,9 +153,9 @@ export default function PublicApp() {
             setAlertKey(stateLabels[r.alert_state] || 'NORMAL');
           }
 
-          if (r.temperature !== undefined) {
-            const temp = parseFloat(r.temperature) || 28.4;
-            const hum = parseFloat(r.humidity) || 74.0;
+          if (r.temperature !== undefined && r.temperature !== null) {
+            const temp = parseFloat(r.temperature);
+            const hum = r.humidity !== undefined && r.humidity !== null ? parseFloat(r.humidity) : 0.0;
             setDhtData({
               temperature: temp,
               humidity: hum,
@@ -166,7 +166,7 @@ export default function PublicApp() {
           }
 
           setHasRealTelemetry(true);
-          setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         }
       })
       .subscribe();

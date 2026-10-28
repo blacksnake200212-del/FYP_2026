@@ -10,42 +10,12 @@ import {
 } from 'react-native';
 import { SUPABASE_CONFIG, supabase } from './supabaseClient';
 
-const SEED_FALLBACK_ALERTS = [
-  {
-    id: 'seed-1',
-    created_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    stage: 'CLEAR_AREA',
-    source: 'AUTO',
-    water_level_pct: 81.2,
-    gate_percent: 20,
-    message: 'Water breached 80% capacity threshold. Automated 20% gate release initiated. Downstream siren sounded.'
-  },
-  {
-    id: 'seed-2',
-    created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    stage: 'PRE_WARNING',
-    source: 'MANUAL',
-    water_level_pct: 62.4,
-    gate_percent: 0,
-    message: 'Water level reached 62.4%. Pre-warning SMS broadcast dispatched via SIM800L to registered emergency list. Sluice gate closed.'
-  },
-  {
-    id: 'seed-3',
-    created_at: new Date(Date.now() - 180 * 60 * 1000).toISOString(),
-    stage: 'NORMAL',
-    source: 'AUTO',
-    water_level_pct: 48.0,
-    gate_percent: 0,
-    message: 'Routine dam crest sensor health check passed. Reservoir levels stable within normal seasonal buffer.'
-  }
-];
-
 export default function AlertsTimeline({ currentStage = 'NORMAL' }) {
-  const [alerts, setAlerts] = useState(SEED_FALLBACK_ALERTS);
+  const [alerts, setAlerts] = useState([]);
   const [filter, setFilter] = useState('ALL'); // ALL, DANGER, CLEAR_AREA, PRE_WARNING
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch alerts from Supabase
+  // Fetch alerts from Supabase (Strictly REAL alerts)
   const fetchAlerts = async () => {
     setIsLoading(true);
     try {
@@ -59,7 +29,7 @@ export default function AlertsTimeline({ currentStage = 'NORMAL' }) {
 
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
+        if (Array.isArray(data)) {
           setAlerts(data);
         }
       }
@@ -158,60 +128,95 @@ export default function AlertsTimeline({ currentStage = 'NORMAL' }) {
       </View>
 
       {/* Timeline Stream */}
-      <View style={styles.timelineList}>
-        {filteredAlerts.map((item, index) => {
-          const theme = getStageTheme(item.stage);
-          const isLatest = index === 0;
+      {filteredAlerts.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyIcon}>🛡️</Text>
+          <Text style={styles.emptyTitle}>No Active Flood Advisories</Text>
+          <Text style={styles.emptyText}>
+            Reservoir telemetry streaming live from ESP32 node. No emergency flood alerts logged in database.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.timelineList}>
+          {filteredAlerts.map((item, index) => {
+            const theme = getStageTheme(item.stage);
+            const isLatest = index === 0;
 
-          return (
-            <View key={item.id || index} style={styles.timelineItem}>
-              {/* Left Column: Milestone Node & Spine */}
-              <View style={styles.spineColumn}>
-                <View style={[styles.dot, { backgroundColor: theme.color }]}>
-                  {isLatest && <View style={[styles.pulseRing, { borderColor: theme.color }]} />}
+            return (
+              <View key={item.id || index} style={styles.timelineItem}>
+                {/* Left Column: Milestone Node & Spine */}
+                <View style={styles.spineColumn}>
+                  <View style={[styles.dot, { backgroundColor: theme.color }]}>
+                    {isLatest && <View style={[styles.pulseRing, { borderColor: theme.color }]} />}
+                  </View>
+                  {index < filteredAlerts.length - 1 && <View style={styles.spineLine} />}
                 </View>
-                {index < filteredAlerts.length - 1 && <View style={styles.spineLine} />}
-              </View>
 
-              {/* Right Column: Alert Event Card */}
-              <View style={[styles.alertCard, { borderLeftColor: theme.color }]}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={[styles.stageBadge, { backgroundColor: theme.color }]}>
-                    <Text style={styles.stageBadgeText}>
-                      {theme.icon} {theme.label}
-                    </Text>
+                {/* Right Column: Alert Event Card */}
+                <View style={[styles.alertCard, { borderLeftColor: theme.color }]}>
+                  <View style={styles.cardHeaderRow}>
+                    <View style={[styles.stageBadge, { backgroundColor: theme.color }]}>
+                      <Text style={styles.stageBadgeText}>
+                        {theme.icon} {theme.label}
+                      </Text>
+                    </View>
+
+                    <View style={styles.sourceBadge}>
+                      <Text style={styles.sourceBadgeText}>
+                        {item.source === 'MANUAL' ? '👨‍💼 OPERATOR' : '🤖 AUTO'}
+                      </Text>
+                    </View>
                   </View>
 
-                  <View style={styles.sourceBadge}>
-                    <Text style={styles.sourceBadgeText}>
-                      {item.source === 'MANUAL' ? '👨‍💼 OPERATOR' : '🤖 AUTO'}
+                  <Text style={styles.timeText}>⏱️ {formatTime(item.created_at)}</Text>
+
+                  <Text style={styles.messageText}>{item.message}</Text>
+
+                  {/* Telemetry Snapshot at Trigger Moment */}
+                  <View style={styles.telemetrySnapshot}>
+                    <Text style={styles.telemetryTag}>
+                      Level: <Text style={styles.telemetryVal}>{Number(item.water_level_pct || 0).toFixed(1)}%</Text>
+                    </Text>
+                    <Text style={styles.telemetryTag}>
+                      Gate: <Text style={styles.telemetryVal}>{item.gate_percent ?? 0}% OPEN</Text>
                     </Text>
                   </View>
                 </View>
-
-                <Text style={styles.timeText}>⏱️ {formatTime(item.created_at)}</Text>
-
-                <Text style={styles.messageText}>{item.message}</Text>
-
-                {/* Telemetry Snapshot at Trigger Moment */}
-                <View style={styles.telemetrySnapshot}>
-                  <Text style={styles.telemetryTag}>
-                    Level: <Text style={styles.telemetryVal}>{Number(item.water_level_pct || 0).toFixed(1)}%</Text>
-                  </Text>
-                  <Text style={styles.telemetryTag}>
-                    Gate: <Text style={styles.telemetryVal}>{item.gate_percent ?? 0}% OPEN</Text>
-                  </Text>
-                </View>
               </View>
-            </View>
-          );
-        })}
-      </View>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  emptyCard: {
+    backgroundColor: '#0A1327',
+    borderRadius: 10,
+    padding: 20,
+    alignItems: 'center',
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#1E2F54'
+  },
+  emptyIcon: {
+    fontSize: 28,
+    marginBottom: 6
+  },
+  emptyTitle: {
+    color: '#F8FAFC',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4
+  },
+  emptyText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 16
+  },
   container: {
     backgroundColor: '#111C36',
     borderRadius: 14,

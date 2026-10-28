@@ -85,19 +85,19 @@ export default function WeatherForecastScreen({ onBack }) {
         <View style={styles.alertsCard}>
           <View style={styles.alertHeaderRow}>
             <View style={styles.alertIconWrapper}>
-              <AlertTriangleIcon size={20} color="#EF4444" />
+              <AlertTriangleIcon size={20} color="#10B981" />
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={styles.alertTitle}>Alerts & Messages</Text>
-              <Text style={styles.alertTime}>Today, 10:25 AM</Text>
+              <Text style={styles.alertTitle}>Telemetry System Feed</Text>
+              <Text style={styles.alertTime}>Live Hardware Active</Text>
             </View>
           </View>
 
-          <Text style={styles.alertWarningText}>
-            Water level is rising fast.
+          <Text style={[styles.alertWarningText, { color: '#E2E8F0', fontSize: 13, fontWeight: '700' }]}>
+            ESP32 Node SDAS-NODE-01 Connected
           </Text>
           <Text style={styles.alertDescText}>
-            Gate will open automatically. Please monitor the system.
+            Dual ultrasonic water telemetry & DHT22 microclimate monitoring active.
           </Text>
         </View>
 

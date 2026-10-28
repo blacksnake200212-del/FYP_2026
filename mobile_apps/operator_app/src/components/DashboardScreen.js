@@ -24,26 +24,26 @@ import { supabase } from '../supabaseClient';
 
 export default function DashboardScreen({ operatorUser }) {
   const [telemetry, setTelemetry] = useState({
-    levelPct: 68.0,
-    depthCm: 204,
-    depthM: 2.04,
+    levelPct: 0.0,
+    depthCm: 0,
+    depthM: 0.00,
     totalHeightM: 3.00,
     gatePercent: 0,
     alertState: 'NORMAL',
     controlMode: 'AUTO',
-    distance1: 96.0,
-    distance2: 96.5,
+    distance1: -1.0,
+    distance2: -1.0,
     sensorAgreed: true,
-    temperature: 28.0,
-    humidity: 75.0,
-    updatedAt: new Date().toISOString(),
-    hasRealData: true
+    temperature: 0.0,
+    humidity: 0.0,
+    updatedAt: null,
+    hasRealData: false
   });
 
   const [refreshing, setRefreshing] = useState(false);
   const [isSendingCommand, setIsSendingCommand] = useState(false);
 
-  // Fetch Latest Readings from Supabase
+  // Fetch Latest REAL Readings from Supabase (Strictly NO mock data)
   const fetchLatestReading = async () => {
     try {
       const { data, error } = await supabase
@@ -59,10 +59,10 @@ export default function DashboardScreen({ operatorUser }) {
         const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
         const modeLabels = ['AUTO', 'MANUAL', 'EMERGENCY'];
 
-        const dist1 = parseFloat(r.distance_1) || 96.0;
-        const dist2 = parseFloat(r.distance_2) || 96.5;
+        const dist1 = r.distance_1 !== undefined && r.distance_1 !== null ? parseFloat(r.distance_1) : -1.0;
+        const dist2 = r.distance_2 !== undefined && r.distance_2 !== null ? parseFloat(r.distance_2) : -1.0;
         const agreed = r.sensors_agreed !== undefined ? r.sensors_agreed : Math.abs(dist1 - dist2) <= 5.0;
-        const pct = parseFloat(r.level_pct) || 68.0;
+        const pct = r.level_pct !== undefined && r.level_pct !== null ? parseFloat(r.level_pct) : 0.0;
 
         const currentM = (pct / 100.0) * 3.00;
         const currentCm = Math.round(currentM * 100);
@@ -78,8 +78,8 @@ export default function DashboardScreen({ operatorUser }) {
           distance1: dist1,
           distance2: dist2,
           sensorAgreed: agreed,
-          temperature: parseFloat(r.temperature) || 28.0,
-          humidity: parseFloat(r.humidity) || 75.0,
+          temperature: r.temperature !== undefined && r.temperature !== null ? parseFloat(r.temperature) : 0.0,
+          humidity: r.humidity !== undefined && r.humidity !== null ? parseFloat(r.humidity) : 0.0,
           updatedAt: r.created_at || new Date().toISOString(),
           hasRealData: true
         }));
@@ -103,10 +103,10 @@ export default function DashboardScreen({ operatorUser }) {
             const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
             const modeLabels = ['AUTO', 'MANUAL', 'EMERGENCY'];
 
-            const dist1 = parseFloat(r.distance_1) || 96.0;
-            const dist2 = parseFloat(r.distance_2) || 96.5;
+            const dist1 = r.distance_1 !== undefined && r.distance_1 !== null ? parseFloat(r.distance_1) : -1.0;
+            const dist2 = r.distance_2 !== undefined && r.distance_2 !== null ? parseFloat(r.distance_2) : -1.0;
             const agreed = r.sensors_agreed !== undefined ? r.sensors_agreed : Math.abs(dist1 - dist2) <= 5.0;
-            const pct = parseFloat(r.level_pct) || 68.0;
+            const pct = r.level_pct !== undefined && r.level_pct !== null ? parseFloat(r.level_pct) : 0.0;
             const currentM = (pct / 100.0) * 3.00;
             const currentCm = Math.round(currentM * 100);
 
@@ -121,8 +121,8 @@ export default function DashboardScreen({ operatorUser }) {
               distance1: dist1,
               distance2: dist2,
               sensorAgreed: agreed,
-              temperature: parseFloat(r.temperature) || 28.0,
-              humidity: parseFloat(r.humidity) || 75.0,
+              temperature: r.temperature !== undefined && r.temperature !== null ? parseFloat(r.temperature) : 0.0,
+              humidity: r.humidity !== undefined && r.humidity !== null ? parseFloat(r.humidity) : 0.0,
               updatedAt: r.created_at || new Date().toISOString(),
               hasRealData: true
             }));

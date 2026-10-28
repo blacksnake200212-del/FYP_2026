@@ -27,23 +27,57 @@ const CHART_HEIGHT = 200;
 
 export default function HistoryInsightsScreen({ onBack }) {
   const [activeRange, setActiveRange] = useState('TODAY'); // 'TODAY', '7DAYS', '30DAYS'
+  const [points, setPoints] = useState([]);
+  const [stats, setStats] = useState({
+    currentLevelM: 0.0,
+    currentPct: 0,
+    highestLevelM: 0.0,
+    highestPct: 0,
+    lowestLevelM: 0.0,
+    lowestPct: 0
+  });
 
-  // Time-series telemetry points
-  const points = [
-    { time: '12 AM', levelM: 0.95, pct: 32 },
-    { time: '6 AM', levelM: 1.25, pct: 42 },
-    { time: '12 PM', levelM: 1.85, pct: 62 },
-    { time: '6 PM', levelM: 2.04, pct: 68 }, // Current point
-    { time: '12 AM', levelM: 1.65, pct: 55 }
-  ];
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const { data } = await supabase
+          .from('readings')
+          .select('created_at, level_pct')
+          .order('created_at', { ascending: false })
+          .limit(6);
 
-  // Current stats matching design mockup Screen 4
-  const currentLevelM = 2.04;
-  const currentPct = 68;
-  const highestLevelM = 2.65;
-  const highestPct = 88;
-  const lowestLevelM = 0.92;
-  const lowestPct = 31;
+        if (data && data.length > 0) {
+          const rev = [...data].reverse();
+          const pts = rev.map((r) => {
+            const pct = parseFloat(r.level_pct) || 0.0;
+            const m = parseFloat(((pct / 100.0) * 3.0).toFixed(2));
+            const t = new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return { time: t, levelM: m, pct };
+          });
+          setPoints(pts);
+
+          const pcts = pts.map((p) => p.pct);
+          const maxPct = Math.max(...pcts);
+          const minPct = Math.min(...pcts);
+          const curr = pts[pts.length - 1];
+          setStats({
+            currentLevelM: curr.levelM,
+            currentPct: Math.round(curr.pct),
+            highestLevelM: parseFloat(((maxPct / 100.0) * 3.0).toFixed(2)),
+            highestPct: Math.round(maxPct),
+            lowestLevelM: parseFloat(((minPct / 100.0) * 3.0).toFixed(2)),
+            lowestPct: Math.round(minPct)
+          });
+        }
+      } catch (err) {
+        console.warn('History fetch error:', err.message);
+      }
+    };
+
+    fetchHistory();
+  }, [activeRange]);
+
+  const { currentLevelM, currentPct, highestLevelM, highestPct, lowestLevelM, lowestPct } = stats;
 
   // Chart coordinates
   const paddingLeft = 32;
@@ -56,7 +90,8 @@ export default function HistoryInsightsScreen({ onBack }) {
   const maxVal = 3.0; // 3.00 m full supply level
   const minVal = 0.0;
 
-  const getX = (index) => paddingLeft + (index / (points.length - 1)) * graphWidth;
+  const denom = Math.max(1, points.length - 1);
+  const getX = (index) => paddingLeft + (index / denom) * graphWidth;
   const getY = (val) => paddingTop + graphHeight - ((val - minVal) / (maxVal - minVal)) * graphHeight;
 
   // Generate SVG smooth curve path
@@ -74,11 +109,12 @@ export default function HistoryInsightsScreen({ onBack }) {
   }, '');
 
   // Fill path under the curve
-  const fillD = `${pathD} L ${getX(points.length - 1)} ${paddingTop + graphHeight} L ${getX(0)} ${paddingTop + graphHeight} Z`;
+  const fillD = points.length > 0 ? `${pathD} L ${getX(points.length - 1)} ${paddingTop + graphHeight} L ${getX(0)} ${paddingTop + graphHeight} Z` : '';
 
-  // Highlight Current point (index 3: 6 PM, 2.04 m)
-  const currentX = getX(3);
-  const currentY = getY(currentLevelM);
+  // Highlight Current point (latest real point)
+  const highlightIdx = points.length > 0 ? points.length - 1 : 0;
+  const currentX = points.length > 0 ? getX(highlightIdx) : paddingLeft + graphWidth / 2;
+  const currentY = points.length > 0 ? getY(currentLevelM) : paddingTop + graphHeight / 2;
 
   return (
     <SafeAreaView style={styles.safeArea}>
