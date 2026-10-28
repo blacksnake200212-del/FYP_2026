@@ -1,0 +1,21 @@
+{
+  "name": "sdas-smart-dam-alerting-system",
+  "version": "2.1.0",
+  "description": "Smart Dam Alerting System (SDAS) - Real-time IoT Flood Forecasting, Dual Ultrasonic Telemetry, Actuator Control, and Downstream Warning Platform",
+  "scripts": {
+    "web": "node web_dashboard/server.js",
+    "start": "node web_dashboard/server.js",
+    "operator": "npm --prefix mobile_apps/operator_app start",
+    "public": "npm --prefix mobile_apps/public_app start"
+  },
+  "keywords": [
+    "sdas",
+    "esp32",
+    "iot",
+    "supabase",
+    "dam-safety",
+    "flood-alert"
+  ],
+  "author": "SDAS Engineering Team",
+  "license": "UNLICENSED"
+}

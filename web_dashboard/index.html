@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SDAS - Smart Dam Sensor & Telemetry Live Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
+  <!-- Supabase JS v2 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon">🌊</div>
+        <div class="brand-title">
+          <h1>Smart Dam Alerting System (SDAS)</h1>
+          <p>Real-Time Hardware Sensor Diagnostics &bull; Node: SDAS-NODE-01</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div id="sync-badge" class="status-badge connecting">
+          <div class="dot-pulse"></div>
+          <span id="sync-text">CONNECTING TO SUPABASE...</span>
+        </div>
+        <button id="btn-refresh" class="btn-refresh">
+          <span>🔄</span> Refresh Telemetry
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Content -->
+  <main>
+
+    <!-- Real-time Alert Stage Banner -->
+    <div id="alert-banner" class="alert-banner normal">
+      <div class="alert-left">
+        <div id="alert-icon" class="alert-icon">🛡️</div>
+        <div>
+          <div id="alert-title" class="alert-title">Initializing Telemetry Feed</div>
+          <div id="alert-subtitle" class="alert-subtitle">Connecting to edge hardware node via Supabase Cloud...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Grid: Gauge + Tank + Actuator -->
+    <div class="dashboard-grid">
+
+      <!-- 1. Circular Water Gauge Card (4 cols) -->
+      <div class="card col-gauge">
+        <div class="card-header" style="width: 100%;">
+          <div class="card-title">
+            <span class="icon">💧</span> Reservoir Water Level
+          </div>
+        </div>
+
+        <div class="gauge-wrapper">
+          <svg class="gauge-svg" viewBox="0 0 200 200">
+            <circle class="gauge-bg" cx="100" cy="100" r="90"></circle>
+            <circle id="gauge-bar" class="gauge-bar" cx="100" cy="100" r="90"></circle>
+          </svg>
+          <div class="gauge-center-text">
+            <div id="gauge-pct" class="gauge-percent">--%</div>
+            <div class="gauge-label">Live Capacity</div>
+          </div>
+        </div>
+
+        <div class="metrics-row">
+          <div class="metric-item">
+            <div id="val-depth" class="metric-val">-- m</div>
+            <div class="metric-sub">Water Depth</div>
+          </div>
+          <div class="metric-item">
+            <div id="val-freeboard" class="metric-val">-- m</div>
+            <div class="metric-sub">Freeboard</div>
+          </div>
+          <div class="metric-item">
+            <div id="val-volume" class="metric-val">-- MCM</div>
+            <div class="metric-sub">Est. Volume</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Reservoir Tank Visualizer (4 cols) -->
+      <div class="card col-tank">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">📊</span> Reservoir Elevation View
+          </div>
+        </div>
+
+        <div class="tank-container">
+          <!-- Live Water Level Fill -->
+          <div id="tank-water" class="tank-water"></div>
+
+          <!-- Threshold Markers -->
+          <div class="tank-threshold threshold-danger">85% DANGER CRITICAL</div>
+          <div class="tank-threshold threshold-clear">80% CLEAR AREA RELIEF</div>
+          <div class="tank-threshold threshold-prewarn">60% PRE-WARNING STANDBY</div>
+        </div>
+
+        <div style="margin-top: 12px; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+          <span>Crest Spillway (3.00m)</span>
+          <span id="tank-pct-label" style="color: var(--accent-cyan); font-weight: 700;">Awaiting Data</span>
+          <span>Dam Bed (0.00m)</span>
+        </div>
+      </div>
+
+      <!-- 3. Sluice Gate & Actuator (4 cols) -->
+      <div class="card col-actuator">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">⚙️</span> MG90S Sluice Gate Actuator
+          </div>
+        </div>
+
+        <div class="gate-visual-wrapper">
+          <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <span style="font-size: 12px; color: var(--text-muted); text-transform: uppercase;">Gate Travel</span>
+            <span id="gate-percent-val" style="font-size: 26px; font-weight: 900; color: #FFFFFF;">0%</span>
+          </div>
+
+          <div class="gate-progress-track">
+            <div id="gate-progress-fill" class="gate-progress-fill"></div>
+            <div class="gate-safety-marker" title="50% Physical Travel Limit"></div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted);">
+            <span>0% (Closed)</span>
+            <span style="color: #EF4444; font-weight: 700;">50% Max Safe Clamp (90°)</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <div class="gate-info-table">
+          <div class="info-tile">
+            <div class="info-tile-label">Servo Angle</div>
+            <div id="gate-angle-val" class="info-tile-val">0°</div>
+          </div>
+          <div class="info-tile">
+            <div class="info-tile-label">Control Mode</div>
+            <div id="gate-mode-val" class="info-tile-val">AUTO</div>
+          </div>
+          <div class="info-tile" style="grid-column: span 2;">
+            <div class="info-tile-label">Discharge Status</div>
+            <div id="gate-flow-val" class="info-tile-val">Gate Closed (Buffer Nominal)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Sensor Diagnostics Matrix (Full Width 12 cols) -->
+      <div class="card col-sensors">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">📡</span> All-Sensors Live Hardware Health & Diagnostic Matrix
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">
+            Real hardware signals from ESP32 GPIO Pins
+          </div>
+        </div>
+
+        <div class="sensors-grid">
+
+          <!-- Sensor 1: Primary HC-SR04 -->
+          <div id="s1-card" class="sensor-card">
+            <div class="sensor-top">
+              <div class="sensor-name">HC-SR04 #1 (Primary)</div>
+              <div id="s1-status" class="sensor-state-pill fault">WAITING</div>
+            </div>
+            <div class="sensor-primary-reading">
+              <span id="s1-dist">--</span><span class="unit">cm</span>
+            </div>
+            <div class="sensor-details">
+              <span>Pins: Trig 5 / Echo 19</span>
+              <span id="s1-quality">Awaiting Pulse</span>
+            </div>
+          </div>
+
+          <!-- Sensor 2: Redundant HC-SR04 -->
+          <div id="s2-card" class="sensor-card">
+            <div class="sensor-top">
+              <div class="sensor-name">HC-SR04 #2 (Redundant)</div>
+              <div id="s2-status" class="sensor-state-pill fault">WAITING</div>
+            </div>
+            <div class="sensor-primary-reading">
+              <span id="s2-dist">--</span><span class="unit">cm</span>
+            </div>
+            <div class="sensor-details">
+              <span>Pins: Trig 18 / Echo 21</span>
+              <span id="s2-agreement">Agreement Check</span>
+            </div>
+          </div>
+
+          <!-- Sensor 3: DHT22 Environmental Microclimate -->
+          <div id="dht-card" class="sensor-card">
+            <div class="sensor-top">
+              <div class="sensor-name">DHT22 Microclimate</div>
+              <div id="dht-status" class="sensor-state-pill fault">WAITING</div>
+            </div>
+            <div style="display: flex; gap: 16px; align-items: baseline;">
+              <div>
+                <span id="dht-temp" style="font-size: 26px; font-weight: 900; color: #F59E0B;">--</span>
+                <span style="font-size: 10px; color: var(--text-muted); display: block;">Ambient Temp</span>
+              </div>
+              <div>
+                <span id="dht-hum" style="font-size: 26px; font-weight: 900; color: #38BDF8;">--</span>
+                <span style="font-size: 10px; color: var(--text-muted); display: block;">Rel. Humidity</span>
+              </div>
+            </div>
+            <div class="sensor-details">
+              <span>Sound Speed: <b id="dht-speed" style="color: #34D399;">331.4 m/s</b></span>
+              <span>Pin: GPIO 4</span>
+            </div>
+          </div>
+
+          <!-- Sensor 4: Edge Node & GSM System Health -->
+          <div id="node-card" class="sensor-card active">
+            <div class="sensor-top">
+              <div class="sensor-name">Node Core & Network</div>
+              <div class="sensor-state-pill ok">ACTIVE</div>
+            </div>
+            <div style="display: flex; gap: 16px; align-items: baseline;">
+              <div>
+                <span id="node-packets" style="font-size: 22px; font-weight: 900; color: #FFFFFF;">0 Packets</span>
+                <span style="font-size: 10px; color: var(--text-muted); display: block;">Supabase Telemetry</span>
+              </div>
+            </div>
+            <div class="sensor-details">
+              <span>Heartbeat: <b id="node-latency" style="color: #38BDF8;">Online</b></span>
+              <span>SIM800L: Armed</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 5. Real-Time Telemetry Trend Chart (7 cols) -->
+      <div class="card col-chart">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">📈</span> Live Water Capacity Stream
+          </div>
+          <div style="font-size: 11px; color: var(--accent-cyan);">
+            Real readings time-series from Supabase
+          </div>
+        </div>
+
+        <div class="chart-container">
+          <canvas id="chart-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- 6. Raw Hardware Packet Inspector (5 cols) -->
+      <div class="card col-log">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">💻</span> Hardware Packet Inspector
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);">
+            Zero Mock Data &bull; Live Payload
+          </div>
+        </div>
+
+        <div id="raw-log" class="raw-log-box">Awaiting first live hardware packet from Supabase readings table...</div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap: 10px;">
+      <div>
+        <strong>SDAS Web Dashboard v2.1</strong> &bull; Tabbowa / Kantalai Dam Telemetry System
+      </div>
+      <div>
+        Connected to Supabase Project: <code style="color: var(--accent-cyan);">gpxakbveqnzqqpxvtkgf</code>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
