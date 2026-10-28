@@ -175,7 +175,16 @@ export default function DashboardScreen({ operatorUser }) {
 
   const remainingM = Math.max(0, telemetry.totalHeightM - telemetry.depthM).toFixed(2);
 
+  const packetAgeMs = telemetry.updatedAt ? (Date.now() - new Date(telemetry.updatedAt).getTime()) : Infinity;
+  const isHardwareLive = telemetry.hasRealData && packetAgeMs <= 30000;
+  const timeStr = telemetry.updatedAt
+    ? new Date(telemetry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    : 'Waiting';
+
   const getBadgeConfig = () => {
+    if (!isHardwareLive) {
+      return { label: 'Node Offline', icon: '🔌', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.15)', border: '#64748B' };
+    }
     switch (telemetry.alertState) {
       case 'PRE_WARNING':
         return { label: 'Pre-Warning', icon: '⚠️', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)', border: '#F59E0B' };
@@ -222,9 +231,19 @@ export default function DashboardScreen({ operatorUser }) {
           <View style={{ marginLeft: 10 }}>
             <Text style={styles.damName}>Kantalai Dam</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#10B981', marginRight: 6 }} />
-              <Text style={styles.damStatusSub}>
-                Live Sync: {new Date(telemetry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 3.5,
+                  backgroundColor: isHardwareLive ? '#10B981' : '#EF4444',
+                  marginRight: 6
+                }}
+              />
+              <Text style={[styles.damStatusSub, !isHardwareLive && { color: '#F87171' }]}>
+                {isHardwareLive
+                  ? `Live Sync: ${timeStr}`
+                  : (telemetry.hasRealData ? `Offline (Last: ${timeStr})` : 'Hardware Disconnected')}
               </Text>
             </View>
           </View>

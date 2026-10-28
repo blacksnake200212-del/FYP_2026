@@ -142,54 +142,72 @@ function processTelemetryRow(row) {
 
 // Update DOM elements with live telemetry
 function renderUI(rawRow) {
-  // 1. Sync Status Badge
-  const now = new Date();
+  const now = Date.now();
+  const packetAgeMs = state.lastPacketTime ? (now - state.lastPacketTime.getTime()) : Infinity;
+  const isOnline = state.hasRealData && packetAgeMs <= 30000; // Real hardware active within last 30s
   const timeStr = state.lastPacketTime
     ? state.lastPacketTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : 'Waiting';
 
-  el.syncBadge.className = 'status-badge live';
-  el.syncText.textContent = `LIVE: ${timeStr}`;
+  // 1. Sync Status Badge (Strictly checks real hardware presence)
+  if (isOnline) {
+    el.syncBadge.className = 'status-badge live';
+    el.syncText.textContent = `🟢 LIVE: ${timeStr}`;
+  } else {
+    const ageSec = Math.round(packetAgeMs / 1000);
+    const ageStr = ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec / 60)}m ago`;
+    el.syncBadge.className = 'status-badge offline';
+    el.syncText.textContent = state.hasRealData ? `🔴 OFFLINE (${ageStr})` : `🔴 DISCONNECTED (Awaiting Node)`;
+  }
 
   // 2. Alert Banner State
-  const alertConfig = {
-    NORMAL: {
-      class: 'alert-banner normal',
-      icon: '🛡️',
-      title: 'Normal Reservoir Buffer',
-      sub: 'All sensor nodes nominal. Safe downstream conditions.'
-    },
-    PRE_WARNING: {
-      class: 'alert-banner pre-warning',
-      icon: '⚠️',
-      title: 'Stage 1: Pre-Warning (Capacity > 60%)',
-      sub: 'Water level rising. Sluice gate mechanisms on active standby.'
-    },
-    CLEAR_AREA: {
-      class: 'alert-banner clear-area',
-      icon: '📢',
-      title: 'Stage 2: Clear Area Advisory (Capacity > 80%)',
-      sub: 'Siren sounded. Automated 20% sluice gate relief discharge initiated.'
-    },
-    DANGER: {
-      class: 'alert-banner danger',
-      icon: '🚨',
-      title: 'Stage 3: Critical Flood Danger (Capacity > 85%)',
-      sub: 'Emergency relief gate open to 50%. Immediate riverbank evacuation.'
-    },
-    MAINTENANCE: {
-      class: 'alert-banner normal',
-      icon: '🔧',
-      title: 'Hardware Fault / Calibration Mode',
-      sub: 'Ultrasonic echo mismatch or signal timeout detected.'
-    }
-  };
+  if (!isOnline) {
+    el.alertBanner.className = 'alert-banner pre-warning';
+    el.alertIcon.textContent = '🔌';
+    el.alertTitle.textContent = 'HARDWARE NODE DISCONNECTED';
+    el.alertSubtitle.textContent = state.hasRealData
+      ? `Node SDAS-NODE-01 is currently offline (last packet at ${timeStr}). Power on ESP32 & connect hotspot to resume live feed.`
+      : 'Waiting for initial telemetry packet from SDAS-NODE-01...';
+  } else {
+    const alertConfig = {
+      NORMAL: {
+        class: 'alert-banner normal',
+        icon: '🛡️',
+        title: 'Normal Reservoir Buffer',
+        sub: 'All sensor nodes nominal. Safe downstream conditions.'
+      },
+      PRE_WARNING: {
+        class: 'alert-banner pre-warning',
+        icon: '⚠️',
+        title: 'Stage 1: Pre-Warning (Capacity > 60%)',
+        sub: 'Water level rising. Sluice gate mechanisms on active standby.'
+      },
+      CLEAR_AREA: {
+        class: 'alert-banner clear-area',
+        icon: '📢',
+        title: 'Stage 2: Clear Area Advisory (Capacity > 80%)',
+        sub: 'Siren sounded. Automated 20% sluice gate relief discharge initiated.'
+      },
+      DANGER: {
+        class: 'alert-banner danger',
+        icon: '🚨',
+        title: 'Stage 3: Critical Flood Danger (Capacity > 85%)',
+        sub: 'Emergency relief gate open to 50%. Immediate riverbank evacuation.'
+      },
+      MAINTENANCE: {
+        class: 'alert-banner normal',
+        icon: '🔧',
+        title: 'Hardware Fault / Calibration Mode',
+        sub: 'Ultrasonic echo mismatch or signal timeout detected.'
+      }
+    };
 
-  const currentAlert = alertConfig[state.alertState] || alertConfig.NORMAL;
-  el.alertBanner.className = currentAlert.class;
-  el.alertIcon.textContent = currentAlert.icon;
-  el.alertTitle.textContent = currentAlert.title;
-  el.alertSubtitle.textContent = currentAlert.sub;
+    const currentAlert = alertConfig[state.alertState] || alertConfig.NORMAL;
+    el.alertBanner.className = currentAlert.class;
+    el.alertIcon.textContent = currentAlert.icon;
+    el.alertTitle.textContent = currentAlert.title;
+    el.alertSubtitle.textContent = currentAlert.sub;
+  }
 
   // 3. Circular Gauge
   el.gaugePct.textContent = `${state.waterLevelPct.toFixed(1)}%`;
@@ -199,7 +217,8 @@ function renderUI(rawRow) {
   el.gaugeBar.style.strokeDashoffset = strokeOffset;
   
   let gaugeColor = '#0284C7';
-  if (state.alertState === 'DANGER') gaugeColor = '#EF4444';
+  if (!isOnline) gaugeColor = '#64748B';
+  else if (state.alertState === 'DANGER') gaugeColor = '#EF4444';
   else if (state.alertState === 'CLEAR_AREA') gaugeColor = '#F97316';
   else if (state.alertState === 'PRE_WARNING') gaugeColor = '#EAB308';
   el.gaugeBar.style.stroke = gaugeColor;
@@ -212,7 +231,9 @@ function renderUI(rawRow) {
 
   // 4. Reservoir Tank Graphic
   el.tankWater.style.height = `${state.waterLevelPct}%`;
-  el.tankPctLabel.textContent = `${state.waterLevelPct.toFixed(1)}% Elevation`;
+  el.tankPctLabel.textContent = isOnline
+    ? `${state.waterLevelPct.toFixed(1)}% Elevation`
+    : `${state.waterLevelPct.toFixed(1)}% (Offline Snapshot)`;
 
   // 5. Actuator & Sluice Gate
   el.gatePercentVal.textContent = `${state.gatePercent}%`;
@@ -224,39 +245,41 @@ function renderUI(rawRow) {
   el.gateFlowVal.textContent = state.gatePercent > 0 ? `Active Relief (${state.gatePercent}%)` : 'Closed';
 
   // 6. Sensor 1 (HC-SR04 Primary)
-  const s1Ok = state.sensor1Dist > 0;
+  const s1Ok = isOnline && state.sensor1Dist > 0;
   el.s1Card.className = s1Ok ? 'sensor-card active' : 'sensor-card fault';
-  el.s1Dist.textContent = s1Ok ? state.sensor1Dist.toFixed(1) : '--';
+  el.s1Dist.textContent = state.sensor1Dist > 0 ? state.sensor1Dist.toFixed(1) : '--';
   el.s1Status.className = s1Ok ? 'sensor-state-pill ok' : 'sensor-state-pill fault';
-  el.s1Status.textContent = s1Ok ? 'ECHO OK' : 'TIMEOUT';
-  el.s1Quality.textContent = s1Ok ? '100% Pulse Return' : 'Acoustic Lost (-1.0cm)';
+  el.s1Status.textContent = isOnline ? (state.sensor1Dist > 0 ? 'ECHO OK' : 'TIMEOUT') : 'OFFLINE';
+  el.s1Quality.textContent = isOnline ? (state.sensor1Dist > 0 ? '100% Pulse Return' : 'Acoustic Lost (-1.0cm)') : 'Hardware Not Connected';
 
   // 7. Sensor 2 (HC-SR04 Redundant)
-  const s2Ok = state.sensor2Dist > 0;
+  const s2Ok = isOnline && state.sensor2Dist > 0;
   el.s2Card.className = s2Ok ? 'sensor-card active' : 'sensor-card fault';
-  el.s2Dist.textContent = s2Ok ? state.sensor2Dist.toFixed(1) : '--';
+  el.s2Dist.textContent = state.sensor2Dist > 0 ? state.sensor2Dist.toFixed(1) : '--';
   el.s2Status.className = s2Ok ? 'sensor-state-pill ok' : 'sensor-state-pill fault';
-  el.s2Status.textContent = s2Ok ? 'ECHO OK' : 'TIMEOUT';
-  el.s2Agreement.textContent = state.sensorsAgreed ? 'Dual-Sensor Verified' : 'Echo Disagreement';
+  el.s2Status.textContent = isOnline ? (state.sensor2Dist > 0 ? 'ECHO OK' : 'TIMEOUT') : 'OFFLINE';
+  el.s2Agreement.textContent = isOnline ? (state.sensorsAgreed ? 'Dual-Sensor Verified' : 'Echo Disagreement') : 'Hardware Not Connected';
 
   // 8. DHT22 Microclimate Sensor
-  const dhtOk = state.temperatureC > 0 || state.humidityPct > 0;
-  el.dhtCard.className = dhtOk ? 'sensor-card active' : 'sensor-card';
-  el.dhtTemp.textContent = dhtOk ? `${state.temperatureC.toFixed(1)}°C` : '--';
-  el.dhtHum.textContent = dhtOk ? `${state.humidityPct.toFixed(1)}%` : '--';
+  const dhtOk = isOnline && (state.temperatureC > 0 || state.humidityPct > 0);
+  el.dhtCard.className = dhtOk ? 'sensor-card active' : 'sensor-card fault';
+  el.dhtTemp.textContent = state.temperatureC > 0 ? `${state.temperatureC.toFixed(1)}°C` : '--';
+  el.dhtHum.textContent = state.humidityPct > 0 ? `${state.humidityPct.toFixed(1)}%` : '--';
   el.dhtSpeed.textContent = `${state.speedOfSound} m/s`;
   el.dhtStatus.className = dhtOk ? 'sensor-state-pill ok' : 'sensor-state-pill fault';
-  el.dhtStatus.textContent = dhtOk ? 'ONLINE' : 'CONNECTING';
+  el.dhtStatus.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
 
   // 9. Node Health & Packets
   el.nodePackets.textContent = `${packetCount} Packets`;
-  const latency = Math.max(12, Math.round(Math.abs(Date.now() - state.lastPacketTime.getTime()) / 1000));
-  el.nodeLatency.textContent = `${latency}s ago`;
+  const ageSec = Math.round(packetAgeMs / 1000);
+  el.nodeLatency.textContent = isOnline ? `${Math.max(1, ageSec)}s ago` : `Offline (${ageSec}s ago)`;
+  el.nodeCard.className = isOnline ? 'sensor-card active' : 'sensor-card fault';
 
   // 10. Raw JSON Inspector
   const rawDisplay = {
-    received_at: new Date().toISOString(),
+    hardware_status: isOnline ? 'CONNECTED_STREAMING' : 'OFFLINE_DISCONNECTED',
     hardware_node: 'SDAS-NODE-01',
+    packet_age_seconds: isFinite(ageSec) ? ageSec : null,
     ultrasonic_sensor_1_cm: state.sensor1Dist,
     ultrasonic_sensor_2_cm: state.sensor2Dist,
     sensors_in_agreement: state.sensorsAgreed,
@@ -276,6 +299,42 @@ function renderUI(rawRow) {
 
   // 11. Render Real-time Trend Chart
   drawChart();
+}
+
+// Watchdog timer running every second to catch hardware disconnect immediately
+function updateHardwareWatchdog() {
+  if (!state.lastPacketTime) return;
+  const now = Date.now();
+  const packetAgeMs = now - state.lastPacketTime.getTime();
+  const isOnline = state.hasRealData && packetAgeMs <= 30000;
+  const timeStr = state.lastPacketTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  if (!isOnline) {
+    const ageSec = Math.round(packetAgeMs / 1000);
+    const ageStr = ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec / 60)}m ago`;
+    el.syncBadge.className = 'status-badge offline';
+    el.syncText.textContent = `🔴 OFFLINE (${ageStr})`;
+    el.nodeLatency.textContent = `Offline (${ageStr})`;
+
+    el.s1Status.className = 'sensor-state-pill fault';
+    el.s1Status.textContent = 'OFFLINE';
+    el.s1Card.className = 'sensor-card fault';
+
+    el.s2Status.className = 'sensor-state-pill fault';
+    el.s2Status.textContent = 'OFFLINE';
+    el.s2Card.className = 'sensor-card fault';
+
+    el.dhtStatus.className = 'sensor-state-pill fault';
+    el.dhtStatus.textContent = 'OFFLINE';
+    el.dhtCard.className = 'sensor-card fault';
+
+    el.nodeCard.className = 'sensor-card fault';
+
+    el.alertBanner.className = 'alert-banner pre-warning';
+    el.alertIcon.textContent = '🔌';
+    el.alertTitle.textContent = 'HARDWARE NODE DISCONNECTED';
+    el.alertSubtitle.textContent = `Node SDAS-NODE-01 last transmitted telemetry at ${timeStr} (${ageStr}). Power on ESP32 & connect hotspot.`;
+  }
 }
 
 // Draw HTML5 Canvas Chart
@@ -448,6 +507,9 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchHistoricalPoints();
   fetchLatestHardwareReading();
   setupRealtimeSubscription();
+
+  // Watchdog timer checking hardware freshness every second
+  setInterval(updateHardwareWatchdog, 1000);
 
   // Polling fallback every 3 seconds to guarantee telemetry freshness
   setInterval(fetchLatestHardwareReading, 3000);

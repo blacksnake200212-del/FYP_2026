@@ -126,8 +126,13 @@ export default function PublicApp() {
           condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : temp > 0 ? 'Overcast' : 'Live Sync'
         });
 
-        setHasRealTelemetry(true);
-        setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        // Strict Hardware Presence Check: only marked LIVE if packet created within last 30s
+        const packetTime = live.created_at ? new Date(live.created_at) : null;
+        const packetAgeMs = packetTime ? (Date.now() - packetTime.getTime()) : Infinity;
+        const isOnline = packetAgeMs <= 30000;
+
+        setHasRealTelemetry(isOnline);
+        setLastSyncTime(packetTime ? packetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
       }
     } catch (err) {
       console.warn('Telemetry sync error:', err.message);
@@ -165,8 +170,9 @@ export default function PublicApp() {
             });
           }
 
+          const packetTime = r.created_at ? new Date(r.created_at) : new Date();
           setHasRealTelemetry(true);
-          setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+          setLastSyncTime(packetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
         }
       })
       .subscribe();
@@ -367,10 +373,12 @@ export default function PublicApp() {
             <Text style={styles.dropdownArrow}>▾</Text>
           </TouchableOpacity>
 
-          <View style={styles.liveSyncBadge}>
-            <View style={styles.liveSyncDot} />
-            <Text style={styles.liveSyncText}>
-              {hasRealTelemetry ? `LIVE ${lastSyncTime}` : 'CONNECTING...'}
+          <View style={[styles.liveSyncBadge, !hasRealTelemetry && { backgroundColor: '#FEE2E2', borderColor: '#FECACA' }]}>
+            <View style={[styles.liveSyncDot, !hasRealTelemetry && { backgroundColor: '#EF4444' }]} />
+            <Text style={[styles.liveSyncText, !hasRealTelemetry && { color: '#DC2626' }]}>
+              {hasRealTelemetry
+                ? `LIVE ${lastSyncTime}`
+                : (lastSyncTime ? `OFFLINE (${lastSyncTime})` : 'DISCONNECTED')}
             </Text>
           </View>
         </View>
