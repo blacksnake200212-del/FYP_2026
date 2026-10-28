@@ -111,10 +111,10 @@
 #if __has_include("secrets.h")
   #include "secrets.h"
 #else
-  #define WIFI_SSID                "YOUR_WIFI_SSID"
-  #define WIFI_PASSWORD            "YOUR_WIFI_PASSWORD"
-  #define SUPABASE_URL             "https://your-project.supabase.co/rest/v1"
-  #define SUPABASE_ANON_KEY        "YOUR_SUPABASE_ANON_KEY"
+  #define WIFI_SSID                "ADRIAN iPhone"
+  #define WIFI_PASSWORD            "1122335566"
+  #define SUPABASE_URL             "https://gpxakbveqnzqqpxvtkgf.supabase.co/rest/v1"
+  #define SUPABASE_ANON_KEY        "sb_publishable_IG22kbgb81H1Ge8PB5Rfkg_qINcdKEF"
 #endif
 
 // MQTT Broker Configuration (EMQX / HiveMQ TLS & Auth capable)
