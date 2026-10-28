@@ -355,16 +355,25 @@ export default function PublicApp() {
       </View>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Location Dropdown Chip */}
-        <TouchableOpacity
-          style={styles.locationChip}
-          onPress={() => setShowMoreModal(true)}
-          activeOpacity={0.8}
-        >
-          <MapPinIcon size={16} color="#0284C7" />
-          <Text style={styles.locationText}>Kantalai Dam</Text>
-          <Text style={styles.dropdownArrow}>▾</Text>
-        </TouchableOpacity>
+        {/* Location & Live Hardware Sync Row */}
+        <View style={styles.topLocationRow}>
+          <TouchableOpacity
+            style={styles.locationChip}
+            onPress={() => setShowMoreModal(true)}
+            activeOpacity={0.8}
+          >
+            <MapPinIcon size={16} color="#0284C7" />
+            <Text style={styles.locationText}>Kantalai Dam</Text>
+            <Text style={styles.dropdownArrow}>▾</Text>
+          </TouchableOpacity>
+
+          <View style={styles.liveSyncBadge}>
+            <View style={styles.liveSyncDot} />
+            <Text style={styles.liveSyncText}>
+              {hasRealTelemetry ? `LIVE ${lastSyncTime}` : 'CONNECTING...'}
+            </Text>
+          </View>
+        </View>
 
         {/* Status Alert Banner Card */}
         <View style={[styles.statusCard, { backgroundColor: statusBadge.bg, borderColor: statusBadge.border }]}>
@@ -686,15 +695,19 @@ const styles = StyleSheet.create({
     padding: 18,
     paddingBottom: 24
   },
+  topLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
   locationChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'center',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 20,
-    marginBottom: 14,
     shadowColor: '#64748B',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
@@ -702,6 +715,28 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: '#E2E8F0'
+  },
+  liveSyncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 6
+  },
+  liveSyncDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10B981'
+  },
+  liveSyncText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#059669'
   },
   locationText: {
     fontSize: 14,
