@@ -151,7 +151,15 @@ void TelemetryManager::sendSupabaseTelemetry(const SensorData& sensors, const Sy
     secClient.setInsecure(); // Explicitly bypass cert verification for field IoT reliability
     
     HTTPClient http;
-    String endpoint = String(SUPABASE_URL) + "/sensor_telemetry";
+    String base = String(SUPABASE_URL);
+    if (!base.endsWith("/rest/v1")) {
+        if (base.endsWith("/")) {
+            base += "rest/v1";
+        } else {
+            base += "/rest/v1";
+        }
+    }
+    String endpoint = base + "/sensor_telemetry";
     http.begin(secClient, endpoint);
     http.setTimeout(4000); // 4-second timeout
     
