@@ -187,14 +187,14 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     if (sensorData.critical_sensor_fault) {
         currentStatus.alertState = STATE_SENSOR_FAULT;
         actuators.setRGBAlert(STATE_SENSOR_FAULT);
-        actuators.setBuzzerPattern(BUZZER_PULSE_DANGER);
         
-        // Dispatch emergency SMS on initial failure transition
+        // Single advisory alert on fault transition (never scream continuous siren for sensor fault)
         if (!previousFaultState) {
             previousFaultState = true;
+            actuators.setBuzzerPattern(BUZZER_SHORT_BEEP);
             currentStatus.smsDispatchRequired = true;
             currentStatus.smsIsPriority = true;
-            currentStatus.lastAlertMessage = "[SDAS CRITICAL FAULT] Dual water level sensors offline. Automated gate holds position. Urgent inspection required.";
+            currentStatus.lastAlertMessage = "[SDAS CRITICAL FAULT] Water level sensors offline. Automated gate holds position. Urgent inspection required.";
         }
         return;
     } else {

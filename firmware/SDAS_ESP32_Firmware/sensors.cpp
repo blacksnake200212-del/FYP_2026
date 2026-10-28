@@ -134,35 +134,80 @@ float SensorManager::measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, f
     }
     
     // Distance in cm = (Time in s * Speed in cm/s) / 2
-    // durationUs * 1e-6 * (speedOfSound * 100.0) / 2.0
     float distanceCm = (durationUs * 1e-6f * (speedOfSound * 100.0f)) / 2.0f;
     return distanceCm;
+}
+
+// 3-Sample Median Filter to reject acoustic spikes, multipath glitches, and dropouts
+float SensorManager::measureFilteredUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound) {
+    float samples[3];
+    int validCount = 0;
+    
+    for (int i = 0; i < 3; i++) {
+        float d = measureSingleUltrasonic(trigPin, echoPin, speedOfSound);
+        if (d >= 3.0f && d <= SENSOR_MAX_VALID_DIST_CM) {
+            samples[validCount++] = d;
+        }
+        delay(12);
+    }
+    
+    if (validCount == 0) {
+        return -1.0f; // Open space / no obstacle within 5m
+    }
+    
+    // Simple sort for median
+    for (int i = 0; i < validCount - 1; i++) {
+        for (int j = i + 1; j < validCount; j++) {
+            if (samples[i] > samples[j]) {
+                float tmp = samples[i];
+                samples[i] = samples[j];
+                samples[j] = tmp;
+            }
+        }
+    }
+    
+    return samples[validCount / 2];
 }
 
 SensorData SensorManager::sampleAndVerify() {
     unsigned long now = millis();
     readDHTSensors();
     
-    // --- Step 1: Ultrasonic Ping Sequence ---
+    // --- Step 1: Ultrasonic Ping Sequence with 3-Sample Median Filter ---
     // Trigger Sensor 1 (Primary on GPIO5/19)
-    float d1 = measureSingleUltrasonic(PIN_TRIG_1, PIN_ECHO_1, currentData.speed_of_sound_mps);
+    float d1 = measureFilteredUltrasonic(PIN_TRIG_1, PIN_ECHO_1, currentData.speed_of_sound_mps);
     float d2 = -1.0f;
     
     // Only ping Sensor 2 if dual-sensor mode is enabled
     if (activeSensorCount >= 2) {
-        delay(60); // 60 ms acoustic blanking interval to attenuate reverberations
-        d2 = measureSingleUltrasonic(PIN_TRIG_2, PIN_ECHO_2, currentData.speed_of_sound_mps);
+        delay(40); // Acoustic blanking interval
+        d2 = measureFilteredUltrasonic(PIN_TRIG_2, PIN_ECHO_2, currentData.speed_of_sound_mps);
     }
     
     currentData.raw_dist_1_cm = d1;
     currentData.raw_dist_2_cm = d2;
     currentData.timestamp_ms = now;
     
-    // --- Step 2: Physical Range & Noise Filtering ---
-    // Physical limit: HC-SR04 transducer ringing produces false echoes below 3.0 cm!
-    // Any reading < 3.0 cm or timeout (-1.0 cm) is treated as noise/unconnected.
-    currentData.sensor_1_valid = (d1 >= 3.0f && d1 <= SENSOR_MAX_VALID_DIST_CM);
-    currentData.sensor_2_valid = (activeSensorCount >= 2 && d2 >= 3.0f && d2 <= SENSOR_MAX_VALID_DIST_CM);
+    // --- Step 2: Physical Range & Open-Air Plausibility ---
+    // If no echo returned (-1.0f), the acoustic path is completely open to the room (> 5 meters).
+    // In reservoir geometry, distance >= 50cm represents an EMPTY reservoir (0% water level).
+    if (d1 < 0.0f) {
+        d1 = SENSOR_MOUNT_HEIGHT_CM; // 50 cm -> 0% capacity (Normal Green, Silent!)
+        currentData.sensor_1_valid = true;
+    } else {
+        currentData.sensor_1_valid = (d1 >= 3.0f && d1 <= SENSOR_MAX_VALID_DIST_CM);
+    }
+    
+    if (activeSensorCount >= 2) {
+        if (d2 < 0.0f) {
+            d2 = SENSOR_MOUNT_HEIGHT_CM;
+            currentData.sensor_2_valid = true;
+        } else {
+            currentData.sensor_2_valid = (d2 >= 3.0f && d2 <= SENSOR_MAX_VALID_DIST_CM);
+        }
+    } else {
+        currentData.sensor_2_valid = false;
+    }
     
     float fusedDistanceCm = 0.0f;
     

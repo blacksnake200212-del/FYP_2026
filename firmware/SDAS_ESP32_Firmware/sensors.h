@@ -44,6 +44,7 @@ private:
     unsigned long previousSampleTimeMs;
 
     float measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound);
+    float measureFilteredUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound);
     void readDHTSensors();
     float calculateSpeedOfSound(float tempC);
 };
