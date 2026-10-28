@@ -38,6 +38,10 @@ void ActuatorManager::begin() {
     pinMode(PIN_BUZZER, OUTPUT);
     digitalWrite(PIN_BUZZER, LOW); // Transistor OFF
     
+    // Buzzer startup chirp (tests audio line on boot)
+    Serial.println("[BUZZER] Audio driver online (GPIO27). Emitting startup chirp...");
+    testBuzzerTone(2400, 120);
+    
     // 3. Configure ESP32 LEDC PWM for MG90S Servo (GPIO25)
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
     ledcAttach(PIN_SERVO, SERVO_LEDC_FREQ, SERVO_LEDC_RES);
@@ -267,4 +271,32 @@ void ActuatorManager::emergencyStop() {
     targetPercent = currentPercent;
     setBuzzerPattern(BUZZER_CONTINUOUS_ESTOP);
     writeRGB(true, false, true); // Visual hazard warning (Purple/Magenta)
+}
+
+void ActuatorManager::testBuzzerDirect(bool state) {
+    digitalWrite(PIN_BUZZER, state ? HIGH : LOW);
+    Serial.printf("[BUZZER] GPIO27 state set to: %s (%s)\n",
+        state ? "HIGH (3.3V)" : "LOW (0V)",
+        state ? "Transistor ON, Buzzer powered" : "Transistor OFF");
+}
+
+void ActuatorManager::testBuzzerChirp(uint16_t durationMs) {
+    Serial.printf("[BUZZER] Emitting active buzzer DC pulse for %d ms...\n", durationMs);
+    digitalWrite(PIN_BUZZER, HIGH);
+    delay(durationMs);
+    digitalWrite(PIN_BUZZER, LOW);
+}
+
+void ActuatorManager::testBuzzerTone(uint16_t freqHz, uint16_t durationMs) {
+    if (freqHz == 0) return;
+    uint32_t periodUs = 1000000UL / freqHz;
+    uint32_t halfPeriodUs = periodUs / 2;
+    uint32_t cycles = ((uint32_t)durationMs * 1000UL) / periodUs;
+    
+    for (uint32_t i = 0; i < cycles; i++) {
+        digitalWrite(PIN_BUZZER, HIGH);
+        delayMicroseconds(halfPeriodUs);
+        digitalWrite(PIN_BUZZER, LOW);
+        delayMicroseconds(halfPeriodUs);
+    }
 }

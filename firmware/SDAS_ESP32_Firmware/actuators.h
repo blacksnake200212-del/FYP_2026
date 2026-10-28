@@ -45,6 +45,11 @@ public:
     bool isPolarityCommonAnode() const { return isCommonAnode; }
     void runHardwareCycleTest();
     
+    // Buzzer Diagnostics & Hardware Testing
+    void testBuzzerDirect(bool state);
+    void testBuzzerChirp(uint16_t durationMs = 500);
+    void testBuzzerTone(uint16_t freqHz = 2400, uint16_t durationMs = 500);
+    
     // Direct actuator override for failsafe
     void emergencyStop();
 

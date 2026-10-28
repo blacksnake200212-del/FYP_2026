@@ -31,6 +31,10 @@ void printSerialHelp() {
     Serial.println("\n=======================================================");
     Serial.println("         SDAS INTERACTIVE SERIAL MONITOR COMMANDS");
     Serial.println("=======================================================");
+    Serial.println("  BUZZ or BEEP    : Test active buzzer with a 500ms DC pulse");
+    Serial.println("  BUZZ ON         : Force GPIO27 HIGH continuously (for DMM voltmeter check)");
+    Serial.println("  BUZZ OFF        : Force GPIO27 LOW (0V)");
+    Serial.println("  TONE            : Generate 2.4 kHz PWM frequency (tests for passive buzzer)");
     Serial.println("  SMS             : Send live test SMS to all 4 registered numbers");
     Serial.println("  SMS 1 / 2 / 3 / 4: Send test SMS to specific registered contact");
     Serial.println("  SMS <+94...>    : Send test SMS directly to any custom number");
@@ -54,6 +58,15 @@ void handleSerialCommand(String cmd) {
     
     if (upper.equals("HELP") || upper.equals("?")) {
         printSerialHelp();
+    } else if (upper.equals("BUZZ") || upper.equals("BEEP")) {
+        actuatorManager.testBuzzerChirp(500);
+    } else if (upper.equals("BUZZ ON")) {
+        actuatorManager.testBuzzerDirect(true);
+    } else if (upper.equals("BUZZ OFF")) {
+        actuatorManager.testBuzzerDirect(false);
+    } else if (upper.equals("TONE")) {
+        Serial.println("[CMD] Playing 2400 Hz test tone on GPIO27 for 800ms...");
+        actuatorManager.testBuzzerTone(2400, 800);
     } else if (upper.equals("RGB")) {
         actuatorManager.togglePolarity();
     } else if (upper.equals("DIAG") || upper.equals("SIM")) {
