@@ -1,8 +1,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 
-const PORT = 3000;
+let PORT = 3000;
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -48,11 +49,30 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n======================================================`);
-  console.log(`🚀 SDAS Live Web Dashboard Running!`);
-  console.log(`📡 Local URL:    http://localhost:${PORT}`);
-  console.log(`🌐 Network URL:  http://127.0.0.1:${PORT}`);
-  console.log(`🛡️ Supabase Node: SDAS-NODE-01`);
-  console.log(`======================================================\n`);
+function startServer(portToUse) {
+  server.listen(portToUse, '0.0.0.0', () => {
+    console.log(`\n======================================================`);
+    console.log(`🚀 SDAS Live Web Dashboard Running!`);
+    console.log(`📡 Local URL:    http://localhost:${portToUse}`);
+    console.log(`🌐 Network URL:  http://127.0.0.1:${portToUse}`);
+    console.log(`🛡️ Supabase Node: SDAS-NODE-01`);
+    console.log(`======================================================\n`);
+    // Automatically open in default browser on Windows
+    try {
+      exec(`start http://localhost:${portToUse}`);
+    } catch (e) {}
+  });
+}
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`⚠️ Port ${PORT} is in use, falling back to port 3001...`);
+    PORT = 3001;
+    startServer(PORT);
+  } else {
+    console.error('Server error:', err.message);
+  }
 });
+
+startServer(PORT);
+
