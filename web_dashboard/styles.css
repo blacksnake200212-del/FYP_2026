@@ -376,23 +376,23 @@ main {
 }
 
 .tank-container {
-  flex: 1;
   position: relative;
   background-color: #0D162B;
   border: 2px solid #233762;
   border-radius: 12px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column-reverse;
   height: 240px;
+  width: 100%;
 }
 
 .tank-water {
-  width: 100%;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   height: 0%;
   background: linear-gradient(180deg, #38BDF8 0%, #0284C7 40%, #034A70 100%);
   transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
   box-shadow: inset 0 6px 12px rgba(255, 255, 255, 0.2);
 }
 
@@ -616,6 +616,17 @@ main {
   position: relative;
   height: 220px;
   width: 100%;
+  background-color: #070B14;
+  border: 1px solid #1E2D4A;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.chart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: #070B14;
 }
 
 .raw-log-box {

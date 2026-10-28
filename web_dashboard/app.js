@@ -72,7 +72,7 @@ const el = {
   nodeLatency: document.getElementById('node-latency'),
   nodePackets: document.getElementById('node-packets'),
   rawLog: document.getElementById('raw-log'),
-  chartCanvas: document.getElementById('chart-canvas')
+  chartSvg: document.getElementById('chart-svg')
 };
 
 let packetCount = 0;
@@ -337,86 +337,67 @@ function updateHardwareWatchdog() {
   }
 }
 
-// Draw HTML5 Canvas Chart
+// Draw Real-Time Telemetry SVG Stream
 function drawChart() {
-  const canvas = el.chartCanvas;
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-
-  canvas.width = width * dpr;
-  canvas.height = height * dpr;
-  ctx.scale(dpr, dpr);
-
-  ctx.clearRect(0, 0, width, height);
-
-  // Background Grid
-  ctx.strokeStyle = '#1E2D4A';
-  ctx.lineWidth = 1;
-  for (let y = 20; y < height - 20; y += 40) {
-    ctx.beginPath();
-    ctx.moveTo(35, y);
-    ctx.lineTo(width - 15, y);
-    ctx.stroke();
-  }
-
-  // Y-axis labels
-  ctx.fillStyle = '#64748B';
-  ctx.font = '10px sans-serif';
-  ctx.fillText('100%', 5, 25);
-  ctx.fillText('50%', 10, height / 2);
-  ctx.fillText('0%', 15, height - 25);
-
   const points = state.recentHistory;
+  const areaPath = document.getElementById('chart-area-path');
+  const linePath = document.getElementById('chart-line-path');
+  const activePoint = document.getElementById('chart-point-active');
+  const emptyText = document.getElementById('chart-empty-text');
+
+  if (!areaPath || !linePath) return;
+
   if (points.length < 2) {
-    ctx.fillStyle = '#94A3B8';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('Collecting real-time hardware telemetry points...', width / 4, height / 2);
+    if (emptyText) {
+      emptyText.style.display = 'block';
+      emptyText.textContent = state.hasRealData
+        ? `Hardware telemetry recorded (${state.waterLevelPct.toFixed(1)}%). Waiting for next packet...`
+        : 'Connecting to real-time hardware telemetry stream...';
+    }
+    areaPath.setAttribute('d', '');
+    linePath.setAttribute('d', '');
+    if (activePoint) activePoint.setAttribute('cx', '-20');
     return;
   }
 
-  const plotX = (idx) => 40 + (idx / (points.length - 1)) * (width - 60);
-  const plotY = (val) => height - 30 - (val / 100.0) * (height - 60);
+  if (emptyText) emptyText.style.display = 'none';
 
-  // Draw Area Gradient
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
-  grad.addColorStop(1, 'rgba(2, 132, 199, 0.0)');
+  const svgWidth = 700;
+  const svgHeight = 220;
+  const startX = 60;
+  const endX = svgWidth - 25;
+  const startY = svgHeight - 35; // 0% baseline
+  const endY = 20; // 100% line
+  const chartHeight = startY - endY;
 
-  ctx.beginPath();
-  ctx.moveTo(plotX(0), height - 30);
-  points.forEach((pt, i) => {
-    ctx.lineTo(plotX(i), plotY(pt.level));
+  const getX = (i) => startX + (i / (points.length - 1)) * (endX - startX);
+  const getY = (val) => startY - (Math.max(0, Math.min(100, val)) / 100.0) * chartHeight;
+
+  let pathD = '';
+  points.forEach((pt, idx) => {
+    const x = getX(idx).toFixed(1);
+    const y = getY(pt.level).toFixed(1);
+    if (idx === 0) {
+      pathD += `M ${x} ${y}`;
+    } else {
+      pathD += ` L ${x} ${y}`;
+    }
   });
-  ctx.lineTo(plotX(points.length - 1), height - 30);
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
 
-  // Draw Line
-  ctx.beginPath();
-  points.forEach((pt, i) => {
-    const x = plotX(i);
-    const y = plotY(pt.level);
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  });
-  ctx.strokeStyle = '#38BDF8';
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  linePath.setAttribute('d', pathD);
 
-  // Draw Current Point
-  const lastX = plotX(points.length - 1);
-  const lastY = plotY(points[points.length - 1].level);
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fill();
-  ctx.strokeStyle = '#0284C7';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  // Area path: start at first point, go along line, down to 0% baseline, back to start
+  const firstX = getX(0).toFixed(1);
+  const lastX = getX(points.length - 1).toFixed(1);
+  const areaD = `${pathD} L ${lastX} ${startY} L ${firstX} ${startY} Z`;
+  areaPath.setAttribute('d', areaD);
+
+  // Update active point marker on latest point
+  if (activePoint) {
+    const latestPt = points[points.length - 1];
+    activePoint.setAttribute('cx', lastX);
+    activePoint.setAttribute('cy', getY(latestPt.level).toFixed(1));
+  }
 }
 
 // Fetch Latest Real Readings from Supabase REST API
