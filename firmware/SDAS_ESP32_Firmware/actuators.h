@@ -39,10 +39,17 @@ public:
     void updateIndicators(unsigned long millisNow);
     bool isBeeping() const { return currentBuzzerPattern == BUZZER_SHORT_BEEP; }
     
+    // RGB Polarity Control & Diagnostic Testing
+    bool togglePolarity();
+    void setCommonAnode(bool enabled);
+    bool isPolarityCommonAnode() const { return isCommonAnode; }
+    void runHardwareCycleTest();
+    
     // Direct actuator override for failsafe
     void emergencyStop();
 
 private:
+    bool  isCommonAnode;
     float currentAngle;
     float targetAngle;
     int   currentPercent;

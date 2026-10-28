@@ -1,18 +1,38 @@
 #include "actuators.h"
+#include <Preferences.h>
 
 ActuatorManager::ActuatorManager()
-    : currentAngle(0.0f), targetAngle(0.0f), currentPercent(0), targetPercent(0),
+    : isCommonAnode(RGB_IS_COMMON_ANODE),
+      currentAngle(0.0f), targetAngle(0.0f), currentPercent(0), targetPercent(0),
       lastServoStepMs(0), currentBuzzerPattern(BUZZER_OFF),
       lastBuzzerToggleMs(0), buzzerState(false),
       currentAlertState(STATE_NORMAL), orangePwmCounter(0) {}
 
 void ActuatorManager::begin() {
-    // 1. Configure RGB Pins (Common Anode, Active LOW)
+    // 1. Configure RGB Pins (Common Cathode / Common Anode)
     pinMode(PIN_LED_RED, OUTPUT);
     pinMode(PIN_LED_GREEN, OUTPUT);
     pinMode(PIN_LED_BLUE, OUTPUT);
-    // Turn all OFF at boot (HIGH = OFF)
-    writeRGB(false, false, false);
+    
+    // Load saved polarity preference from Flash
+    Preferences prefs;
+    prefs.begin("sdas_act", false);
+    isCommonAnode = prefs.getBool("rgb_ca", RGB_IS_COMMON_ANODE);
+    prefs.end();
+    
+    Serial.printf("[RGB] LED Polarity configured as: %s\n",
+        isCommonAnode ? "COMMON ANODE (Active LOW, 3.3V to Anode)" : "COMMON CATHODE (Active HIGH, GND to Cathode)");
+    
+    // Hardware Startup Self-Test: Red -> Green -> Blue -> Off
+    Serial.println("[RGB] Running LED Hardware Self-Test: RED -> GREEN -> BLUE -> OFF");
+    writeRGB(true, false, false); // Red
+    delay(450);
+    writeRGB(false, true, false); // Green
+    delay(450);
+    writeRGB(false, false, true); // Blue
+    delay(450);
+    writeRGB(false, false, false); // All OFF
+    Serial.println("[RGB] Self-test complete. (Tip: Type 'RGB' in Serial Monitor if colors were inverted!)");
     
     // 2. Configure Buzzer Transistor Driver
     pinMode(PIN_BUZZER, OUTPUT);
@@ -83,19 +103,86 @@ void ActuatorManager::updateServoMotion() {
     }
 }
 
-// Dual Polarity RGB Control (Supports Common Cathode and Common Anode)
+// Dual Polarity RGB Control (Supports Common Cathode and Common Anode dynamically)
 void ActuatorManager::writeRGB(bool r_on, bool g_on, bool b_on) {
-#if RGB_IS_COMMON_ANODE
-    // Active LOW (3.3V to Anode): LOW turns LED ON
-    digitalWrite(PIN_LED_RED,   r_on ? LOW : HIGH);
-    digitalWrite(PIN_LED_GREEN, g_on ? LOW : HIGH);
-    digitalWrite(PIN_LED_BLUE,  b_on ? LOW : HIGH);
-#else
-    // Active HIGH (GND to Cathode): HIGH turns LED ON
-    digitalWrite(PIN_LED_RED,   r_on ? HIGH : LOW);
-    digitalWrite(PIN_LED_GREEN, g_on ? HIGH : LOW);
-    digitalWrite(PIN_LED_BLUE,  b_on ? HIGH : LOW);
-#endif
+    if (isCommonAnode) {
+        // Active LOW (3.3V to Anode): LOW turns LED ON
+        digitalWrite(PIN_LED_RED,   r_on ? LOW : HIGH);
+        digitalWrite(PIN_LED_GREEN, g_on ? LOW : HIGH);
+        digitalWrite(PIN_LED_BLUE,  b_on ? LOW : HIGH);
+    } else {
+        // Active HIGH (GND to Cathode): HIGH turns LED ON
+        digitalWrite(PIN_LED_RED,   r_on ? HIGH : LOW);
+        digitalWrite(PIN_LED_GREEN, g_on ? HIGH : LOW);
+        digitalWrite(PIN_LED_BLUE,  b_on ? HIGH : LOW);
+    }
+}
+
+bool ActuatorManager::togglePolarity() {
+    isCommonAnode = !isCommonAnode;
+    Preferences prefs;
+    prefs.begin("sdas_act", false);
+    prefs.putBool("rgb_ca", isCommonAnode);
+    prefs.end();
+    
+    Serial.printf("[RGB] LED polarity switched to: %s (Saved to Flash!)\n",
+        isCommonAnode ? "COMMON ANODE (Active LOW)" : "COMMON CATHODE (Active HIGH)");
+    
+    // Quick confirmation flash: RED -> GREEN -> BLUE
+    writeRGB(true, false, false);
+    delay(250);
+    writeRGB(false, true, false);
+    delay(250);
+    writeRGB(false, false, true);
+    delay(250);
+    
+    // Restore current alert state
+    setRGBAlert(currentAlertState);
+    return isCommonAnode;
+}
+
+void ActuatorManager::setCommonAnode(bool enabled) {
+    if (isCommonAnode != enabled) {
+        togglePolarity();
+    }
+}
+
+void ActuatorManager::runHardwareCycleTest() {
+    Serial.println("\n=======================================================");
+    Serial.println("  ACTUATOR HARDWARE CYCLE TEST (VISUAL & AUDIO)");
+    Serial.println("=======================================================");
+    
+    Serial.println("[TEST] Stage 1/4: NORMAL State (Green LED, Gate 0%, Siren OFF)");
+    writeRGB(false, true, false);
+    setTargetGatePercent(0);
+    delay(1200);
+    
+    Serial.println("[TEST] Stage 2/4: PRE-WARNING State (Yellow LED, Gate 0%, Siren OFF)");
+    writeRGB(true, true, false);
+    delay(1200);
+    
+    Serial.println("[TEST] Stage 3/4: CLEAR AREA State (Orange LED, Gate Opening to 20%)");
+    setTargetGatePercent(20);
+    for (int i = 0; i < 24; i++) {
+        writeRGB(true, (i % 4 == 0), false);
+        updateServoMotion();
+        delay(50);
+    }
+    
+    Serial.println("[TEST] Stage 4/4: CRITICAL DANGER (Red LED, Gate Opening to 50%, Siren Pulse)");
+    setTargetGatePercent(50);
+    writeRGB(true, false, false);
+    digitalWrite(PIN_BUZZER, HIGH);
+    delay(250);
+    digitalWrite(PIN_BUZZER, LOW);
+    for (int i = 0; i < 20; i++) {
+        updateServoMotion();
+        delay(50);
+    }
+    
+    Serial.println("[TEST] Actuator cycle completed successfully. Restoring system state...\n");
+    setTargetGatePercent(targetPercent);
+    setRGBAlert(currentAlertState);
 }
 
 void ActuatorManager::setRGBAlert(AlertState state) {

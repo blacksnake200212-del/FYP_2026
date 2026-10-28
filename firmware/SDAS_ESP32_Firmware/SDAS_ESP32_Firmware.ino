@@ -24,6 +24,110 @@ TelemetryManager telemetryManager;
 unsigned long lastSensorSampleMs   = 0;
 unsigned long lastFastUpdateMs      = 0;
 
+// Bench Testing Simulation Override (-1.0 = use real live sensors)
+float simulatedLevelPct = -1.0f;
+
+void printSerialHelp() {
+    Serial.println("\n=======================================================");
+    Serial.println("         SDAS INTERACTIVE SERIAL MONITOR COMMANDS");
+    Serial.println("=======================================================");
+    Serial.println("  SMS             : Send live test SMS to all 4 registered numbers");
+    Serial.println("  SMS 1 / 2 / 3 / 4: Send test SMS to specific registered contact");
+    Serial.println("  SMS <+94...>    : Send test SMS directly to any custom number");
+    Serial.println("  RGB             : Toggle RGB LED polarity (Common Anode <-> Cathode)");
+    Serial.println("  DIAG or SIM     : Run full SIM800L diagnostics (CSQ, CREG, CPIN, Volts)");
+    Serial.println("  TEST            : Run hardware visual & audio cycle (Green->Yellow->Orange->Red)");
+    Serial.println("  LEVEL <0-100>   : Simulate water level % (e.g. LEVEL 65 for Yellow, 90 for Red)");
+    Serial.println("  LEVEL REAL      : Disable simulation and return to real ultrasonic sensors");
+    Serial.println("  OPEN <0-50>     : Manually open sluice gate to specified percentage");
+    Serial.println("  CLOSE           : Manually close sluice gate (0%)");
+    Serial.println("  AUTO            : Return system to autonomous control mode");
+    Serial.println("  STATUS          : Print complete hardware and sensor telemetry status");
+    Serial.println("  HELP            : Display this command list");
+    Serial.println("=======================================================\n");
+}
+
+void handleSerialCommand(String cmd) {
+    cmd.trim();
+    String upper = cmd;
+    upper.toUpperCase();
+    
+    if (upper.equals("HELP") || upper.equals("?")) {
+        printSerialHelp();
+    } else if (upper.equals("RGB")) {
+        actuatorManager.togglePolarity();
+    } else if (upper.equals("DIAG") || upper.equals("SIM")) {
+        gsmManager.printDiagnostics();
+    } else if (upper.equals("TEST")) {
+        actuatorManager.runHardwareCycleTest();
+    } else if (upper.equals("SMS")) {
+        Serial.println("[CMD] Initiating live test SMS broadcast to all 4 registered contacts...");
+        gsmManager.broadcastAlert("SDAS TEST ALERT: Hardware cellular broadcast verified. System operational.", true);
+    } else if (upper.startsWith("SMS ")) {
+        String param = cmd.substring(4);
+        param.trim();
+        String targetNum = "";
+        if (param.equals("1")) targetNum = CONTACT_OPERATOR_1;
+        else if (param.equals("2")) targetNum = CONTACT_OPERATOR_2;
+        else if (param.equals("3")) targetNum = CONTACT_OPERATOR_3;
+        else if (param.equals("4")) targetNum = CONTACT_OPERATOR_4;
+        else targetNum = param;
+        
+        Serial.printf("[CMD] Queuing test SMS directly to %s...\n", targetNum.c_str());
+        gsmManager.queueSMS(targetNum.c_str(), "SDAS TEST ALERT: Single-number SMS verified successfully!", true);
+    } else if (upper.startsWith("LEVEL ")) {
+        String param = upper.substring(6);
+        param.trim();
+        if (param.equals("REAL") || param.equals("AUTO")) {
+            simulatedLevelPct = -1.0f;
+            Serial.println("[SIMULATED] Deactivated. System restored to live HC-SR04 ultrasonic sensors.");
+        } else {
+            float val = param.toFloat();
+            if (val >= 0.0f && val <= 100.0f) {
+                simulatedLevelPct = val;
+                Serial.printf("[SIMULATED] Water level forced to %.1f%%. Evaluating state machine...\n", val);
+            } else {
+                Serial.println("[CMD] Invalid level! Enter a percentage between 0 and 100 (e.g. LEVEL 65).");
+            }
+        }
+    } else if (upper.startsWith("OPEN ")) {
+        int pct = upper.substring(5).toInt();
+        pct = constrain(pct, 0, GATE_PCT_MAX_LIMIT);
+        stateMachine.requestManualGatePercent(pct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.printf("[CMD] Sluice gate set to %d%% (Manual mode, 300s watchdog)\n", pct);
+    } else if (upper.equals("CLOSE")) {
+        stateMachine.requestManualGatePercent(0, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.println("[CMD] Sluice gate closed (0%)");
+    } else if (upper.equals("AUTO")) {
+        stateMachine.revertToAuto();
+        Serial.println("[CMD] Returned to autonomous mode.");
+    } else if (upper.equals("STATUS")) {
+        const SystemStatus& status = stateMachine.getStatus();
+        Serial.println("\n--- [CURRENT SYSTEM STATUS] ---");
+        Serial.printf("Water Level:       %.1f%% %s\n",
+            simulatedLevelPct >= 0.0f ? simulatedLevelPct : 0.0f,
+            simulatedLevelPct >= 0.0f ? "(SIMULATED)" : "(LIVE)");
+        Serial.printf("Gate Percentage:   %d%% (Target: %d%%)\n", status.actualGatePercent, status.targetGatePercent);
+        Serial.printf("Alert State:       %d (%s)\n", (int)status.alertState,
+            status.alertState == STATE_NORMAL ? "NORMAL (Green)" :
+            status.alertState == STATE_PRE_WARNING ? "PRE-WARNING (Yellow)" :
+            status.alertState == STATE_CLEAR_AREA ? "CLEAR AREA (Orange)" :
+            status.alertState == STATE_DANGER ? "DANGER (Red)" : "SENSOR FAULT (Purple)");
+        Serial.printf("Control Mode:      %s\n", status.controlMode == MODE_AUTO ? "AUTO" :
+            status.controlMode == MODE_MANUAL ? "MANUAL" : "EMERGENCY");
+        Serial.printf("RGB LED Polarity:  %s\n", actuatorManager.isPolarityCommonAnode() ? "Common Anode (Active LOW)" : "Common Cathode (Active HIGH)");
+        Serial.printf("GSM Modem Ready:   %s | Registered: %s | Queue: %d\n",
+            gsmManager.isModemReady() ? "YES" : "NO",
+            gsmManager.isRegistered() ? "YES" : "NO",
+            gsmManager.getPendingCount());
+        Serial.println("-------------------------------\n");
+    } else {
+        Serial.printf("[CMD] Unknown command '%s'. Type 'HELP' to view available commands.\n", cmd.c_str());
+    }
+}
+
 // Command Callback for MQTT Remote Operator Overrides
 void onRemoteOperatorCommand(const char* command, int param) {
     Serial.printf("[CMD] Received Remote Command: %s (Param: %d)\n", command, param);
@@ -74,7 +178,8 @@ void setup() {
     telemetryManager.begin(onRemoteOperatorCommand);
     Serial.println("[INIT] Wi-Fi & MQTT FreeRTOS Core 0 background worker online");
 
-    Serial.println("[SDAS] Setup completed successfully. Entering main control loop.\n");
+    Serial.println("[SDAS] Setup completed successfully. Entering main control loop.");
+    Serial.println("[TIP] Type 'HELP' in Serial Monitor at any time for interactive commands!\n");
 }
 
 void loop() {
@@ -97,6 +202,17 @@ void loop() {
     stateMachine.checkPhysicalButtons(&actuatorManager); // Polls OPEN, CLOSE, E-STOP switches with instant response
 
     // ------------------------------------------------------------------------
+    // INTERACTIVE SERIAL MONITOR COMMAND INTERPRETER
+    // ------------------------------------------------------------------------
+    if (Serial.available()) {
+        String line = Serial.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0) {
+            handleSerialCommand(line);
+        }
+    }
+
+    // ------------------------------------------------------------------------
     // MAIN SENSING & CONTROL LOOP (Runs every 2000 ms = 2.0 s on Core 1)
     // Dual ultrasonic alternating pings, plausibility check & FSM evaluation
     // ------------------------------------------------------------------------
@@ -105,6 +221,13 @@ void loop() {
 
         // Sample dual sensors with speed-of-sound acoustic temperature correction
         SensorData sensors = sensorManager.sampleAndVerify();
+
+        // Check if manual level simulation is active
+        if (simulatedLevelPct >= 0.0f) {
+            sensors.water_level_pct = simulatedLevelPct;
+            sensors.water_level_cm = (simulatedLevelPct / 100.0f) * TANK_MAX_DEPTH_CM;
+            sensors.critical_sensor_fault = false;
+        }
 
         // Evaluate 4-stage alert state machine & update physical gate target
         stateMachine.evaluate(sensors, actuatorManager);
@@ -121,10 +244,11 @@ void loop() {
 
         // Print debug telemetry to serial monitor
         const SystemStatus& status = stateMachine.getStatus();
-        Serial.printf("[TELEM] Dist1: %.1fcm | Dist2: %.1fcm | Level: %.1f%% | Gate: %d%% | State: %d | Mode: %d\n",
+        Serial.printf("[TELEM] Dist1: %.1fcm | Dist2: %.1fcm | Level: %.1f%% %s | Gate: %d%% | State: %d | Mode: %d\n",
             sensors.raw_dist_1_cm,
             sensors.raw_dist_2_cm,
             sensors.water_level_pct,
+            simulatedLevelPct >= 0.0f ? "[SIM]" : "[LIVE]",
             status.actualGatePercent,
             (int)status.alertState,
             (int)status.controlMode

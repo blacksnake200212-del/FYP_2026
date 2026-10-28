@@ -9,6 +9,7 @@ struct SMSJob {
     char message[140];
     bool inUse;
     bool isPriority;
+    uint8_t retryCount;
 };
 
 class GSMManager {
@@ -24,16 +25,21 @@ public:
     void broadcastAlert(const char* message, bool isPriority = false);
     
     // Modem Health & Diagnostics
-    bool isRegistered() const { return modemReady; }
+    bool isModemReady() const { return modemReady; }
+    bool isRegistered() const { return isNetworkRegistered; }
     int  getSignalQuality() const { return signalQuality; }
     int  getPendingCount() const { return queueCount; }
     void hardResetModem();
+    bool checkNetworkRegistration();
+    void printDiagnostics();
 
 private:
     HardwareSerial simSerial;
     bool modemReady;
+    bool isNetworkRegistered;
     int  signalQuality;
     unsigned long lastHeartbeatMs;
+    unsigned long lastRegistrationCheckMs;
     
     // SMS Queue (expanded buffer up to SMS_QUEUE_SIZE = 16)
     SMSJob queue[SMS_QUEUE_SIZE];
@@ -44,19 +50,18 @@ private:
     // State machine for asynchronous AT SMS transmission
     enum TxState {
         TX_IDLE,
-        TX_SEND_CMGS,
         TX_WAIT_PROMPT,
-        TX_SEND_BODY,
-        TX_WAIT_OK
+        TX_WAIT_OK,
+        TX_RETRY_DELAY
     } txState;
     
     unsigned long txStepTimeoutMs;
+    unsigned long txRetryUntilMs;
     int currentJobIndex;
     String rxBuffer;
     
     bool sendATCommand(const char* cmd, const char* expectedReply, uint32_t timeoutMs);
-    void readIncomingSerial();
-    void processNextQueueItem();
+    void handleFailureOrRetry(unsigned long now);
 };
 
 #endif // SDAS_GSM_MODEM_H

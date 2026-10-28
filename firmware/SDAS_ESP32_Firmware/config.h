@@ -19,9 +19,10 @@
 #define DHT_TYPE             DHT22
 
 // --- RGB LED Module Polarity & Pins ---
-// Set to false for Common Cathode (Longest pin to GND - Most standard Arduino starter kit LEDs)
-// Set to true for Common Anode (Longest pin to 3.3V)
-#define RGB_IS_COMMON_ANODE  false
+// Set to true for Common Anode (Longest pin to 3.3V - Standard SDAS Blueprint design)
+// Set to false for Common Cathode (Longest pin to GND)
+// Note: You can also toggle polarity dynamically at runtime by sending 'RGB' in the Serial Monitor!
+#define RGB_IS_COMMON_ANODE  true
 
 // Resistors: Red=220 Ohm, Green=100 Ohm, Blue=100 Ohm (Current Balanced)
 #define PIN_LED_RED          32
