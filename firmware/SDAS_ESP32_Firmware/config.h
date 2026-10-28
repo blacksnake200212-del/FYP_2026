@@ -114,7 +114,7 @@
   #define WIFI_SSID                "ADRIAN iPhone"
   #define WIFI_PASSWORD            "1122335566"
   #define SUPABASE_URL             "https://gpxakbveqnzqqpxvtkgf.supabase.co/rest/v1"
-  #define SUPABASE_ANON_KEY        "sb_publishable_IG22kbgb81H1Ge8PB5Rfkg_qINcdKEF"
+  #define SUPABASE_ANON_KEY        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdweGFrYnZlcW56cXFweHZ0a2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MzAwNjcsImV4cCI6MjEwNzQwNjA2N30.dv_53Z7HzHIl8e-5BhVBx1OYYbE2L5GhyZZkbzTvEgU"
 #endif
 
 // MQTT Broker Configuration (EMQX / HiveMQ TLS & Auth capable)
