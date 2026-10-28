@@ -30,8 +30,9 @@ INSERT INTO public.contacts
 (name, phone_encrypted, role, recipient_group, tier, opted_in)
 VALUES
 ('Testing Number 1 (Adrian)', 'enc_aes256_+94740099235', 'OPERATOR', 'ENGINEERS', 1, true),
-('Testing Number 2 (Aadhil)', 'enc_aes256_+94712833936', 'OPERATOR', 'ENGINEERS', 1, true),
-('Testing Number 3 (Dilshan / DMC)', 'enc_aes256_+94781099235', 'DMC_OFFICER', 'DMC', 2, true);
+('Testing Number 2 (Disaster Unit)', 'enc_aes256_+94778364925', 'OPERATOR', 'ENGINEERS', 1, true),
+('Testing Number 3 (Aadhil)', 'enc_aes256_+94712833936', 'OPERATOR', 'ENGINEERS', 1, true),
+('Testing Number 4 (Dilshan / DMC)', 'enc_aes256_+94781099235', 'DMC_OFFICER', 'DMC', 2, true);
 
 -- 5. Insert App Config version metadata (OTA & Store Update Control)
 INSERT INTO public.app_config

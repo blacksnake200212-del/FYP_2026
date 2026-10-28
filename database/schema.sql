@@ -620,11 +620,12 @@ EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 -- ============================================================================
--- 20. INITIAL SEED: EMERGENCY CONTACT DIRECTORY (Exclusively 3 Demo Test Numbers)
+-- 20. INITIAL SEED: EMERGENCY CONTACT DIRECTORY (4 Demo Test Numbers)
 -- ============================================================================
 INSERT INTO public.contacts (name, phone_encrypted, role, recipient_group, tier, opted_in)
 VALUES 
     ('District Secretariat & DMC', '+94740099235', 'DISTRICT_SECRETARIAT', 'OPERATOR', 1, true),
+    ('Disaster Management Field Unit', '+94778364925', 'OFFICER', 'OPERATOR', 1, true),
     ('Police Emergency Operations', '+94712833936', 'POLICE', 'OPERATOR', 1, true),
     ('Fire & Rescue Service Command', '+94781099235', 'FIRE_RESCUE', 'OPERATOR', 1, true)
 ON CONFLICT DO NOTHING;

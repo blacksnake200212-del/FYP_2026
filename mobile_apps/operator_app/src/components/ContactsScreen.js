@@ -30,7 +30,7 @@ import { supabase } from '../supabaseClient';
 
 const STORAGE_KEY = 'sdas_operator_contacts_v3';
 
-// EXCLUSIVELY the 3 designated user demo testing numbers
+// EXCLUSIVELY the 4 designated user demo testing numbers
 const DEFAULT_CONTACTS = [
   {
     id: 'c-1',
@@ -43,17 +43,26 @@ const DEFAULT_CONTACTS = [
   },
   {
     id: 'c-2',
-    name: 'Police Emergency Operations',
-    phone: '+94712833936', // Testing Contact 2 (Aadhil)
-    role: 'POLICE',
+    name: 'Disaster Management Field Unit',
+    phone: '+94778364925', // Testing Contact 2 (Newly Added User Contact)
+    role: 'OFFICER',
     category: 'EMERGENCY',
     tier: 1,
     synced: true
   },
   {
     id: 'c-3',
+    name: 'Police Emergency Operations',
+    phone: '+94712833936', // Testing Contact 3 (Aadhil)
+    role: 'POLICE',
+    category: 'EMERGENCY',
+    tier: 1,
+    synced: true
+  },
+  {
+    id: 'c-4',
     name: 'Fire & Rescue Service Command',
-    phone: '+94781099235', // Testing Contact 3 (Dilshan)
+    phone: '+94781099235', // Testing Contact 4 (Dilshan)
     role: 'FIRE_RESCUE',
     category: 'EMERGENCY',
     tier: 1,

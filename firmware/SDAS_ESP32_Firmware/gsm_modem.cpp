@@ -92,10 +92,11 @@ bool GSMManager::queueSMS(const char* recipient, const char* message, bool isPri
 }
 
 void GSMManager::broadcastAlert(const char* message, bool isPriority) {
-    // Staged delivery targeting the 3 registered user testing numbers
+    // Staged delivery targeting all 4 registered user testing numbers
     queueSMS(CONTACT_OPERATOR_1, message, isPriority);
     queueSMS(CONTACT_OPERATOR_2, message, isPriority);
-    queueSMS(CONTACT_DMC_CONTROL, message, isPriority);
+    queueSMS(CONTACT_OPERATOR_3, message, isPriority);
+    queueSMS(CONTACT_OPERATOR_4, message, isPriority);
 }
 
 void GSMManager::update() {
