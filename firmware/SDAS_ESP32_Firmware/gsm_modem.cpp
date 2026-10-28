@@ -23,14 +23,19 @@ void GSMManager::begin() {
     
     // 3. Initialize AT Commands
     delay(1000);
-    sendATCommand("AT", "OK", 1000);
-    sendATCommand("ATE0", "OK", 1000);        // Echo OFF
-    sendATCommand("AT+CMGF=1", "OK", 1000);    // Text Mode
+    bool atOk = sendATCommand("AT", "OK", 1000);
+    if (!atOk) {
+        Serial.println("[GSM] ⚠️ SIM800L did not answer AT! Check: 1) 3.8-4.1V power to VCC, 2) Common GND, 3) GPIO16(RX2)-TXD and GPIO17(TX2)-RXD.");
+    } else {
+        Serial.println("[GSM] ✓ SIM800L UART2 Communication Verified (AT OK)");
+    }
+    sendATCommand("ATE0", "OK", 1000);            // Echo OFF
+    sendATCommand("AT+CMGF=1", "OK", 1000);        // Text Mode
     sendATCommand("AT+CSCS=\"GSM\"", "OK", 1000); // Standard 7-bit GSM charset
     
     // Read signal quality (AT+CSQ)
     sendATCommand("AT+CSQ", "OK", 1000);
-    modemReady = true;
+    modemReady = atOk;
 }
 
 void GSMManager::hardResetModem() {
@@ -88,6 +93,7 @@ bool GSMManager::queueSMS(const char* recipient, const char* message, bool isPri
     
     queueTail = (queueTail + 1) % SMS_QUEUE_SIZE;
     queueCount++;
+    Serial.printf("[GSM] Queued SMS (%d/%d) for %s: %s\n", queueCount, SMS_QUEUE_SIZE, recipient, message);
     return true;
 }
 
@@ -122,6 +128,7 @@ void GSMManager::update() {
             if (queueCount > 0) {
                 currentJobIndex = queueHead;
                 rxBuffer = "";
+                Serial.printf("[GSM] Transmitting to %s via AT+CMGS...\n", queue[currentJobIndex].recipient);
                 simSerial.print("AT+CMGS=\"");
                 simSerial.print(queue[currentJobIndex].recipient);
                 simSerial.println("\"");
@@ -135,6 +142,7 @@ void GSMManager::update() {
                 char c = simSerial.read();
                 if (c == '>') {
                     // Prompt received: Send message body + Ctrl+Z (ASCII 26)
+                    Serial.println("[GSM] '>' Prompt received! Uploading message payload...");
                     simSerial.print(queue[currentJobIndex].message);
                     simSerial.write(26);
                     rxBuffer = "";
@@ -145,7 +153,7 @@ void GSMManager::update() {
                     // Check if modem sent ERROR
                     rxBuffer += c;
                     if (rxBuffer.indexOf("ERROR") != -1) {
-                        // Abort this message
+                        Serial.println("[GSM] ❌ Modem returned ERROR on AT+CMGS prompt!");
                         queue[currentJobIndex].inUse = false;
                         queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                         queueCount--;
@@ -158,8 +166,8 @@ void GSMManager::update() {
                 }
             }
             if (now > txStepTimeoutMs) {
-                // Timeout on prompt - send ESC (27) to cancel and discard
-                simSerial.write(27);
+                Serial.printf("[GSM] ⚠️ Timeout waiting for '>' prompt from SIM800L for %s! (Check 4V power / UART TX2-RX2)\n", queue[currentJobIndex].recipient);
+                simSerial.write(27); // Send ESC to cancel
                 queue[currentJobIndex].inUse = false;
                 queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                 queueCount--;
@@ -173,7 +181,7 @@ void GSMManager::update() {
                 char c = simSerial.read();
                 rxBuffer += c;
                 if (rxBuffer.indexOf("OK") != -1 || rxBuffer.indexOf("+CMGS:") != -1) {
-                    // SMS successfully sent
+                    Serial.printf("[GSM] ✓ SMS Successfully Delivered to %s!\n", queue[currentJobIndex].recipient);
                     queue[currentJobIndex].inUse = false;
                     queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                     queueCount--;
@@ -181,7 +189,7 @@ void GSMManager::update() {
                     txState = TX_IDLE;
                     return;
                 } else if (rxBuffer.indexOf("ERROR") != -1 || rxBuffer.indexOf("+CMS ERROR") != -1) {
-                    // Delivery failed
+                    Serial.printf("[GSM] ❌ Cellular Network Rejected SMS (+CMS ERROR) for %s! Check SIM credit and 2G coverage.\n", queue[currentJobIndex].recipient);
                     queue[currentJobIndex].inUse = false;
                     queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;
                     queueCount--;
@@ -191,7 +199,7 @@ void GSMManager::update() {
                 }
             }
             if (now > txStepTimeoutMs) {
-                // Timeout waiting for OK - send ESC to clear modem state
+                Serial.printf("[GSM] ⚠️ Network delivery timeout (15s) for %s.\n", queue[currentJobIndex].recipient);
                 simSerial.write(27);
                 queue[currentJobIndex].inUse = false;
                 queueHead = (queueHead + 1) % SMS_QUEUE_SIZE;

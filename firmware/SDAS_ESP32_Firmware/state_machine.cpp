@@ -226,7 +226,11 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     if (nextAlert != previousAlert) {
         if (nextAlert > previousAlert) {
             // Escalation: Send SMS broadcast
-            if (nextAlert == STATE_CLEAR_AREA) {
+            if (nextAlert == STATE_PRE_WARNING) {
+                currentStatus.smsDispatchRequired = true;
+                currentStatus.smsIsPriority = false;
+                currentStatus.lastAlertMessage = "PRE-WARNING ALERT: Reservoir reached 60% capacity. Sluice gates on standby.";
+            } else if (nextAlert == STATE_CLEAR_AREA) {
                 currentStatus.smsDispatchRequired = true;
                 currentStatus.smsIsPriority = false;
                 currentStatus.lastAlertMessage = "CLEAR AREA ALERT: Reservoir at 80%+. Sluice gate opening 20%. Evacuate spillway zones.";
@@ -240,11 +244,8 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     }
     
     // --- Step 5: Update Visual and Audible Actuators ---
-    if (sensorData.degraded_mode && currentStatus.alertState != STATE_DANGER && currentStatus.alertState != STATE_CLEAR_AREA) {
-        actuators.setRGBAlert(STATE_SENSOR_FAULT);
-    } else {
-        actuators.setRGBAlert(currentStatus.alertState);
-    }
+    // Always display the true reservoir water level alert state on the RGB LED!
+    actuators.setRGBAlert(currentStatus.alertState);
     
     if (currentStatus.alertState == STATE_DANGER) {
         actuators.setBuzzerPattern(BUZZER_PULSE_DANGER);

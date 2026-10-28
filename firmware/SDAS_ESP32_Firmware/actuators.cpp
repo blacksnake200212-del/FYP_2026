@@ -83,11 +83,19 @@ void ActuatorManager::updateServoMotion() {
     }
 }
 
-// Active-LOW control for Common Anode LED
+// Dual Polarity RGB Control (Supports Common Cathode and Common Anode)
 void ActuatorManager::writeRGB(bool r_on, bool g_on, bool b_on) {
+#if RGB_IS_COMMON_ANODE
+    // Active LOW (3.3V to Anode): LOW turns LED ON
     digitalWrite(PIN_LED_RED,   r_on ? LOW : HIGH);
     digitalWrite(PIN_LED_GREEN, g_on ? LOW : HIGH);
     digitalWrite(PIN_LED_BLUE,  b_on ? LOW : HIGH);
+#else
+    // Active HIGH (GND to Cathode): HIGH turns LED ON
+    digitalWrite(PIN_LED_RED,   r_on ? HIGH : LOW);
+    digitalWrite(PIN_LED_GREEN, g_on ? HIGH : LOW);
+    digitalWrite(PIN_LED_BLUE,  b_on ? HIGH : LOW);
+#endif
 }
 
 void ActuatorManager::setRGBAlert(AlertState state) {
@@ -123,10 +131,8 @@ void ActuatorManager::updateIndicators(unsigned long millisNow) {
     // Update Orange color modulation for CLEAR_AREA stage
     if (currentAlertState == STATE_CLEAR_AREA) {
         orangePwmCounter = (orangePwmCounter + 1) % 4;
-        // Red is continuously ON (LOW); Green is ON (LOW) 25% of the time (1 out of 4 cycles)
-        digitalWrite(PIN_LED_RED, LOW);
-        digitalWrite(PIN_LED_GREEN, (orangePwmCounter == 0) ? LOW : HIGH);
-        digitalWrite(PIN_LED_BLUE, HIGH);
+        // Red 100%, Green 25% (creates Orange)
+        writeRGB(true, (orangePwmCounter == 0), false);
     }
     
     updateBuzzer(millisNow);

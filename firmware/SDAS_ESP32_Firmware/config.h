@@ -18,7 +18,11 @@
 #define PIN_DHT              4     // DHT22 Data line (with 10k pull-up to 3.3V)
 #define DHT_TYPE             DHT22
 
-// --- RGB LED Module (Common Anode, Active LOW) ---
+// --- RGB LED Module Polarity & Pins ---
+// Set to false for Common Cathode (Longest pin to GND - Most standard Arduino starter kit LEDs)
+// Set to true for Common Anode (Longest pin to 3.3V)
+#define RGB_IS_COMMON_ANODE  false
+
 // Resistors: Red=220 Ohm, Green=100 Ohm, Blue=100 Ohm (Current Balanced)
 #define PIN_LED_RED          32
 #define PIN_LED_GREEN        33
