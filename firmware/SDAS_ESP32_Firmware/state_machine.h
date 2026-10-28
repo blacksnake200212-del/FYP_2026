@@ -40,6 +40,7 @@ public:
     
     // Hardware button polling (with 20ms debounce and optional direct actuator trigger)
     void checkPhysicalButtons(ActuatorManager* actuators = nullptr);
+    void printButtonStatus() const;
     
     const SystemStatus& getStatus() const { return currentStatus; }
     bool checkAndClearSmsTrigger(bool* isPriorityOut = nullptr);

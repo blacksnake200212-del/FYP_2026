@@ -20,6 +20,12 @@ void SDASStateMachine::begin() {
     pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
     pinMode(PIN_BTN_STOP, INPUT_PULLUP);
     
+    // Sample initial button states on boot to prevent spurious edge triggers
+    delay(10);
+    lastBtnOpenState  = digitalRead(PIN_BTN_OPEN);
+    lastBtnCloseState = digitalRead(PIN_BTN_CLOSE);
+    lastBtnStopState  = digitalRead(PIN_BTN_STOP);
+    
     // Load last persistent gate position from ESP32 NVS flash
     preferences.begin("sdas_fsm", false);
     int savedGate = loadGateStateFromNVS();
@@ -37,6 +43,30 @@ void SDASStateMachine::saveGateStateToNVS(int percent) {
     preferences.putInt("gate_pct", percent);
 }
 
+void SDASStateMachine::printButtonStatus() const {
+    int readOpen  = digitalRead(PIN_BTN_OPEN);
+    int readClose = digitalRead(PIN_BTN_CLOSE);
+    int readStop  = digitalRead(PIN_BTN_STOP);
+    
+    Serial.println("\n=======================================================");
+    Serial.println("         PHYSICAL PUSH BUTTON DIAGNOSTIC CHECK");
+    Serial.println("=======================================================");
+    Serial.printf("1. OPEN Button  (GPIO14):  %s [%s]\n",
+        readOpen == LOW ? "LOW (PRESSED / CLOSED TO GND)" : "HIGH (RELEASED / OPEN)",
+        readOpen == LOW ? "ACTIVE" : "IDLE");
+    Serial.printf("2. CLOSE Button (GPIO26):  %s [%s]\n",
+        readClose == LOW ? "LOW (PRESSED / CLOSED TO GND)" : "HIGH (RELEASED / OPEN)",
+        readClose == LOW ? "ACTIVE" : "IDLE");
+    Serial.printf("3. STOP Button  (GPIO22):  %s [%s]\n",
+        readStop == LOW ? "LOW (PRESSED / E-STOP TRIGGERED)" : "HIGH (RELEASED / SAFE)",
+        readStop == LOW ? "EMERGENCY" : "NORMAL");
+    Serial.printf("Current Control Mode:      %s\n",
+        currentStatus.controlMode == MODE_AUTO ? "AUTO (Autonomous Sluice Regulation)" :
+        currentStatus.controlMode == MODE_MANUAL ? "MANUAL (Operator Push-Button Control)" : "EMERGENCY (E-STOP Lockout Active)");
+    Serial.println("Tip: If a button shows LOW without touching it, rotate the tactile switch 90 deg!");
+    Serial.println("=======================================================\n");
+}
+
 void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
     unsigned long now = millis();
     int readStop  = digitalRead(PIN_BTN_STOP);
@@ -45,17 +75,17 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
     
     // 1. Emergency STOP Button (GPIO22) - Highest priority edge transition
     if (lastBtnStopState == HIGH && readStop == LOW) {
-        if (now - lastBtnStopMs >= 50) {
+        if (now - lastBtnStopMs >= 80) { // 80ms debounce
             lastBtnStopMs = now;
             if (currentStatus.controlMode == MODE_EMERGENCY) {
                 releaseEmergencyStop();
                 if (actuators != nullptr) {
                     actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
                 }
-                Serial.println("[E-STOP] Released! Resumed autonomous regulation.");
+                Serial.println("[BUTTON] 🟢 Physical STOP Button pressed: Released E-STOP! Resumed AUTO mode.");
             } else {
                 triggerEmergencyStop(actuators);
-                Serial.println("[E-STOP] Triggered! Sluice gate locked immediately in position.");
+                Serial.println("[BUTTON] 🔴 Physical STOP Button pressed: Triggered E-STOP! Sluice gate locked in position.");
             }
         }
     }
@@ -73,7 +103,7 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
             if (actuators != nullptr) {
                 actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
             }
-            Serial.printf("[MANUAL] CLOSE Pressed -> Sluice Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[BUTTON] 🔽 Physical CLOSE Button pressed (GPIO26): Gate -> %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnCloseState = readClose;
@@ -87,7 +117,7 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
             if (actuators != nullptr) {
                 actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
             }
-            Serial.printf("[MANUAL] OPEN Pressed -> Sluice Gate set to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[BUTTON] 🔼 Physical OPEN Button pressed (GPIO14): Gate -> %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnOpenState = readOpen;

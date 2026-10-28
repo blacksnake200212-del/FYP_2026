@@ -32,6 +32,7 @@ void printSerialHelp() {
     Serial.println("         SDAS INTERACTIVE SERIAL MONITOR COMMANDS");
     Serial.println("=======================================================");
     Serial.println("  MUTE / UNMUTE   : Silence or restore the alarm buzzer");
+    Serial.println("  BTN or BUTTONS  : Inspect live physical state of OPEN (14), CLOSE (26), STOP (22)");
     Serial.println("  SENSOR 1        : Use Single HC-SR04 Sensor #1 (GPIO5/19) - Bench Testing");
     Serial.println("  SENSOR DUAL     : Enable Dual HC-SR04 Sensor Voting (GPIO5/19 + GPIO18/21)");
     Serial.println("  BUZZ or BEEP    : Test active buzzer with a 500ms DC pulse");
@@ -46,9 +47,11 @@ void printSerialHelp() {
     Serial.println("  TEST            : Run hardware visual & audio cycle (Green->Yellow->Orange->Red)");
     Serial.println("  LEVEL <0-100>   : Simulate water level % (e.g. LEVEL 25 for Green, LEVEL 65 for Yellow)");
     Serial.println("  LEVEL REAL      : Disable simulation and return to real ultrasonic sensors");
+    Serial.println("  OPEN            : Open sluice gate to 20% (Manual mode)");
     Serial.println("  OPEN <0-50>     : Manually open sluice gate to specified percentage");
     Serial.println("  CLOSE           : Manually close sluice gate (0%)");
-    Serial.println("  AUTO            : Return system to autonomous control mode");
+    Serial.println("  STOP or ESTOP   : Toggle Emergency Stop mode");
+    Serial.println("  AUTO or RESET   : Return system to autonomous control mode");
     Serial.println("  STATUS          : Print complete hardware and sensor telemetry status");
     Serial.println("  HELP            : Display this command list");
     Serial.println("=======================================================\n");
@@ -114,6 +117,12 @@ void handleSerialCommand(String cmd) {
                 Serial.println("[CMD] Invalid level! Enter a percentage between 0 and 100 (e.g. LEVEL 65).");
             }
         }
+    } else if (upper.equals("BTN") || upper.equals("BUTTONS") || upper.equals("BUTTON")) {
+        stateMachine.printButtonStatus();
+    } else if (upper.equals("OPEN")) {
+        stateMachine.requestManualGatePercent(20, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.println("[CMD] Sluice gate set to 20% (Manual mode, 300s watchdog)");
     } else if (upper.startsWith("OPEN ")) {
         int pct = upper.substring(5).toInt();
         pct = constrain(pct, 0, GATE_PCT_MAX_LIMIT);
@@ -124,9 +133,20 @@ void handleSerialCommand(String cmd) {
         stateMachine.requestManualGatePercent(0, MANUAL_WATCHDOG_TIMEOUT_SEC);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
         Serial.println("[CMD] Sluice gate closed (0%)");
-    } else if (upper.equals("AUTO")) {
+    } else if (upper.equals("STOP") || upper.equals("ESTOP")) {
+        const SystemStatus& s = stateMachine.getStatus();
+        if (s.controlMode == MODE_EMERGENCY) {
+            stateMachine.releaseEmergencyStop();
+            actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+            Serial.println("[CMD] E-STOP Released. Restored AUTO mode.");
+        } else {
+            stateMachine.triggerEmergencyStop(&actuatorManager);
+            Serial.println("[CMD] E-STOP Triggered! Gate locked.");
+        }
+    } else if (upper.equals("AUTO") || upper.equals("RESET") || upper.equals("CLEAR")) {
+        stateMachine.releaseEmergencyStop();
         stateMachine.revertToAuto();
-        Serial.println("[CMD] Returned to autonomous mode.");
+        Serial.println("[CMD] Overrides cleared. Returned to autonomous mode.");
     } else if (upper.equals("STATUS")) {
         const SystemStatus& status = stateMachine.getStatus();
         Serial.println("\n--- [CURRENT SYSTEM STATUS] ---");
