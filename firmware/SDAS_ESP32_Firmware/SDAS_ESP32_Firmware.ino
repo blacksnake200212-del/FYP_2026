@@ -130,9 +130,10 @@ void handleSerialCommand(String cmd) {
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
         Serial.printf("[CMD] Sluice gate set to %d%% (Manual mode, 300s watchdog)\n", pct);
     } else if (upper.equals("CLOSE")) {
-        stateMachine.requestManualGatePercent(0, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        stateMachine.requestManualGatePercent(GATE_PCT_CLOSED, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.println("[CMD] Sluice gate closed (0%)");
+        Serial.println("[CMD] Sluice gate closing to 0% (Closed)");
     } else if (upper.equals("STOP") || upper.equals("ESTOP")) {
         const SystemStatus& s = stateMachine.getStatus();
         if (s.controlMode == MODE_EMERGENCY) {

@@ -94,30 +94,32 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
     // If currently in hardware E-STOP, ignore other manual buttons
     if (currentStatus.controlMode == MODE_EMERGENCY) return;
     
-    // 2. Manual CLOSE Button (GPIO26) - Stepped Gate Closure (50% -> 20% -> 0%)
+    // 2. Manual CLOSE Button (GPIO26) - Direct Immediate Gate Closure to 0%
     if (lastBtnCloseState == HIGH && readClose == LOW) {
-        if (now - lastBtnCloseMs >= 100) {
+        if (now - lastBtnCloseMs >= 80) {
             lastBtnCloseMs = now;
-            int targetPct = (currentStatus.targetGatePercent > GATE_PCT_CLEAR_AREA) ? GATE_PCT_CLEAR_AREA : GATE_PCT_CLOSED;
+            int targetPct = GATE_PCT_CLOSED; // Directly close gate to 0%!
             requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
             if (actuators != nullptr) {
+                actuators->setTargetGatePercent(GATE_PCT_CLOSED);
                 actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
             }
-            Serial.printf("[BUTTON] 🔽 Physical CLOSE Button pressed (GPIO26): Gate -> %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[BUTTON] 🔽 Physical CLOSE Button pressed (GPIO26) -> Sluice Gate CLOSING to 0%% (Watchdog: %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnCloseState = readClose;
     
     // 3. Manual OPEN Button (GPIO14) - Stepped Gate Opening (0% -> 20% -> 50% Max)
     if (lastBtnOpenState == HIGH && readOpen == LOW) {
-        if (now - lastBtnOpenMs >= 100) {
+        if (now - lastBtnOpenMs >= 80) {
             lastBtnOpenMs = now;
             int targetPct = (currentStatus.targetGatePercent < GATE_PCT_CLEAR_AREA) ? GATE_PCT_CLEAR_AREA : GATE_PCT_DANGER;
             requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
             if (actuators != nullptr) {
+                actuators->setTargetGatePercent(targetPct);
                 actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
             }
-            Serial.printf("[BUTTON] 🔼 Physical OPEN Button pressed (GPIO14): Gate -> %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[BUTTON] 🔼 Physical OPEN Button pressed (GPIO14) -> Sluice Gate OPENING to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
         }
     }
     lastBtnOpenState = readOpen;
@@ -204,10 +206,16 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     AlertState previousAlert = currentStatus.alertState;
     AlertState nextAlert = previousAlert;
     
-    // SAFETY OVERRIDE: If water reaches Danger (>= 85%), override Manual mode immediately
+    // SAFETY OVERRIDE: If water reaches Danger (>= 85%), override Manual mode unless operator recently commanded it
     if (currentStatus.controlMode == MODE_MANUAL && level >= THRESH_DANGER_PCT) {
-        revertToAuto();
-        Serial.println("[SAFETY] DANGER threshold (85%) reached! Overriding MANUAL mode to AUTO for flood protection.");
+        unsigned long manualElapsedMs = (currentStatus.manualModeExpiryMs > now) ? 
+            ((MANUAL_WATCHDOG_TIMEOUT_SEC * 1000UL) - (currentStatus.manualModeExpiryMs - now)) : 999999UL;
+        
+        // Allow operator manual control for at least 15 seconds before autonomous flood protection kicks in
+        if (manualElapsedMs > 15000UL) {
+            revertToAuto();
+            Serial.println("[SAFETY] DANGER threshold (85%) reached! Overriding MANUAL mode to AUTO for flood protection.");
+        }
     }
     
     switch (previousAlert) {
