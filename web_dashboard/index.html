@@ -252,8 +252,11 @@
               <span class="dot-auth"></span>
               <span id="operator-auth-label">🔒 ACCESS LOCKED (Read-Only Mode)</span>
             </div>
+            <button id="btn-add-operator-modal" class="btn-auth-add" style="display: none;" title="Provision another engineer in Supabase">
+              ➕ Add Operator
+            </button>
             <button id="btn-toggle-auth" class="btn-auth-toggle">
-              🔐 Authorize Operator
+              🔐 Operator Login
             </button>
           </div>
         </div>
@@ -264,10 +267,15 @@
             <div class="lock-overlay-content">
               <div class="lock-icon">🔒</div>
               <h3>Operator Authorization Required</h3>
-              <p>Manual sluice gate controls and cellular SMS broadcast lists are locked to protect dam operations from unauthorized overrides. Authenticate as an authorized engineer to unlock command actuators.</p>
-              <button id="btn-unlock-prompt" class="btn-unlock-primary">
-                🔑 Enter Operator PIN to Unlock
-              </button>
+              <p>Manual sluice gate controls and cellular SMS broadcast lists are locked to protect dam operations from unauthorized overrides. Sign in with your verified Supabase operator account to unlock actuators.</p>
+              <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+                <button id="btn-unlock-prompt" class="btn-unlock-primary">
+                  🔑 Sign In with Supabase
+                </button>
+                <button id="btn-register-prompt" class="btn-unlock-secondary">
+                  ➕ Register New Operator
+                </button>
+              </div>
             </div>
           </div>
 
@@ -531,34 +539,116 @@
 
   </main>
 
-  <!-- Operator Authentication Modal -->
+  <!-- Supabase Operator Authentication & User Management Modal -->
   <div id="operator-auth-modal" class="modal-backdrop" style="display: none;">
-    <div class="modal-box">
+    <div class="modal-box modal-box-auth">
       <div class="modal-header">
         <div class="modal-title">
-          <span>🔐</span> Operator Security Authentication
+          <span>🔐</span> Supabase Operator Security Authentication
         </div>
         <button id="btn-modal-close" class="btn-modal-close" type="button">&times;</button>
       </div>
-      <div class="modal-body">
-        <p class="modal-desc">
-          Authorized personnel authentication is required to manually operate the spillway sluice gates and modify cellular alert broadcast numbers.
-        </p>
-        <div class="form-group-modal">
-          <label for="operator-input-name">Operator Callsign / Designation:</label>
-          <input type="text" id="operator-input-name" class="modal-input" value="Eng. Adrian (Chief Dam Controller)">
-        </div>
-        <div class="form-group-modal">
-          <label for="operator-input-pin">Operator Security PIN:</label>
-          <input type="password" id="operator-input-pin" class="modal-input" maxlength="8" placeholder="Enter PIN (Default: 1234)">
-        </div>
-        <div id="modal-pin-error" class="modal-error" style="display: none;">
-          ⚠️ Incorrect PIN! Enter the authorized operator PIN (Default: 1234).
-        </div>
+
+      <!-- Auth Modal Tabs -->
+      <div class="auth-tabs">
+        <button id="tab-btn-signin" class="auth-tab-btn active" type="button">
+          <span>🔑</span> Sign In as Operator
+        </button>
+        <button id="tab-btn-signup" class="auth-tab-btn" type="button">
+          <span>➕</span> Register New Operator
+        </button>
       </div>
-      <div class="modal-footer">
-        <button id="btn-modal-cancel" class="btn-secondary" type="button">Cancel</button>
-        <button id="btn-modal-submit" class="btn-primary" type="button">Unlock Operator Console</button>
+
+      <div class="modal-body">
+        <!-- 1. SIGN IN TAB CONTENT -->
+        <div id="tab-content-signin" class="auth-tab-content active">
+          <p class="modal-desc">
+            Sign in with your verified Supabase operator account to unlock manual spillway gate actuators and emergency dispatch.
+          </p>
+
+          <form id="form-operator-signin" onsubmit="return false;">
+            <div class="form-group-modal">
+              <label for="signin-email">Operator Email Address:</label>
+              <input type="email" id="signin-email" class="modal-input" placeholder="e.g. adrian.operator@gmail.com" required autocomplete="username">
+            </div>
+
+            <div class="form-group-modal">
+              <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                <label for="signin-password">Operator Password:</label>
+                <button type="button" id="btn-toggle-signin-pass" class="btn-text-link">Show Password</button>
+              </div>
+              <input type="password" id="signin-password" class="modal-input" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+
+            <div id="signin-error" class="modal-error" style="display: none;"></div>
+            <div id="signin-success" class="modal-success" style="display: none;"></div>
+
+            <div class="modal-actions-bar">
+              <button type="button" id="btn-quick-fill-test" class="btn-quick-demo">
+                ⚡ Quick-Fill Field Account
+              </button>
+              <button type="submit" id="btn-submit-signin" class="btn-primary">
+                🚀 Sign In with Supabase
+              </button>
+            </div>
+          </form>
+
+          <!-- Master PIN Fallback Option for Field Emergency / Pending Email Confirmation -->
+          <div class="field-fallback-box">
+            <span style="font-size: 11px; color: var(--text-muted);">Emergency Field Master Override?</span>
+            <button type="button" id="btn-show-pin-fallback" class="btn-text-link">Unlock with Master PIN (1234)</button>
+          </div>
+          <div id="pin-fallback-row" style="display: none; margin-top: 10px;">
+            <div class="form-group-modal">
+              <label for="fallback-pin-input">Master Emergency Key:</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="password" id="fallback-pin-input" class="modal-input" maxlength="8" placeholder="Enter PIN (1234)">
+                <button type="button" id="btn-submit-pin-fallback" class="btn-secondary" style="white-space: nowrap;">Unlock</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. REGISTER NEW OPERATOR TAB CONTENT -->
+        <div id="tab-content-signup" class="auth-tab-content" style="display: none;">
+          <p class="modal-desc">
+            Provision a new authorized dam operator account in Supabase. New accounts are stored securely in Supabase Auth & Profiles.
+          </p>
+
+          <form id="form-operator-signup" onsubmit="return false;">
+            <div class="form-group-modal">
+              <label for="signup-name">Full Name & Designation:</label>
+              <input type="text" id="signup-name" class="modal-input" placeholder="e.g. Eng. Adrian (Chief Dam Controller)" required>
+            </div>
+
+            <div class="form-group-modal">
+              <label for="signup-email">Official Email Address:</label>
+              <input type="email" id="signup-email" class="modal-input" placeholder="e.g. adrian.operator@gmail.com" required autocomplete="username">
+            </div>
+
+            <div class="form-group-modal">
+              <label for="signup-password">Secure Password (min 6 characters):</label>
+              <input type="password" id="signup-password" class="modal-input" placeholder="••••••••" minlength="6" required autocomplete="new-password">
+            </div>
+
+            <div class="form-group-modal">
+              <label for="signup-role">Operator Role / Authority Level:</label>
+              <select id="signup-role" class="modal-input">
+                <option value="OPERATOR">OPERATOR (Dam Controller / Gate Operator)</option>
+                <option value="ADMIN">ADMIN (Chief Irrigation Engineer / DMC Officer)</option>
+              </select>
+            </div>
+
+            <div id="signup-error" class="modal-error" style="display: none;"></div>
+            <div id="signup-success" class="modal-success" style="display: none;"></div>
+
+            <div class="modal-actions-bar" style="justify-content: flex-end;">
+              <button type="submit" id="btn-submit-signup" class="btn-primary" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">
+                ➕ Register Operator in Supabase
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </div>

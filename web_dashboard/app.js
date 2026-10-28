@@ -497,12 +497,19 @@ if (el.btnRefresh) {
 // AUTHORIZED OPERATOR CONTROL CENTER & EMERGENCY DISPATCH ENGINE
 // ============================================================================
 
-const OPERATOR_PIN = '1234';
+// ============================================================================
+// AUTHORIZED OPERATOR SUPABASE AUTHENTICATION & USER MANAGEMENT ENGINE
+// ============================================================================
+
+const MASTER_PIN = '1234';
 
 const operatorSession = {
   isAuthorized: false,
-  name: 'Eng. Adrian (Chief Dam Controller)',
-  role: 'CHIEF_ENGINEER'
+  user: null,
+  id: null,
+  email: null,
+  fullName: 'Guest Viewer',
+  role: 'VIEWER'
 };
 
 // Registered Emergency Contacts (Firmware designated baseline)
@@ -567,15 +574,90 @@ function initMqttWebSocket() {
   }
 }
 
-// Check saved operator authentication on page load
-function restoreOperatorSession() {
-  const savedAuth = sessionStorage.getItem('sdas_operator_auth');
-  const savedName = sessionStorage.getItem('sdas_operator_name');
-  if (savedAuth === 'true') {
-    operatorSession.isAuthorized = true;
-    if (savedName) operatorSession.name = savedName;
-    updateOperatorUiState();
+// Initialize Supabase Auth & Session Listener
+async function initSupabaseAuth() {
+  if (!supabaseClient) return;
+
+  // 1. Listen for real-time auth changes (Sign-In, Sign-Out, Token Refresh)
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    console.log('[Supabase Auth Event]:', event);
+    if (session?.user) {
+      await applyAuthenticatedUser(session.user);
+    } else if (event === 'SIGNED_OUT') {
+      applyLoggedOutState();
+    }
+  });
+
+  // 2. Check existing active session on page launch
+  try {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (session?.user) {
+      await applyAuthenticatedUser(session.user);
+    } else {
+      // Check emergency PIN session in sessionStorage
+      const savedAuth = sessionStorage.getItem('sdas_operator_auth');
+      const savedName = sessionStorage.getItem('sdas_operator_name');
+      if (savedAuth === 'true' && savedName) {
+        operatorSession.isAuthorized = true;
+        operatorSession.fullName = savedName;
+        operatorSession.email = 'field.operator@sdas.local';
+        operatorSession.role = 'OPERATOR';
+        updateOperatorUiState();
+      }
+    }
+  } catch (e) {
+    console.warn('[Supabase Auth] Session fetch:', e.message);
   }
+}
+
+// Apply authenticated Supabase user profile
+async function applyAuthenticatedUser(user) {
+  if (!user) return;
+
+  let fullName = user.user_metadata?.full_name || user.email.split('@')[0];
+  let role = user.user_metadata?.role || 'OPERATOR';
+
+  // Attempt to fetch profile from profiles table
+  try {
+    const { data: profile } = await supabaseClient
+      .from('profiles')
+      .select('role, full_name, email')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profile) {
+      if (profile.full_name) fullName = profile.full_name;
+      if (profile.role) role = profile.role;
+    }
+  } catch (err) {}
+
+  operatorSession.isAuthorized = true;
+  operatorSession.user = user;
+  operatorSession.id = user.id;
+  operatorSession.email = user.email;
+  operatorSession.fullName = fullName;
+  operatorSession.role = role;
+
+  sessionStorage.setItem('sdas_operator_auth', 'true');
+  sessionStorage.setItem('sdas_operator_name', fullName);
+
+  updateOperatorUiState();
+  closeAuthModal();
+}
+
+function applyLoggedOutState() {
+  operatorSession.isAuthorized = false;
+  operatorSession.user = null;
+  operatorSession.id = null;
+  operatorSession.email = null;
+  operatorSession.fullName = 'Guest Viewer';
+  operatorSession.role = 'VIEWER';
+
+  sessionStorage.removeItem('sdas_operator_auth');
+  sessionStorage.removeItem('sdas_operator_name');
+
+  updateOperatorUiState();
+  showCommandFeedback('🔒 Operator Console Locked. Signed out of Supabase.', 'waiting');
 }
 
 // Update UI elements based on authorization status
@@ -583,38 +665,38 @@ function updateOperatorUiState() {
   const authStatus = document.getElementById('operator-auth-status');
   const authLabel = document.getElementById('operator-auth-label');
   const btnToggleAuth = document.getElementById('btn-toggle-auth');
+  const btnAddOperator = document.getElementById('btn-add-operator-modal');
   const lockOverlay = document.getElementById('operator-lock-overlay');
 
   if (operatorSession.isAuthorized) {
     if (authStatus) authStatus.className = 'operator-badge authorized';
-    if (authLabel) authLabel.textContent = `🟢 AUTHORIZED: ${operatorSession.name}`;
+    if (authLabel) {
+      const emailDisplay = operatorSession.email ? `(${operatorSession.email})` : '';
+      authLabel.innerHTML = `🟢 <b>${escapeHtml(operatorSession.fullName)}</b> <span style="font-size: 10px; opacity: 0.85;">${escapeHtml(emailDisplay)}</span> &bull; [${escapeHtml(operatorSession.role)}]`;
+    }
     if (btnToggleAuth) {
-      btnToggleAuth.textContent = '🔒 Lock Console';
+      btnToggleAuth.textContent = '🔒 Sign Out';
       btnToggleAuth.className = 'btn-auth-toggle unlocked';
     }
+    if (btnAddOperator) btnAddOperator.style.display = 'inline-flex';
     if (lockOverlay) lockOverlay.style.display = 'none';
   } else {
     if (authStatus) authStatus.className = 'operator-badge locked';
     if (authLabel) authLabel.textContent = '🔒 ACCESS LOCKED (Read-Only Mode)';
     if (btnToggleAuth) {
-      btnToggleAuth.textContent = '🔐 Authorize Operator';
+      btnToggleAuth.textContent = '🔐 Operator Login';
       btnToggleAuth.className = 'btn-auth-toggle';
     }
+    if (btnAddOperator) btnAddOperator.style.display = 'none';
     if (lockOverlay) lockOverlay.style.display = 'flex';
   }
 }
 
-// Open / Close Operator Auth Modal
-function openAuthModal() {
+// Open / Close Operator Auth Modal & Tab Switching
+function openAuthModal(defaultTab = 'signin') {
   const modal = document.getElementById('operator-auth-modal');
-  const pinInput = document.getElementById('operator-input-pin');
-  const errorBox = document.getElementById('modal-pin-error');
   if (modal) modal.style.display = 'flex';
-  if (pinInput) {
-    pinInput.value = '';
-    pinInput.focus();
-  }
-  if (errorBox) errorBox.style.display = 'none';
+  switchAuthTab(defaultTab);
 }
 
 function closeAuthModal() {
@@ -622,36 +704,204 @@ function closeAuthModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function submitAuthPin() {
-  const pinInput = document.getElementById('operator-input-pin');
-  const nameInput = document.getElementById('operator-input-name');
-  const errorBox = document.getElementById('modal-pin-error');
-  const enteredPin = pinInput ? pinInput.value.trim() : '';
-  const enteredName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : 'Eng. Adrian (Dam Controller)';
+function switchAuthTab(tabName) {
+  const btnSignin = document.getElementById('tab-btn-signin');
+  const btnSignup = document.getElementById('tab-btn-signup');
+  const contentSignin = document.getElementById('tab-content-signin');
+  const contentSignup = document.getElementById('tab-content-signup');
+  const signinErr = document.getElementById('signin-error');
+  const signupErr = document.getElementById('signup-error');
+  if (signinErr) signinErr.style.display = 'none';
+  if (signupErr) signupErr.style.display = 'none';
 
-  if (enteredPin === OPERATOR_PIN) {
-    operatorSession.isAuthorized = true;
-    operatorSession.name = enteredName;
-    sessionStorage.setItem('sdas_operator_auth', 'true');
-    sessionStorage.setItem('sdas_operator_name', enteredName);
-    updateOperatorUiState();
-    closeAuthModal();
-    showCommandFeedback(`✅ Operator Authorized as '${enteredName}'. Actuators and contact management unlocked!`, 'success');
+  if (tabName === 'signup') {
+    if (btnSignin) btnSignin.className = 'auth-tab-btn';
+    if (btnSignup) btnSignup.className = 'auth-tab-btn active';
+    if (contentSignin) contentSignin.style.display = 'none';
+    if (contentSignup) contentSignup.style.display = 'block';
+    const nameInput = document.getElementById('signup-name');
+    if (nameInput) nameInput.focus();
   } else {
-    if (errorBox) errorBox.style.display = 'block';
-    if (pinInput) {
-      pinInput.value = '';
-      pinInput.focus();
+    if (btnSignin) btnSignin.className = 'auth-tab-btn active';
+    if (btnSignup) btnSignup.className = 'auth-tab-btn';
+    if (contentSignin) contentSignin.style.display = 'block';
+    if (contentSignup) contentSignup.style.display = 'none';
+    const emailInput = document.getElementById('signin-email');
+    if (emailInput) emailInput.focus();
+  }
+}
+
+// Handle Supabase Sign In
+async function handleSupabaseSignIn(email, password) {
+  const errBox = document.getElementById('signin-error');
+  const okBox = document.getElementById('signin-success');
+  const submitBtn = document.getElementById('btn-submit-signin');
+  if (errBox) errBox.style.display = 'none';
+  if (okBox) okBox.style.display = 'none';
+
+  if (!email || !password) {
+    if (errBox) {
+      errBox.textContent = '⚠️ Please enter both email and password.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Authenticating...';
+  }
+
+  try {
+    if (!supabaseClient) throw new Error('Supabase client is not initialized.');
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+      email: email.trim(),
+      password: password
+    });
+
+    if (error) {
+      // Check for email confirmation requirement
+      if (error.message && error.message.toLowerCase().includes('email not confirmed')) {
+        if (errBox) {
+          errBox.innerHTML = `⚠️ <b>Email Confirmation Pending!</b><br>Supabase has sent a confirmation link to <code>${escapeHtml(email)}</code>.<br><small>To unlock immediately on bench test, use the <b>Master Emergency PIN (1234)</b> below.</small>`;
+          errBox.style.display = 'block';
+        }
+        const pinRow = document.getElementById('pin-fallback-row');
+        if (pinRow) pinRow.style.display = 'block';
+        return;
+      }
+      throw error;
+    }
+
+    if (data?.user) {
+      await applyAuthenticatedUser(data.user);
+      showCommandFeedback(`✅ Successfully authenticated as ${operatorSession.fullName} via Supabase Auth!`, 'success');
+    }
+  } catch (err) {
+    if (errBox) {
+      errBox.textContent = `⚠️ Sign In Failed: ${err.message || 'Invalid email or password'}`;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '🚀 Sign In with Supabase';
     }
   }
 }
 
-function lockOperatorConsole() {
-  operatorSession.isAuthorized = false;
-  sessionStorage.removeItem('sdas_operator_auth');
-  sessionStorage.removeItem('sdas_operator_name');
-  updateOperatorUiState();
-  showCommandFeedback('🔒 Operator Console Locked. Manual controls returned to read-only mode.', 'waiting');
+// Handle Register / Add New Operator
+async function handleSupabaseSignUp(fullName, email, password, role) {
+  const errBox = document.getElementById('signup-error');
+  const okBox = document.getElementById('signup-success');
+  const submitBtn = document.getElementById('btn-submit-signup');
+  if (errBox) errBox.style.display = 'none';
+  if (okBox) okBox.style.display = 'none';
+
+  if (!fullName || !email || !password) {
+    if (errBox) {
+      errBox.textContent = '⚠️ All fields are required.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (password.length < 6) {
+    if (errBox) {
+      errBox.textContent = '⚠️ Password must be at least 6 characters.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Registering in Supabase...';
+  }
+
+  try {
+    if (!supabaseClient) throw new Error('Supabase client is not initialized.');
+
+    const { data, error } = await supabaseClient.auth.signUp({
+      email: email.trim(),
+      password: password,
+      options: {
+        data: {
+          full_name: fullName.trim(),
+          role: role || 'OPERATOR'
+        }
+      }
+    });
+
+    if (error) throw error;
+
+    if (data?.user) {
+      // Attempt upserting to public.profiles table
+      try {
+        await supabaseClient.from('profiles').upsert({
+          user_id: data.user.id,
+          email: data.user.email,
+          full_name: fullName.trim(),
+          role: role || 'OPERATOR'
+        });
+      } catch (e) {}
+
+      if (okBox) {
+        okBox.innerHTML = `✅ <b>Operator Account Provisioned!</b><br>User <b>${escapeHtml(fullName)}</b> (<small>${escapeHtml(email)}</small>) registered in Supabase with role [<b>${escapeHtml(role)}</b>].<br><small>User can now log in to command actuators.</small>`;
+        okBox.style.display = 'block';
+      }
+
+      showCommandFeedback(`✅ Provisioned new operator '${fullName}' in Supabase Auth & Profiles!`, 'success');
+
+      // If user session returned immediately, sign in directly
+      if (data.session?.user) {
+        setTimeout(async () => {
+          await applyAuthenticatedUser(data.session.user);
+        }, 1200);
+      }
+    }
+  } catch (err) {
+    if (errBox) {
+      errBox.textContent = `⚠️ Registration Error: ${err.message}`;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '➕ Register Operator in Supabase';
+    }
+  }
+}
+
+// Master Emergency PIN Fallback
+function handleMasterPinUnlock(enteredPin) {
+  if (enteredPin === MASTER_PIN) {
+    operatorSession.isAuthorized = true;
+    operatorSession.id = '00000000-0000-0000-0000-000000000001';
+    operatorSession.email = 'adrian.chief@dam.gov.lk';
+    operatorSession.fullName = 'Eng. Adrian (Chief Dam Controller)';
+    operatorSession.role = 'ADMIN';
+
+    sessionStorage.setItem('sdas_operator_auth', 'true');
+    sessionStorage.setItem('sdas_operator_name', operatorSession.fullName);
+
+    updateOperatorUiState();
+    closeAuthModal();
+    showCommandFeedback('⚡ Master Emergency Access Granted (PIN 1234). Actuators and broadcast enabled.', 'success');
+  } else {
+    alert('⚠️ Invalid Master Emergency PIN!');
+  }
+}
+
+// Handle Sign Out
+async function handleSignOut() {
+  try {
+    if (supabaseClient) {
+      await supabaseClient.auth.signOut();
+    }
+  } catch (e) {}
+  applyLoggedOutState();
 }
 
 // Show command feedback in UI
@@ -706,10 +956,13 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
     const payload = {
       schema_version: 1,
       type: cmdType,
+      issued_by: (operatorSession.id && operatorSession.id.length === 36) ? operatorSession.id : null,
       params: {
-        operator: operatorSession.name,
+        operator: operatorSession.fullName,
+        operator_email: operatorSession.email,
+        operator_role: operatorSession.role,
         target_percent: clampedPct,
-        issued_via: 'SDAS Web Operator Console',
+        issued_via: 'SDAS Web Console (Supabase Authenticated)',
         timestamp: new Date().toISOString()
       },
       status: 'PENDING',
@@ -739,7 +992,7 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
   // Construct status report
   const mqttLabel = mqttSuccess ? '⚡ MQTT Sent' : '⚠️ MQTT Offline';
   const dbLabel = supabaseSuccess ? '☁️ Supabase Audited' : '⚠️ DB Sync Pending';
-  showCommandFeedback(`[${timeStr}] Command '${cmdType}' issued by ${operatorSession.name} (${clampedPct}%). ${mqttLabel} &bull; ${dbLabel}`, 'success');
+  showCommandFeedback(`[${timeStr}] Command '${cmdType}' issued by ${operatorSession.fullName} (${clampedPct}%). ${mqttLabel} &bull; ${dbLabel}`, 'success');
 
   // Optimistically update local control mode if AUTO
   if (cmdType === 'AUTO') {
@@ -986,7 +1239,7 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchLatestHardwareReading();
   setupRealtimeSubscription();
   initMqttWebSocket();
-  restoreOperatorSession();
+  initSupabaseAuth();
   loadEmergencyContacts();
 
   // Watchdog timer checking hardware freshness every second
@@ -1000,30 +1253,124 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Operator Auth Modal event listeners
   const btnToggleAuth = document.getElementById('btn-toggle-auth');
+  const btnAddOperator = document.getElementById('btn-add-operator-modal');
   const btnUnlockPrompt = document.getElementById('btn-unlock-prompt');
+  const btnRegisterPrompt = document.getElementById('btn-register-prompt');
   const btnModalClose = document.getElementById('btn-modal-close');
-  const btnModalCancel = document.getElementById('btn-modal-cancel');
-  const btnModalSubmit = document.getElementById('btn-modal-submit');
-  const pinInput = document.getElementById('operator-input-pin');
 
+  const tabBtnSignin = document.getElementById('tab-btn-signin');
+  const tabBtnSignup = document.getElementById('tab-btn-signup');
+
+  const formSignin = document.getElementById('form-operator-signin');
+  const formSignup = document.getElementById('form-operator-signup');
+  const btnQuickFill = document.getElementById('btn-quick-fill-test');
+  const btnTogglePass = document.getElementById('btn-toggle-signin-pass');
+
+  const btnShowPinFallback = document.getElementById('btn-show-pin-fallback');
+  const pinFallbackRow = document.getElementById('pin-fallback-row');
+  const btnSubmitPinFallback = document.getElementById('btn-submit-pin-fallback');
+  const fallbackPinInput = document.getElementById('fallback-pin-input');
+
+  // Toggle Auth: Sign Out if authorized, or Open Sign In modal
   if (btnToggleAuth) {
     btnToggleAuth.addEventListener('click', () => {
       if (operatorSession.isAuthorized) {
-        lockOperatorConsole();
+        handleSignOut();
       } else {
-        openAuthModal();
+        openAuthModal('signin');
       }
     });
   }
 
-  if (btnUnlockPrompt) btnUnlockPrompt.addEventListener('click', openAuthModal);
-  if (btnModalClose) btnModalClose.addEventListener('click', closeAuthModal);
-  if (btnModalCancel) btnModalCancel.addEventListener('click', closeAuthModal);
-  if (btnModalSubmit) btnModalSubmit.addEventListener('click', submitAuthPin);
+  if (btnAddOperator) {
+    btnAddOperator.addEventListener('click', () => {
+      openAuthModal('signup');
+    });
+  }
 
-  if (pinInput) {
-    pinInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') submitAuthPin();
+  if (btnUnlockPrompt) btnUnlockPrompt.addEventListener('click', () => openAuthModal('signin'));
+  if (btnRegisterPrompt) btnRegisterPrompt.addEventListener('click', () => openAuthModal('signup'));
+  if (btnModalClose) btnModalClose.addEventListener('click', closeAuthModal);
+
+  // Modal Tab switching
+  if (tabBtnSignin) tabBtnSignin.addEventListener('click', () => switchAuthTab('signin'));
+  if (tabBtnSignup) tabBtnSignup.addEventListener('click', () => switchAuthTab('signup'));
+
+  // Quick Demo account auto-fill
+  if (btnQuickFill) {
+    btnQuickFill.addEventListener('click', () => {
+      const emailInput = document.getElementById('signin-email');
+      const passInput = document.getElementById('signin-password');
+      if (emailInput && passInput) {
+        emailInput.value = 'test.operator.sdas@gmail.com';
+        passInput.value = 'sdasoperator2026';
+      }
+    });
+  }
+
+  // Toggle password visibility
+  if (btnTogglePass) {
+    btnTogglePass.addEventListener('click', () => {
+      const passInput = document.getElementById('signin-password');
+      if (passInput) {
+        if (passInput.type === 'password') {
+          passInput.type = 'text';
+          btnTogglePass.textContent = 'Hide';
+        } else {
+          passInput.type = 'password';
+          btnTogglePass.textContent = 'Show';
+        }
+      }
+    });
+  }
+
+  // Handle Sign In submission
+  if (formSignin) {
+    formSignin.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const emailInput = document.getElementById('signin-email');
+      const passInput = document.getElementById('signin-password');
+      if (emailInput && passInput) {
+        handleSupabaseSignIn(emailInput.value, passInput.value);
+      }
+    });
+  }
+
+  // Handle Sign Up / Register Operator submission
+  if (formSignup) {
+    formSignup.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById('signup-name');
+      const emailInput = document.getElementById('signup-email');
+      const passInput = document.getElementById('signup-password');
+      const roleInput = document.getElementById('signup-role');
+
+      if (nameInput && emailInput && passInput) {
+        handleSupabaseSignUp(
+          nameInput.value,
+          emailInput.value,
+          passInput.value,
+          roleInput ? roleInput.value : 'OPERATOR'
+        );
+      }
+    });
+  }
+
+  // Show Master PIN Fallback row
+  if (btnShowPinFallback && pinFallbackRow) {
+    btnShowPinFallback.addEventListener('click', () => {
+      pinFallbackRow.style.display = pinFallbackRow.style.display === 'none' ? 'block' : 'none';
+      if (fallbackPinInput) fallbackPinInput.focus();
+    });
+  }
+
+  // Submit Master PIN Fallback
+  if (btnSubmitPinFallback && fallbackPinInput) {
+    btnSubmitPinFallback.addEventListener('click', () => {
+      handleMasterPinUnlock(fallbackPinInput.value.trim());
+    });
+    fallbackPinInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleMasterPinUnlock(fallbackPinInput.value.trim());
     });
   }
 
