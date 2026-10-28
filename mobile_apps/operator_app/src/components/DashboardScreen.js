@@ -175,6 +175,22 @@ export default function DashboardScreen({ operatorUser }) {
 
   const remainingM = Math.max(0, telemetry.totalHeightM - telemetry.depthM).toFixed(2);
 
+  const getBadgeConfig = () => {
+    switch (telemetry.alertState) {
+      case 'PRE_WARNING':
+        return { label: 'Pre-Warning', icon: '⚠️', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.15)', border: '#F59E0B' };
+      case 'CLEAR_AREA':
+        return { label: 'Clear Area', icon: '⚠️', color: '#F97316', bg: 'rgba(249, 115, 22, 0.15)', border: '#F97316' };
+      case 'DANGER':
+        return { label: 'Danger', icon: '🚨', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.2)', border: '#EF4444' };
+      case 'MAINTENANCE':
+        return { label: 'Fault Mode', icon: '🔧', color: '#A855F7', bg: 'rgba(168, 85, 247, 0.2)', border: '#A855F7' };
+      default:
+        return { label: 'Normal', icon: '✓', color: '#10B981', bg: 'rgba(16, 185, 129, 0.15)', border: '#10B981' };
+    }
+  };
+  const badge = getBadgeConfig();
+
   return (
     <ScrollView
       style={styles.container}
@@ -205,12 +221,16 @@ export default function DashboardScreen({ operatorUser }) {
           <MapPinIcon size={20} color="#00F0FF" />
           <View style={{ marginLeft: 10 }}>
             <Text style={styles.damName}>Kantalai Dam</Text>
-            <Text style={styles.damStatusSub}>Live Data</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#10B981', marginRight: 6 }} />
+              <Text style={styles.damStatusSub}>
+                Live Sync: {new Date(telemetry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </Text>
+            </View>
           </View>
         </View>
-        <View style={styles.damStatusBadge}>
-          <CheckIcon size={14} color="#10B981" />
-          <Text style={styles.damStatusBadgeText}>Normal</Text>
+        <View style={[styles.damStatusBadge, { backgroundColor: badge.bg, borderColor: badge.border }]}>
+          <Text style={[styles.damStatusBadgeText, { color: badge.color }]}>{badge.icon} {badge.label}</Text>
         </View>
       </View>
 
