@@ -139,8 +139,8 @@ SensorData SensorManager::sampleAndVerify() {
     // water is at or exceeding 100% capacity (extreme flood danger). This is NOT a sensor fault!
     float minBlindZoneDist = SENSOR_MOUNT_HEIGHT_CM - TANK_MAX_DEPTH_CM; // Distance at 100% full
     
-    bool d1_blindzone = (d1 >= 0.0f && d1 < SENSOR_MIN_VALID_DIST_CM);
-    bool d2_blindzone = (d2 >= 0.0f && d2 < SENSOR_MIN_VALID_DIST_CM);
+    bool d1_blindzone = (d1 > 0.0f && d1 < SENSOR_MIN_VALID_DIST_CM);
+    bool d2_blindzone = (d2 > 0.0f && d2 < SENSOR_MIN_VALID_DIST_CM);
     
     if (d1_blindzone) {
         d1 = minBlindZoneDist; // Clamp to 100% capacity
