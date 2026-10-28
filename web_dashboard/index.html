@@ -8,6 +8,8 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
   <!-- Supabase JS v2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Paho MQTT WebSocket Client for sub-second hardware command dispatch -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
 <body>
 
@@ -239,7 +241,232 @@
         </div>
       </div>
 
-      <!-- 5. Real-Time Telemetry Trend Chart (7 cols) -->
+      <!-- 5. AUTHORIZED OPERATOR CONTROL CENTER & EMERGENCY DISPATCH CONSOLE -->
+      <div class="card col-operator-center" id="operator-center-card">
+        <div class="card-header" style="flex-wrap: wrap; gap: 12px;">
+          <div class="card-title">
+            <span class="icon">🛡️</span> Authorized Operator Control Center & Emergency Dispatch
+          </div>
+          <div class="operator-auth-bar">
+            <div id="operator-auth-status" class="operator-badge locked">
+              <span class="dot-auth"></span>
+              <span id="operator-auth-label">🔒 ACCESS LOCKED (Read-Only Mode)</span>
+            </div>
+            <button id="btn-toggle-auth" class="btn-auth-toggle">
+              🔐 Authorize Operator
+            </button>
+          </div>
+        </div>
+
+        <div class="operator-workspace-wrapper">
+          <!-- Security Lock Overlay (visible when unauthorized) -->
+          <div id="operator-lock-overlay" class="operator-lock-overlay">
+            <div class="lock-overlay-content">
+              <div class="lock-icon">🔒</div>
+              <h3>Operator Authorization Required</h3>
+              <p>Manual sluice gate controls and cellular SMS broadcast lists are locked to protect dam operations from unauthorized overrides. Authenticate as an authorized engineer to unlock command actuators.</p>
+              <button id="btn-unlock-prompt" class="btn-unlock-primary">
+                🔑 Enter Operator PIN to Unlock
+              </button>
+            </div>
+          </div>
+
+          <!-- Authorized Operator Workspace Grid -->
+          <div class="operator-grid">
+
+            <!-- Left Subpanel: Manual Sluice Gate Control Deck -->
+            <div class="operator-subpanel">
+              <div class="subpanel-header">
+                <div class="subpanel-title">
+                  <span>⚙️</span> Manual Sluice Gate Actuator Override
+                </div>
+                <span class="badge-safe-limit">⚠️ Physical Clamp: 50% Max</span>
+              </div>
+
+              <!-- Current Gate State Overview -->
+              <div class="gate-live-summary">
+                <div class="summary-tile">
+                  <span class="lbl">Gate Travel</span>
+                  <span id="op-gate-pct" class="val">0%</span>
+                </div>
+                <div class="summary-tile">
+                  <span class="lbl">Servo Angle</span>
+                  <span id="op-servo-angle" class="val">0°</span>
+                </div>
+                <div class="summary-tile">
+                  <span class="lbl">Control Mode</span>
+                  <span id="op-gate-mode" class="val">AUTO</span>
+                </div>
+                <div class="summary-tile">
+                  <span class="lbl">Discharge</span>
+                  <span id="op-discharge-status" class="val">Closed</span>
+                </div>
+              </div>
+
+              <!-- Safety Policy Notice -->
+              <div class="safety-notice-box">
+                <span class="notice-icon">🛡️</span>
+                <div class="notice-text">
+                  <strong>Hardware Safety Protocol:</strong> Sluice gate physical travel is hard-capped at <strong>50% (90° servo travel)</strong> to prevent downstream flood surge waves. All commands are audited to Supabase and published directly via MQTT.
+                </div>
+              </div>
+
+              <!-- Action Buttons Grid -->
+              <div class="gate-actions-grid">
+                <button id="btn-cmd-auto" class="cmd-btn btn-auto" title="Restore autonomous sensor-driven flood control">
+                  <span class="btn-icon">🟢</span>
+                  <div class="btn-text">
+                    <strong>AUTO MODE</strong>
+                    <small>Autonomous Sensor Control</small>
+                  </div>
+                </button>
+
+                <button id="btn-cmd-open20" class="cmd-btn btn-open20" title="Open gate to 20% Clear Area relief">
+                  <span class="btn-icon">🟡</span>
+                  <div class="btn-text">
+                    <strong>OPEN 20%</strong>
+                    <small>Clear Area Relief (36°)</small>
+                  </div>
+                </button>
+
+                <button id="btn-cmd-open50" class="cmd-btn btn-open50" title="Open gate to 50% Maximum Safe travel">
+                  <span class="btn-icon">🔴</span>
+                  <div class="btn-text">
+                    <strong>OPEN 50%</strong>
+                    <small>Max Safe Limit (90°)</small>
+                  </div>
+                </button>
+
+                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate">
+                  <span class="btn-icon">⚪</span>
+                  <div class="btn-text">
+                    <strong>CLOSE GATE (0%)</strong>
+                    <small>Full Closure (0°)</small>
+                  </div>
+                </button>
+
+                <button id="btn-cmd-estop" class="cmd-btn btn-estop" title="Emergency Stop - Halt servo motor immediately">
+                  <span class="btn-icon">🛑</span>
+                  <div class="btn-text">
+                    <strong>EMERGENCY STOP</strong>
+                    <small>Halt Servo Motor (ESTOP)</small>
+                  </div>
+                </button>
+              </div>
+
+              <!-- Custom Travel Slider (Clamped 0% - 50%) -->
+              <div class="custom-slider-box">
+                <div class="slider-header">
+                  <label for="gate-slider">Precision Gate Position:</label>
+                  <span id="gate-slider-val" class="slider-val-badge">0% (0°)</span>
+                </div>
+                <div class="slider-track-wrap">
+                  <input type="range" id="gate-slider" min="0" max="50" step="5" value="0" class="range-slider">
+                  <div class="slider-ticks">
+                    <span>0%</span>
+                    <span>10%</span>
+                    <span>20% (Relief)</span>
+                    <span>30%</span>
+                    <span>40%</span>
+                    <span class="tick-max">50% (Max Safe)</span>
+                  </div>
+                </div>
+                <button id="btn-apply-slider" class="btn-apply-slider">
+                  🚀 Apply Gate Position
+                </button>
+              </div>
+
+              <!-- Command Transmission Log -->
+              <div id="cmd-feedback-box" class="cmd-feedback-box waiting">
+                <span id="cmd-feedback-icon">📡</span>
+                <span id="cmd-feedback-text">Awaiting operator command dispatch...</span>
+              </div>
+            </div>
+
+            <!-- Right Subpanel: Emergency SMS Broadcast & Contact Management -->
+            <div class="operator-subpanel">
+              <div class="subpanel-header">
+                <div class="subpanel-title">
+                  <span>📱</span> Emergency SMS Broadcast & Contact Directory
+                </div>
+                <span id="contacts-count-badge" class="badge-contacts-count">4 Active Numbers</span>
+              </div>
+
+              <!-- Broadcast Quick Actions -->
+              <div class="broadcast-actions-box">
+                <button id="btn-broadcast-alert" class="btn-broadcast-alert">
+                  <span class="btn-icon">📢</span>
+                  <div>
+                    <strong>BROADCAST EMERGENCY SMS</strong>
+                    <small>Transmit flood alert to all registered contacts</small>
+                  </div>
+                </button>
+                <button id="btn-test-sms" class="btn-test-sms">
+                  <span class="btn-icon">🔔</span>
+                  <div>
+                    <strong>PING TEST SMS</strong>
+                    <small>Test SIM800L module readiness</small>
+                  </div>
+                </button>
+              </div>
+
+              <!-- Add Contact Form -->
+              <div class="add-contact-box">
+                <div class="add-contact-header">
+                  <span>➕ Add Emergency Broadcast Number</span>
+                </div>
+                <form id="form-add-contact" class="add-contact-form" onsubmit="return false;">
+                  <div class="form-row">
+                    <div class="form-group flex-2">
+                      <label for="contact-name">Authority / Name:</label>
+                      <input type="text" id="contact-name" placeholder="e.g. Irrigation Dept Engineer" required>
+                    </div>
+                    <div class="form-group flex-2">
+                      <label for="contact-phone">Phone Number (+94):</label>
+                      <input type="tel" id="contact-phone" placeholder="e.g. +94771234567 or 0771234567" required>
+                    </div>
+                    <div class="form-group flex-1">
+                      <label for="contact-role">Role:</label>
+                      <select id="contact-role">
+                        <option value="OPERATOR">Operator</option>
+                        <option value="OFFICER">Field Officer</option>
+                        <option value="POLICE">Police</option>
+                        <option value="FIRE_RESCUE">Fire & Rescue</option>
+                        <option value="COMMUNITY">Community</option>
+                      </select>
+                    </div>
+                  </div>
+                  <button type="submit" id="btn-save-contact" class="btn-save-contact">
+                    ➕ Add Number to SIM800L Broadcast List
+                  </button>
+                </form>
+              </div>
+
+              <!-- Contacts List Table -->
+              <div class="contacts-table-wrap">
+                <table class="contacts-table">
+                  <thead>
+                    <tr>
+                      <th>Authority / Contact</th>
+                      <th>Phone Number</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="contacts-table-body">
+                    <!-- Populated dynamically via JS -->
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- 6. Real-Time Telemetry Trend Chart (7 cols) -->
       <div class="card col-chart">
         <div class="card-header">
           <div class="card-title">
@@ -303,6 +530,38 @@
     </div>
 
   </main>
+
+  <!-- Operator Authentication Modal -->
+  <div id="operator-auth-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title">
+          <span>🔐</span> Operator Security Authentication
+        </div>
+        <button id="btn-modal-close" class="btn-modal-close" type="button">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">
+          Authorized personnel authentication is required to manually operate the spillway sluice gates and modify cellular alert broadcast numbers.
+        </p>
+        <div class="form-group-modal">
+          <label for="operator-input-name">Operator Callsign / Designation:</label>
+          <input type="text" id="operator-input-name" class="modal-input" value="Eng. Adrian (Chief Dam Controller)">
+        </div>
+        <div class="form-group-modal">
+          <label for="operator-input-pin">Operator Security PIN:</label>
+          <input type="password" id="operator-input-pin" class="modal-input" maxlength="8" placeholder="Enter PIN (Default: 1234)">
+        </div>
+        <div id="modal-pin-error" class="modal-error" style="display: none;">
+          ⚠️ Incorrect PIN! Enter the authorized operator PIN (Default: 1234).
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-modal-cancel" class="btn-secondary" type="button">Cancel</button>
+        <button id="btn-modal-submit" class="btn-primary" type="button">Unlock Operator Console</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Footer -->
   <footer>

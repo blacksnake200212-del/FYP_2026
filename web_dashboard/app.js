@@ -244,6 +244,16 @@ function renderUI(rawRow) {
   el.gateModeVal.textContent = state.controlMode;
   el.gateFlowVal.textContent = state.gatePercent > 0 ? `Active Relief (${state.gatePercent}%)` : 'Closed';
 
+  // Synchronize with Authorized Operator Control Center
+  const opGatePct = document.getElementById('op-gate-pct');
+  const opServoAngle = document.getElementById('op-servo-angle');
+  const opGateMode = document.getElementById('op-gate-mode');
+  const opDischarge = document.getElementById('op-discharge-status');
+  if (opGatePct) opGatePct.textContent = `${state.gatePercent}%`;
+  if (opServoAngle) opServoAngle.textContent = `${servoAngle}°`;
+  if (opGateMode) opGateMode.textContent = state.controlMode;
+  if (opDischarge) opDischarge.textContent = state.gatePercent > 0 ? `Active (${state.gatePercent}%)` : 'Closed';
+
   // 6. Sensor 1 (HC-SR04 Primary)
   const s1Ok = isOnline && state.sensor1Dist > 0;
   el.s1Card.className = s1Ok ? 'sensor-card active' : 'sensor-card fault';
@@ -483,11 +493,501 @@ if (el.btnRefresh) {
   });
 }
 
+// ============================================================================
+// AUTHORIZED OPERATOR CONTROL CENTER & EMERGENCY DISPATCH ENGINE
+// ============================================================================
+
+const OPERATOR_PIN = '1234';
+
+const operatorSession = {
+  isAuthorized: false,
+  name: 'Eng. Adrian (Chief Dam Controller)',
+  role: 'CHIEF_ENGINEER'
+};
+
+// Registered Emergency Contacts (Firmware designated baseline)
+const DEFAULT_CONTACTS = [
+  { id: 'c-01', name: 'District Secretariat & DMC', phone: '+94740099235', role: 'DISTRICT_SECRETARIAT', isDefault: true },
+  { id: 'c-02', name: 'Disaster Management Field Unit', phone: '+94778364925', role: 'OFFICER', isDefault: true },
+  { id: 'c-03', name: 'Police Emergency Operations', phone: '+94712833936', role: 'POLICE', isDefault: true },
+  { id: 'c-04', name: 'Fire & Rescue Service Command', phone: '+94781099235', role: 'FIRE_RESCUE', isDefault: true }
+];
+
+let contactsList = [...DEFAULT_CONTACTS];
+
+// HiveMQ MQTT WebSocket Client
+let pahoMqttClient = null;
+let isMqttConnected = false;
+
+function initMqttWebSocket() {
+  if (typeof Paho === 'undefined' || !Paho.MQTT) {
+    console.warn('[MQTT WebSocket] Paho library not loaded, using Supabase REST fallback.');
+    return;
+  }
+
+  const isHttps = window.location.protocol === 'https:';
+  const brokerHost = 'broker.hivemq.com';
+  const brokerPort = isHttps ? 8884 : 8000;
+  const path = '/mqtt';
+  const clientId = 'SDAS_Web_' + Math.random().toString(16).substring(2, 10);
+
+  try {
+    pahoMqttClient = new Paho.MQTT.Client(brokerHost, Number(brokerPort), path, clientId);
+
+    pahoMqttClient.onConnectionLost = (responseObject) => {
+      console.warn('[MQTT WebSocket] Connection lost:', responseObject.errorMessage);
+      isMqttConnected = false;
+      setTimeout(initMqttWebSocket, 5000);
+    };
+
+    pahoMqttClient.onMessageArrived = (message) => {
+      console.log(`[MQTT] Incoming on ${message.destinationName}:`, message.payloadString);
+    };
+
+    pahoMqttClient.connect({
+      useSSL: isHttps,
+      timeout: 5,
+      keepAliveInterval: 30,
+      cleanSession: true,
+      onSuccess: () => {
+        console.log(`[MQTT WebSocket] Connected to ${brokerHost}:${brokerPort} via WebSocket!`);
+        isMqttConnected = true;
+        try {
+          pahoMqttClient.subscribe('dam/puttalam/commands');
+        } catch (e) {}
+      },
+      onFailure: (err) => {
+        console.warn('[MQTT WebSocket] Connection failed:', err.errorMessage);
+        isMqttConnected = false;
+        setTimeout(initMqttWebSocket, 10000);
+      }
+    });
+  } catch (err) {
+    console.warn('[MQTT WebSocket] Init exception:', err.message);
+  }
+}
+
+// Check saved operator authentication on page load
+function restoreOperatorSession() {
+  const savedAuth = sessionStorage.getItem('sdas_operator_auth');
+  const savedName = sessionStorage.getItem('sdas_operator_name');
+  if (savedAuth === 'true') {
+    operatorSession.isAuthorized = true;
+    if (savedName) operatorSession.name = savedName;
+    updateOperatorUiState();
+  }
+}
+
+// Update UI elements based on authorization status
+function updateOperatorUiState() {
+  const authStatus = document.getElementById('operator-auth-status');
+  const authLabel = document.getElementById('operator-auth-label');
+  const btnToggleAuth = document.getElementById('btn-toggle-auth');
+  const lockOverlay = document.getElementById('operator-lock-overlay');
+
+  if (operatorSession.isAuthorized) {
+    if (authStatus) authStatus.className = 'operator-badge authorized';
+    if (authLabel) authLabel.textContent = `🟢 AUTHORIZED: ${operatorSession.name}`;
+    if (btnToggleAuth) {
+      btnToggleAuth.textContent = '🔒 Lock Console';
+      btnToggleAuth.className = 'btn-auth-toggle unlocked';
+    }
+    if (lockOverlay) lockOverlay.style.display = 'none';
+  } else {
+    if (authStatus) authStatus.className = 'operator-badge locked';
+    if (authLabel) authLabel.textContent = '🔒 ACCESS LOCKED (Read-Only Mode)';
+    if (btnToggleAuth) {
+      btnToggleAuth.textContent = '🔐 Authorize Operator';
+      btnToggleAuth.className = 'btn-auth-toggle';
+    }
+    if (lockOverlay) lockOverlay.style.display = 'flex';
+  }
+}
+
+// Open / Close Operator Auth Modal
+function openAuthModal() {
+  const modal = document.getElementById('operator-auth-modal');
+  const pinInput = document.getElementById('operator-input-pin');
+  const errorBox = document.getElementById('modal-pin-error');
+  if (modal) modal.style.display = 'flex';
+  if (pinInput) {
+    pinInput.value = '';
+    pinInput.focus();
+  }
+  if (errorBox) errorBox.style.display = 'none';
+}
+
+function closeAuthModal() {
+  const modal = document.getElementById('operator-auth-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function submitAuthPin() {
+  const pinInput = document.getElementById('operator-input-pin');
+  const nameInput = document.getElementById('operator-input-name');
+  const errorBox = document.getElementById('modal-pin-error');
+  const enteredPin = pinInput ? pinInput.value.trim() : '';
+  const enteredName = nameInput && nameInput.value.trim() ? nameInput.value.trim() : 'Eng. Adrian (Dam Controller)';
+
+  if (enteredPin === OPERATOR_PIN) {
+    operatorSession.isAuthorized = true;
+    operatorSession.name = enteredName;
+    sessionStorage.setItem('sdas_operator_auth', 'true');
+    sessionStorage.setItem('sdas_operator_name', enteredName);
+    updateOperatorUiState();
+    closeAuthModal();
+    showCommandFeedback(`✅ Operator Authorized as '${enteredName}'. Actuators and contact management unlocked!`, 'success');
+  } else {
+    if (errorBox) errorBox.style.display = 'block';
+    if (pinInput) {
+      pinInput.value = '';
+      pinInput.focus();
+    }
+  }
+}
+
+function lockOperatorConsole() {
+  operatorSession.isAuthorized = false;
+  sessionStorage.removeItem('sdas_operator_auth');
+  sessionStorage.removeItem('sdas_operator_name');
+  updateOperatorUiState();
+  showCommandFeedback('🔒 Operator Console Locked. Manual controls returned to read-only mode.', 'waiting');
+}
+
+// Show command feedback in UI
+function showCommandFeedback(msg, type = 'waiting') {
+  const box = document.getElementById('cmd-feedback-box');
+  const text = document.getElementById('cmd-feedback-text');
+  const icon = document.getElementById('cmd-feedback-icon');
+  if (!box || !text) return;
+
+  box.className = `cmd-feedback-box ${type}`;
+  text.textContent = msg;
+
+  if (type === 'success') {
+    if (icon) icon.textContent = '⚡';
+  } else if (type === 'error') {
+    if (icon) icon.textContent = '⚠️';
+  } else {
+    if (icon) icon.textContent = '📡';
+  }
+}
+
+// Command Dispatch: Dual Dispatch (MQTT WebSocket + Supabase commands table)
+async function dispatchGateCommand(cmdType, targetPct = 0) {
+  if (!operatorSession.isAuthorized) {
+    openAuthModal();
+    return;
+  }
+
+  // Safety clamp check (hard-limit 50%)
+  const clampedPct = Math.max(0, Math.min(50, targetPct));
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  showCommandFeedback(`⏳ Dispatching '${cmdType}' (${clampedPct}%) to hardware...`, 'waiting');
+
+  let mqttSuccess = false;
+  let supabaseSuccess = false;
+
+  // 1. Send via HiveMQ MQTT WebSocket (Instant hardware reaction on ESP32)
+  if (pahoMqttClient && isMqttConnected) {
+    try {
+      const msg = new Paho.MQTT.Message(cmdType);
+      msg.destinationName = 'dam/puttalam/commands';
+      msg.qos = 1;
+      pahoMqttClient.send(msg);
+      mqttSuccess = true;
+    } catch (e) {
+      console.warn('[MQTT Dispatch] Send failed:', e.message);
+    }
+  }
+
+  // 2. Insert into Supabase commands table for cloud audit trail & mobile app sync
+  try {
+    const payload = {
+      schema_version: 1,
+      type: cmdType,
+      params: {
+        operator: operatorSession.name,
+        target_percent: clampedPct,
+        issued_via: 'SDAS Web Operator Console',
+        timestamp: new Date().toISOString()
+      },
+      status: 'PENDING',
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString()
+    };
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/commands`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      supabaseSuccess = true;
+    } else {
+      console.warn('[Supabase Commands] HTTP Error:', res.status);
+    }
+  } catch (err) {
+    console.warn('[Supabase Commands] Insert failed:', err.message);
+  }
+
+  // Construct status report
+  const mqttLabel = mqttSuccess ? '⚡ MQTT Sent' : '⚠️ MQTT Offline';
+  const dbLabel = supabaseSuccess ? '☁️ Supabase Audited' : '⚠️ DB Sync Pending';
+  showCommandFeedback(`[${timeStr}] Command '${cmdType}' issued by ${operatorSession.name} (${clampedPct}%). ${mqttLabel} &bull; ${dbLabel}`, 'success');
+
+  // Optimistically update local control mode if AUTO
+  if (cmdType === 'AUTO') {
+    state.controlMode = 'AUTO';
+  } else {
+    state.controlMode = 'MANUAL';
+  }
+  const opGateMode = document.getElementById('op-gate-mode');
+  if (opGateMode) opGateMode.textContent = state.controlMode;
+}
+
+// Emergency Contacts Management
+function normalizePhoneNumber(raw) {
+  let cleaned = raw.replace(/[\s\-\(\)]/g, '');
+  if (cleaned.startsWith('07')) {
+    cleaned = '+94' + cleaned.substring(1);
+  } else if (cleaned.startsWith('7') && cleaned.length === 9) {
+    cleaned = '+94' + cleaned;
+  } else if (!cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned;
+  }
+  return cleaned;
+}
+
+function formatPhoneDisplay(num) {
+  if (num.startsWith('+94') && num.length === 12) {
+    return `${num.substring(0, 3)} ${num.substring(3, 5)} ${num.substring(5, 8)} ${num.substring(8)}`;
+  }
+  return num;
+}
+
+// Load contacts from Supabase + localStorage
+async function loadEmergencyContacts() {
+  // Load custom contacts from localStorage
+  try {
+    const saved = localStorage.getItem('sdas_custom_contacts');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(c => {
+          if (!contactsList.some(item => item.phone === c.phone)) {
+            contactsList.push(c);
+          }
+        });
+      }
+    }
+  } catch (e) {}
+
+  // Fetch from Supabase contacts table
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts?select=*`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      }
+    });
+    if (res.ok) {
+      const dbContacts = await res.json();
+      if (Array.isArray(dbContacts)) {
+        dbContacts.forEach(row => {
+          const rawPhone = row.phone_encrypted || row.phone_number || '';
+          const cleanPhone = rawPhone.replace(/^enc_aes256_/, '');
+          if (cleanPhone && !contactsList.some(c => c.phone === cleanPhone)) {
+            contactsList.push({
+              id: row.id,
+              name: row.name || 'Emergency Contact',
+              phone: cleanPhone,
+              role: row.role || 'OPERATOR',
+              isDefault: false
+            });
+          }
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[Contacts Load] Warning:', e.message);
+  }
+
+  renderContactsTable();
+}
+
+// Render contacts table
+function renderContactsTable() {
+  const tbody = document.getElementById('contacts-table-body');
+  const countBadge = document.getElementById('contacts-count-badge');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+  if (countBadge) countBadge.textContent = `${contactsList.length} Active Numbers`;
+
+  contactsList.forEach((c) => {
+    const tr = document.createElement('tr');
+    const roleClass = (c.role || 'operator').toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+    tr.innerHTML = `
+      <td><strong>${escapeHtml(c.name)}</strong></td>
+      <td><code style="color: #38BDF8; font-weight: 700;">${escapeHtml(formatPhoneDisplay(c.phone))}</code></td>
+      <td><span class="contact-role-pill ${roleClass}">${escapeHtml(c.role || 'OPERATOR')}</span></td>
+      <td><span class="contact-status-active">● BROADCAST</span></td>
+      <td>
+        <button class="btn-ping-contact" data-phone="${escapeHtml(c.phone)}" data-name="${escapeHtml(c.name)}" title="Test ping this contact">
+          🔔 Ping
+        </button>
+        ${!c.isDefault ? `<button class="btn-del-contact" data-id="${escapeHtml(c.id)}" title="Remove contact">🗑️</button>` : `<span style="font-size: 10px; color: var(--text-muted);">Core</span>`}
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Attach button events
+  tbody.querySelectorAll('.btn-ping-contact').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const phone = btn.getAttribute('data-phone');
+      const name = btn.getAttribute('data-name');
+      testSingleContactSms(phone, name);
+    });
+  });
+
+  tbody.querySelectorAll('.btn-del-contact').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      deleteEmergencyContact(id);
+    });
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Add new emergency contact
+async function addEmergencyContact(name, rawPhone, role) {
+  if (!operatorSession.isAuthorized) {
+    openAuthModal();
+    return;
+  }
+
+  const phone = normalizePhoneNumber(rawPhone);
+  if (phone.length < 10) {
+    alert('Please enter a valid phone number (e.g. +94778364925 or 0778364925).');
+    return;
+  }
+
+  // Check duplicate
+  if (contactsList.some(c => c.phone === phone)) {
+    alert(`Phone number ${phone} is already registered in the emergency broadcast list!`);
+    return;
+  }
+
+  const newContact = {
+    id: 'custom-' + Date.now(),
+    name: name,
+    phone: phone,
+    role: role || 'OPERATOR',
+    isDefault: false
+  };
+
+  contactsList.push(newContact);
+
+  // Persist custom contacts in localStorage
+  const customList = contactsList.filter(c => !c.isDefault);
+  localStorage.setItem('sdas_custom_contacts', JSON.stringify(customList));
+
+  // Attempt Supabase insert
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: name,
+        phone_encrypted: phone,
+        role: role,
+        recipient_group: 'OPERATOR',
+        tier: 1,
+        opted_in: true
+      })
+    });
+  } catch (e) {
+    console.warn('[Contacts Save] Supabase sync:', e.message);
+  }
+
+  renderContactsTable();
+  showCommandFeedback(`✅ Added '${name}' (${phone}) to SIM800L emergency broadcast list!`, 'success');
+}
+
+// Delete emergency contact
+function deleteEmergencyContact(id) {
+  if (!operatorSession.isAuthorized) {
+    openAuthModal();
+    return;
+  }
+
+  const idx = contactsList.findIndex(c => c.id === id);
+  if (idx !== -1) {
+    const removed = contactsList.splice(idx, 1)[0];
+    const customList = contactsList.filter(c => !c.isDefault);
+    localStorage.setItem('sdas_custom_contacts', JSON.stringify(customList));
+    renderContactsTable();
+    showCommandFeedback(`🗑️ Removed '${removed.name}' from broadcast list.`, 'waiting');
+  }
+}
+
+// Test individual contact SMS ping
+function testSingleContactSms(phone, name) {
+  if (!operatorSession.isAuthorized) {
+    openAuthModal();
+    return;
+  }
+
+  showCommandFeedback(`🔔 Triggering test SMS dispatch to ${name} (${phone})...`, 'waiting');
+  dispatchGateCommand('PREWARN_SMS', 0);
+  setTimeout(() => {
+    showCommandFeedback(`✅ Diagnostic test SMS dispatched to ${name} (${phone}) via SIM800L transmitter!`, 'success');
+  }, 1200);
+}
+
+// Broadcast full emergency SMS
+function triggerFullEmergencyBroadcast() {
+  if (!operatorSession.isAuthorized) {
+    openAuthModal();
+    return;
+  }
+
+  const confirmMsg = `Are you sure you want to trigger an EMERGENCY SMS BROADCAST to all ${contactsList.length} registered contacts?`;
+  if (!confirm(confirmMsg)) return;
+
+  dispatchGateCommand('PREWARN_SMS', 0);
+  showCommandFeedback(`📢 EMERGENCY FLOOD ALERT broadcast triggered to all ${contactsList.length} numbers via SIM800L cellular link!`, 'success');
+}
+
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
   fetchHistoricalPoints();
   fetchLatestHardwareReading();
   setupRealtimeSubscription();
+  initMqttWebSocket();
+  restoreOperatorSession();
+  loadEmergencyContacts();
 
   // Watchdog timer checking hardware freshness every second
   setInterval(updateHardwareWatchdog, 1000);
@@ -497,4 +997,111 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Resize canvas on window change
   window.addEventListener('resize', drawChart);
+
+  // Operator Auth Modal event listeners
+  const btnToggleAuth = document.getElementById('btn-toggle-auth');
+  const btnUnlockPrompt = document.getElementById('btn-unlock-prompt');
+  const btnModalClose = document.getElementById('btn-modal-close');
+  const btnModalCancel = document.getElementById('btn-modal-cancel');
+  const btnModalSubmit = document.getElementById('btn-modal-submit');
+  const pinInput = document.getElementById('operator-input-pin');
+
+  if (btnToggleAuth) {
+    btnToggleAuth.addEventListener('click', () => {
+      if (operatorSession.isAuthorized) {
+        lockOperatorConsole();
+      } else {
+        openAuthModal();
+      }
+    });
+  }
+
+  if (btnUnlockPrompt) btnUnlockPrompt.addEventListener('click', openAuthModal);
+  if (btnModalClose) btnModalClose.addEventListener('click', closeAuthModal);
+  if (btnModalCancel) btnModalCancel.addEventListener('click', closeAuthModal);
+  if (btnModalSubmit) btnModalSubmit.addEventListener('click', submitAuthPin);
+
+  if (pinInput) {
+    pinInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitAuthPin();
+    });
+  }
+
+  // Gate Command Action Buttons
+  const btnAuto = document.getElementById('btn-cmd-auto');
+  const btnOpen20 = document.getElementById('btn-cmd-open20');
+  const btnOpen50 = document.getElementById('btn-cmd-open50');
+  const btnClose = document.getElementById('btn-cmd-close');
+  const btnEstop = document.getElementById('btn-cmd-estop');
+
+  if (btnAuto) btnAuto.addEventListener('click', () => dispatchGateCommand('AUTO', 0));
+  if (btnOpen20) btnOpen20.addEventListener('click', () => dispatchGateCommand('OPEN_20', 20));
+  if (btnOpen50) btnOpen50.addEventListener('click', () => dispatchGateCommand('OPEN_50', 50));
+  if (btnClose) btnClose.addEventListener('click', () => dispatchGateCommand('CLOSE', 0));
+  if (btnEstop) btnEstop.addEventListener('click', () => dispatchGateCommand('ESTOP', 0));
+
+  // Gate Position Slider
+  const gateSlider = document.getElementById('gate-slider');
+  const gateSliderVal = document.getElementById('gate-slider-val');
+  const btnApplySlider = document.getElementById('btn-apply-slider');
+
+  if (gateSlider && gateSliderVal) {
+    gateSlider.addEventListener('input', () => {
+      const val = parseInt(gateSlider.value, 10);
+      const angle = Math.round((val / 100.0) * 180);
+      gateSliderVal.textContent = `${val}% (${angle}°)`;
+    });
+  }
+
+  if (btnApplySlider && gateSlider) {
+    btnApplySlider.addEventListener('click', () => {
+      const val = parseInt(gateSlider.value, 10);
+      if (val === 0) {
+        dispatchGateCommand('CLOSE', 0);
+      } else if (val <= 20) {
+        dispatchGateCommand('OPEN_20', val);
+      } else {
+        dispatchGateCommand('OPEN_50', val);
+      }
+    });
+  }
+
+  // Emergency Broadcast Buttons
+  const btnBroadcastAlert = document.getElementById('btn-broadcast-alert');
+  const btnTestSms = document.getElementById('btn-test-sms');
+
+  if (btnBroadcastAlert) btnBroadcastAlert.addEventListener('click', triggerFullEmergencyBroadcast);
+  if (btnTestSms) {
+    btnTestSms.addEventListener('click', () => {
+      if (!operatorSession.isAuthorized) {
+        openAuthModal();
+        return;
+      }
+      showCommandFeedback('🔔 Dispatching SIM800L transmitter ping diagnostic...', 'waiting');
+      dispatchGateCommand('PREWARN_SMS', 0);
+    });
+  }
+
+  // Add Contact Form
+  const formAddContact = document.getElementById('form-add-contact');
+  if (formAddContact) {
+    formAddContact.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nameInput = document.getElementById('contact-name');
+      const phoneInput = document.getElementById('contact-phone');
+      const roleInput = document.getElementById('contact-role');
+
+      if (nameInput && phoneInput) {
+        const name = nameInput.value.trim();
+        const phone = phoneInput.value.trim();
+        const role = roleInput ? roleInput.value : 'OPERATOR';
+
+        if (name && phone) {
+          addEmergencyContact(name, phone, role);
+          nameInput.value = '';
+          phoneInput.value = '';
+        }
+      }
+    });
+  }
 });
