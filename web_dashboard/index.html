@@ -532,7 +532,53 @@
           </div>
         </div>
 
-        <div id="raw-log" class="raw-log-box">Awaiting first live hardware packet from Supabase readings table...</div>
+        <div id="raw-log" class="raw-log-box" style="height: 140px;">Awaiting first live hardware packet from Supabase readings table...</div>
+
+        <!-- Google Sheets Real-Time Telemetry Bridge -->
+        <div class="google-sheets-card-wrap">
+          <div class="sheets-header-row">
+            <div class="sheets-title">
+              <span>📊</span> Google Sheets Telemetry Sync
+            </div>
+            <a href="https://docs.google.com/spreadsheets/d/1Qx9yU15Ht66sRxXjezvFSamN4StEV8ylWi5XWCFwSFw/edit?usp=sharing" target="_blank" rel="noopener noreferrer" class="sheet-link-pill" title="Open Google Sheet in new tab">
+              🔗 Open Google Sheet ↗
+            </a>
+          </div>
+
+          <div class="sheets-id-sub">
+            Target Sheet: <code>1Qx9yU15Ht66sRxXjezvFSamN4StEV8ylWi5XWCFwSFw</code>
+          </div>
+
+          <div class="sheets-controls">
+            <div class="form-group" style="margin-bottom: 8px;">
+              <label for="input-sheets-webhook" style="font-size: 10px; color: var(--text-muted); font-weight: 700;">Google Apps Script Web App URL:</label>
+              <div style="display: flex; gap: 6px;">
+                <input type="url" id="input-sheets-webhook" placeholder="Paste Apps Script URL (https://script.google.com/...)" class="modal-input" style="font-size: 11px; padding: 6px 8px;">
+                <button type="button" id="btn-save-sheets-url" class="btn-primary" style="padding: 6px 12px; font-size: 11px; white-space: nowrap;">Save</button>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+              <label style="font-size: 11px; color: #F8FAFC; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <input type="checkbox" id="chk-sheets-auto-sync" checked>
+                <span>Live Auto-Sync New Packets</span>
+              </label>
+
+              <div style="display: flex; gap: 6px;">
+                <button type="button" id="btn-sheets-sync-now" class="btn-secondary" style="padding: 5px 10px; font-size: 11px;">
+                  ⚡ Sync Current
+                </button>
+                <button type="button" id="btn-sheets-batch-sync" class="btn-secondary" style="padding: 5px 10px; font-size: 11px; color: var(--accent-cyan); border-color: rgba(56, 189, 248, 0.4);">
+                  📦 Batch Export History
+                </button>
+              </div>
+            </div>
+
+            <div id="sheets-sync-status" class="sheets-status-bar waiting">
+              ⚪ Ready to sync telemetry to Google Sheets.
+            </div>
+          </div>
+        </div>
       </div>
 
     </div>

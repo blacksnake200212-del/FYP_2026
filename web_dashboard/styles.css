@@ -1692,3 +1692,82 @@ footer {
   justify-content: space-between;
   align-items: center;
 }
+
+/* ==========================================================================
+   GOOGLE SHEETS TELEMETRY BRIDGE STYLES
+   ========================================================================== */
+
+.google-sheets-card-wrap {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sheets-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.sheets-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sheet-link-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38BDF8;
+  background-color: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 3px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.sheet-link-pill:hover {
+  background-color: rgba(56, 189, 248, 0.25);
+  border-color: #38BDF8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+
+.sheets-id-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.sheets-id-sub code {
+  color: #34D399;
+  font-weight: 600;
+}
+
+.sheets-status-bar {
+  margin-top: 8px;
+  font-size: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  background-color: #070B14;
+  border: 1px solid #1E2D4A;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.sheets-status-bar.success {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34D399;
+}
+
+.sheets-status-bar.error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #F87171;
+}

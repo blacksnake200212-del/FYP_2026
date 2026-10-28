@@ -138,6 +138,9 @@ function processTelemetryRow(row) {
 
   // Update UI components
   renderUI(row);
+
+  // Real-time Google Sheets stream forwarder
+  triggerGoogleSheetsAutoSync(row);
 }
 
 // Update DOM elements with live telemetry
@@ -1233,6 +1236,81 @@ function triggerFullEmergencyBroadcast() {
   showCommandFeedback(`📢 EMERGENCY FLOOD ALERT broadcast triggered to all ${contactsList.length} numbers via SIM800L cellular link!`, 'success');
 }
 
+// ============================================================================
+// GOOGLE SHEETS LIVE TELEMETRY BRIDGE
+// Target Sheet: https://docs.google.com/spreadsheets/d/1Qx9yU15Ht66sRxXjezvFSamN4StEV8ylWi5XWCFwSFw
+// ============================================================================
+
+function triggerGoogleSheetsAutoSync(row) {
+  const chkAuto = document.getElementById('chk-sheets-auto-sync');
+  const inputUrl = document.getElementById('input-sheets-webhook');
+  const url = inputUrl ? inputUrl.value.trim() : (localStorage.getItem('sdas_sheets_webhook_url') || '');
+
+  if (!url || (chkAuto && !chkAuto.checked)) return;
+
+  const payload = {
+    created_at: row.created_at || new Date().toISOString(),
+    node_id: "SDAS-NODE-01",
+    water_level_pct: state.waterLevelPct,
+    depth_m: state.depthM,
+    freeboard_m: state.freeboardM,
+    sensor_1_dist: state.sensor1Dist,
+    sensor_2_dist: state.sensor2Dist,
+    sensors_agreed: state.sensorsAgreed,
+    temperature_c: state.temperatureC,
+    humidity_pct: state.humidityPct,
+    gate_percent: state.gatePercent,
+    alert_stage: state.alertState,
+    control_mode: state.controlMode,
+    source: "SDAS Web Live Stream"
+  };
+
+  sendTelemetryToGoogleSheet(payload);
+}
+
+async function sendTelemetryToGoogleSheet(data, isBatch = false) {
+  const statusBox = document.getElementById('sheets-sync-status');
+  const inputUrl = document.getElementById('input-sheets-webhook');
+  const url = inputUrl ? inputUrl.value.trim() : (localStorage.getItem('sdas_sheets_webhook_url') || '');
+
+  if (!url) {
+    if (statusBox) {
+      statusBox.className = 'sheets-status-bar waiting';
+      statusBox.innerHTML = `ℹ️ <b>Live Stream Ready</b>: Deploy <code>google_sheets/SDAS_GoogleSheets_Logger.gs</code> in your Sheet and paste the Web App URL above to enable real-time rows.`;
+    }
+    return;
+  }
+
+  const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (statusBox) {
+    statusBox.className = 'sheets-status-bar waiting';
+    statusBox.textContent = `⏳ Streaming packet to Google Sheet at ${timeStr}...`;
+  }
+
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/plain;charset=utf-8'
+      },
+      body: JSON.stringify(data),
+      mode: 'no-cors'
+    });
+
+    if (statusBox) {
+      statusBox.className = 'sheets-status-bar success';
+      statusBox.textContent = isBatch
+        ? `✅ Successfully synced batch readings to Google Sheet at ${timeStr}!`
+        : `🟢 Telemetry row logged to Google Sheet at ${timeStr} (Level: ${state.waterLevelPct.toFixed(1)}%)`;
+    }
+  } catch (err) {
+    if (statusBox) {
+      statusBox.className = 'sheets-status-bar error';
+      statusBox.textContent = `❌ Google Sheets Error: ${err.message}`;
+    }
+  }
+}
+
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
   fetchHistoricalPoints();
@@ -1447,6 +1525,75 @@ window.addEventListener('DOMContentLoaded', () => {
           addEmergencyContact(name, phone, role);
           nameInput.value = '';
           phoneInput.value = '';
+        }
+      }
+    });
+  }
+
+  // Google Sheets Integration Controls
+  const inputWebhook = document.getElementById('input-sheets-webhook');
+  const btnSaveWebhook = document.getElementById('btn-save-sheets-url');
+  const btnSyncNow = document.getElementById('btn-sheets-sync-now');
+  const btnBatchSync = document.getElementById('btn-sheets-batch-sync');
+  const statusBox = document.getElementById('sheets-sync-status');
+
+  if (inputWebhook) {
+    const savedUrl = localStorage.getItem('sdas_sheets_webhook_url') || '';
+    inputWebhook.value = savedUrl;
+    if (savedUrl && statusBox) {
+      statusBox.className = 'sheets-status-bar success';
+      statusBox.innerHTML = `🟢 <b>Google Sheets Bridge Linked</b>: Ready to stream live telemetry to sheet.`;
+    }
+  }
+
+  if (btnSaveWebhook && inputWebhook) {
+    btnSaveWebhook.addEventListener('click', () => {
+      const val = inputWebhook.value.trim();
+      localStorage.setItem('sdas_sheets_webhook_url', val);
+      if (statusBox) {
+        statusBox.className = 'sheets-status-bar success';
+        statusBox.innerHTML = `✅ <b>Webhook URL Saved!</b> Live rows will now stream to Google Sheet.`;
+      }
+    });
+  }
+
+  if (btnSyncNow) {
+    btnSyncNow.addEventListener('click', () => {
+      triggerGoogleSheetsAutoSync({
+        created_at: new Date().toISOString()
+      });
+    });
+  }
+
+  if (btnBatchSync) {
+    btnBatchSync.addEventListener('click', async () => {
+      if (statusBox) {
+        statusBox.className = 'sheets-status-bar waiting';
+        statusBox.textContent = '⏳ Querying Supabase cloud for historical telemetry readings...';
+      }
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/readings?select=*&order=created_at.desc&limit=50`, {
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+          }
+        });
+
+        if (res.ok) {
+          const readings = await res.json();
+          if (Array.isArray(readings) && readings.length > 0) {
+            await sendTelemetryToGoogleSheet(readings, true);
+          } else {
+            if (statusBox) statusBox.textContent = 'ℹ️ No readings found in Supabase database.';
+          }
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (err) {
+        if (statusBox) {
+          statusBox.className = 'sheets-status-bar error';
+          statusBox.textContent = `❌ Batch export failed: ${err.message}`;
         }
       }
     });
