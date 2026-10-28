@@ -1,0 +1,15 @@
+# Netlify Build & Deployment Configuration for SDAS Live Dashboard
+[build]
+  publish = "web_dashboard"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Access-Control-Allow-Origin = "*"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
