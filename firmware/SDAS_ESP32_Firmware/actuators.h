@@ -49,12 +49,16 @@ public:
     void testBuzzerDirect(bool state);
     void testBuzzerChirp(uint16_t durationMs = 500);
     void testBuzzerTone(uint16_t freqHz = 2400, uint16_t durationMs = 500);
+    void setMuted(bool muted);
+    bool toggleMute();
+    bool isBuzzerMuted() const { return isMuted; }
     
     // Direct actuator override for failsafe
     void emergencyStop();
 
 private:
     bool  isCommonAnode;
+    bool  isMuted;
     float currentAngle;
     float targetAngle;
     int   currentPercent;

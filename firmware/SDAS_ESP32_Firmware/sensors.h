@@ -32,8 +32,13 @@ public:
     SensorData sampleAndVerify();
     float getLastWaterLevelPct() const { return currentData.water_level_pct; }
     const SensorData& getData() const { return currentData; }
+    
+    // Dynamic Sensor Count Control (Single vs Dual)
+    void setSensorCount(uint8_t count);
+    uint8_t getSensorCount() const { return activeSensorCount; }
 
 private:
+    uint8_t activeSensorCount;
     SensorData currentData;
     float previousWaterLevelCm;
     unsigned long previousSampleTimeMs;

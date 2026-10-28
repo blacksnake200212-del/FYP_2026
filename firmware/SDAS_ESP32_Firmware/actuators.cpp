@@ -2,7 +2,7 @@
 #include <Preferences.h>
 
 ActuatorManager::ActuatorManager()
-    : isCommonAnode(RGB_IS_COMMON_ANODE),
+    : isCommonAnode(RGB_IS_COMMON_ANODE), isMuted(false),
       currentAngle(0.0f), targetAngle(0.0f), currentPercent(0), targetPercent(0),
       lastServoStepMs(0), currentBuzzerPattern(BUZZER_OFF),
       lastBuzzerToggleMs(0), buzzerState(false),
@@ -231,7 +231,7 @@ void ActuatorManager::updateIndicators(unsigned long millisNow) {
 
 void ActuatorManager::setBuzzerPattern(BuzzerPattern pattern) {
     currentBuzzerPattern = pattern;
-    if (pattern == BUZZER_OFF) {
+    if (isMuted || pattern == BUZZER_OFF) {
         digitalWrite(PIN_BUZZER, LOW);
         buzzerState = false;
     } else if (pattern == BUZZER_CONTINUOUS_ESTOP) {
@@ -245,6 +245,11 @@ void ActuatorManager::setBuzzerPattern(BuzzerPattern pattern) {
 }
 
 void ActuatorManager::updateBuzzer(unsigned long millisNow) {
+    if (isMuted) {
+        digitalWrite(PIN_BUZZER, LOW);
+        return;
+    }
+    
     if (currentBuzzerPattern == BUZZER_OFF || currentBuzzerPattern == BUZZER_CONTINUOUS_ESTOP) {
         return;
     }
@@ -264,6 +269,22 @@ void ActuatorManager::updateBuzzer(unsigned long millisNow) {
             currentBuzzerPattern = BUZZER_OFF;
         }
     }
+}
+
+void ActuatorManager::setMuted(bool muted) {
+    isMuted = muted;
+    if (isMuted) {
+        digitalWrite(PIN_BUZZER, LOW);
+        buzzerState = false;
+        Serial.println("[BUZZER] 🔇 Buzzer MUTED. Siren silenced for quiet testing.");
+    } else {
+        Serial.println("[BUZZER] 🔊 Buzzer UNMUTED. Normal alarm operation restored.");
+    }
+}
+
+bool ActuatorManager::toggleMute() {
+    setMuted(!isMuted);
+    return isMuted;
 }
 
 void ActuatorManager::emergencyStop() {

@@ -31,6 +31,9 @@ void printSerialHelp() {
     Serial.println("\n=======================================================");
     Serial.println("         SDAS INTERACTIVE SERIAL MONITOR COMMANDS");
     Serial.println("=======================================================");
+    Serial.println("  MUTE / UNMUTE   : Silence or restore the alarm buzzer");
+    Serial.println("  SENSOR 1        : Use Single HC-SR04 Sensor #1 (GPIO5/19) - Bench Testing");
+    Serial.println("  SENSOR DUAL     : Enable Dual HC-SR04 Sensor Voting (GPIO5/19 + GPIO18/21)");
     Serial.println("  BUZZ or BEEP    : Test active buzzer with a 500ms DC pulse");
     Serial.println("  BUZZ ON         : Force GPIO27 HIGH continuously (for DMM voltmeter check)");
     Serial.println("  BUZZ OFF        : Force GPIO27 LOW (0V)");
@@ -41,7 +44,7 @@ void printSerialHelp() {
     Serial.println("  RGB             : Toggle RGB LED polarity (Common Anode <-> Cathode)");
     Serial.println("  DIAG or SIM     : Run full SIM800L diagnostics (CSQ, CREG, CPIN, Volts)");
     Serial.println("  TEST            : Run hardware visual & audio cycle (Green->Yellow->Orange->Red)");
-    Serial.println("  LEVEL <0-100>   : Simulate water level % (e.g. LEVEL 65 for Yellow, 90 for Red)");
+    Serial.println("  LEVEL <0-100>   : Simulate water level % (e.g. LEVEL 25 for Green, LEVEL 65 for Yellow)");
     Serial.println("  LEVEL REAL      : Disable simulation and return to real ultrasonic sensors");
     Serial.println("  OPEN <0-50>     : Manually open sluice gate to specified percentage");
     Serial.println("  CLOSE           : Manually close sluice gate (0%)");
@@ -58,6 +61,14 @@ void handleSerialCommand(String cmd) {
     
     if (upper.equals("HELP") || upper.equals("?")) {
         printSerialHelp();
+    } else if (upper.equals("MUTE")) {
+        actuatorManager.setMuted(true);
+    } else if (upper.equals("UNMUTE")) {
+        actuatorManager.setMuted(false);
+    } else if (upper.equals("SENSOR 1") || upper.equals("SENSOR SINGLE")) {
+        sensorManager.setSensorCount(1);
+    } else if (upper.equals("SENSOR 2") || upper.equals("SENSOR DUAL")) {
+        sensorManager.setSensorCount(2);
     } else if (upper.equals("BUZZ") || upper.equals("BEEP")) {
         actuatorManager.testBuzzerChirp(500);
     } else if (upper.equals("BUZZ ON")) {

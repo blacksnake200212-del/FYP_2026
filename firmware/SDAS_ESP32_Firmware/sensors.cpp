@@ -1,7 +1,9 @@
 #include "sensors.h"
+#include <Preferences.h>
 
 SensorManager::SensorManager() 
-    : previousWaterLevelCm(0.0f), previousSampleTimeMs(0) {
+    : activeSensorCount(ACTIVE_ULTRASONIC_COUNT),
+      previousWaterLevelCm(0.0f), previousSampleTimeMs(0) {
     memset(&currentData, 0, sizeof(SensorData));
 }
 
@@ -16,10 +18,31 @@ void SensorManager::begin() {
     
     pinMode(PIN_DHT, INPUT_PULLUP);
     
+    // Load saved sensor count configuration from Flash
+    Preferences prefs;
+    prefs.begin("sdas_sens", false);
+    activeSensorCount = prefs.getUChar("sens_cnt", ACTIVE_ULTRASONIC_COUNT);
+    prefs.end();
+    
+    Serial.printf("[SENSORS] Active Ultrasonic Sensors: %d (%s)\n",
+        activeSensorCount,
+        activeSensorCount == 1 ? "Single Sensor Mode - Primary HC-SR04 on GPIO5/19" : "Dual Sensor Voting Mode");
+    
     // Default initial readings
     currentData.temperature_c = 28.0f; // Typical Puttalam ambient baseline
     currentData.humidity_pct = 75.0f;
     currentData.speed_of_sound_mps = calculateSpeedOfSound(28.0f);
+}
+
+void SensorManager::setSensorCount(uint8_t count) {
+    activeSensorCount = (count >= 2) ? 2 : 1;
+    Preferences prefs;
+    prefs.begin("sdas_sens", false);
+    prefs.putUChar("sens_cnt", activeSensorCount);
+    prefs.end();
+    Serial.printf("[SENSORS] Sensor count set to: %d (%s) - Saved to Flash!\n",
+        activeSensorCount,
+        activeSensorCount == 1 ? "Single Sensor #1 Primary" : "Dual Sensor Voting");
 }
 
 float SensorManager::calculateSpeedOfSound(float tempC) {
@@ -120,41 +143,26 @@ SensorData SensorManager::sampleAndVerify() {
     unsigned long now = millis();
     readDHTSensors();
     
-    // --- Step 1: Alternating Ultrasonic Ping Sequence ---
-    // Trigger Sensor 1 (Primary)
+    // --- Step 1: Ultrasonic Ping Sequence ---
+    // Trigger Sensor 1 (Primary on GPIO5/19)
     float d1 = measureSingleUltrasonic(PIN_TRIG_1, PIN_ECHO_1, currentData.speed_of_sound_mps);
+    float d2 = -1.0f;
     
-    // 60 ms acoustic blanking interval: allows reverberations to completely attenuate
-    delay(60);
-    
-    // Trigger Sensor 2 (Redundant)
-    float d2 = measureSingleUltrasonic(PIN_TRIG_2, PIN_ECHO_2, currentData.speed_of_sound_mps);
+    // Only ping Sensor 2 if dual-sensor mode is enabled
+    if (activeSensorCount >= 2) {
+        delay(60); // 60 ms acoustic blanking interval to attenuate reverberations
+        d2 = measureSingleUltrasonic(PIN_TRIG_2, PIN_ECHO_2, currentData.speed_of_sound_mps);
+    }
     
     currentData.raw_dist_1_cm = d1;
     currentData.raw_dist_2_cm = d2;
     currentData.timestamp_ms = now;
     
-    // --- Step 2: Physical Limit & Range Verification ---
-    // CRITICAL FIX: If distance is closer than the 20 cm blind zone (d > 0 and d < 20cm),
-    // water is at or exceeding 100% capacity (extreme flood danger). This is NOT a sensor fault!
-    float minBlindZoneDist = SENSOR_MOUNT_HEIGHT_CM - TANK_MAX_DEPTH_CM; // Distance at 100% full
-    
-    bool d1_blindzone = (d1 > 0.0f && d1 < SENSOR_MIN_VALID_DIST_CM);
-    bool d2_blindzone = (d2 > 0.0f && d2 < SENSOR_MIN_VALID_DIST_CM);
-    
-    if (d1_blindzone) {
-        d1 = minBlindZoneDist; // Clamp to 100% capacity
-        currentData.sensor_1_valid = true;
-    } else {
-        currentData.sensor_1_valid = (d1 >= SENSOR_MIN_VALID_DIST_CM && d1 <= SENSOR_MAX_VALID_DIST_CM);
-    }
-    
-    if (d2_blindzone) {
-        d2 = minBlindZoneDist; // Clamp to 100% capacity
-        currentData.sensor_2_valid = true;
-    } else {
-        currentData.sensor_2_valid = (d2 >= SENSOR_MIN_VALID_DIST_CM && d2 <= SENSOR_MAX_VALID_DIST_CM);
-    }
+    // --- Step 2: Physical Range & Noise Filtering ---
+    // Physical limit: HC-SR04 transducer ringing produces false echoes below 3.0 cm!
+    // Any reading < 3.0 cm or timeout (-1.0 cm) is treated as noise/unconnected.
+    currentData.sensor_1_valid = (d1 >= 3.0f && d1 <= SENSOR_MAX_VALID_DIST_CM);
+    currentData.sensor_2_valid = (activeSensorCount >= 2 && d2 >= 3.0f && d2 <= SENSOR_MAX_VALID_DIST_CM);
     
     float fusedDistanceCm = 0.0f;
     
@@ -163,40 +171,34 @@ SensorData SensorManager::sampleAndVerify() {
         
         // --- Step 3: Sensor Voting & Agreement Check ---
         if (currentData.sensor_delta_cm <= SENSOR_MAX_DELTA_CM) {
-            // Both agree within 5.0 cm: High-confidence fused average
+            // Both agree within 5.0 cm: High-confidence average
             fusedDistanceCm = (d1 + d2) * 0.5f;
             currentData.sensors_in_agreement = true;
             currentData.degraded_mode = false;
             currentData.critical_sensor_fault = false;
         } else {
-            // Divergence > 5.0 cm: Degraded mode, prefer reading closest to previous depth
+            // Divergence > 5.0 cm: Primary Sensor 1 takes precedence (prevents divergence lockup!)
             currentData.sensors_in_agreement = false;
             currentData.degraded_mode = true;
             currentData.critical_sensor_fault = false;
-            
-            float targetPrevDist = SENSOR_MOUNT_HEIGHT_CM - previousWaterLevelCm;
-            if (fabsf(d1 - targetPrevDist) < fabsf(d2 - targetPrevDist)) {
-                fusedDistanceCm = d1;
-            } else {
-                fusedDistanceCm = d2;
-            }
+            fusedDistanceCm = d1;
         }
     } else if (currentData.sensor_1_valid) {
-        // Sensor 2 failed: Fallback to Sensor 1
+        // Operating cleanly on Primary Sensor 1
         fusedDistanceCm = d1;
-        currentData.sensor_delta_cm = 999.0f;
-        currentData.sensors_in_agreement = false;
-        currentData.degraded_mode = true;
+        currentData.sensor_delta_cm = 0.0f;
+        currentData.sensors_in_agreement = (activeSensorCount == 1);
+        currentData.degraded_mode = (activeSensorCount > 1);
         currentData.critical_sensor_fault = false;
     } else if (currentData.sensor_2_valid) {
-        // Sensor 1 failed: Fallback to Sensor 2
+        // Fallback to Sensor 2
         fusedDistanceCm = d2;
         currentData.sensor_delta_cm = 999.0f;
         currentData.sensors_in_agreement = false;
         currentData.degraded_mode = true;
         currentData.critical_sensor_fault = false;
     } else {
-        // Genuine Critical Failure: Both sensors offline/disconnected (e.g. echo timeout)
+        // Genuine Critical Failure: Both sensors offline/disconnected
         currentData.critical_sensor_fault = true;
         currentData.degraded_mode = true;
         currentData.sensors_in_agreement = false;
