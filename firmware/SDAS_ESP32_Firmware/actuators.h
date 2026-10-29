@@ -46,6 +46,7 @@ public:
     void setCommonAnode(bool enabled);
     bool isPolarityCommonAnode() const { return isCommonAnode; }
     void runHardwareCycleTest();
+    void writeRGB(bool r_on, bool g_on, bool b_on);
     
     // Buzzer Diagnostics & Hardware Testing
     void testBuzzerDirect(bool state);
@@ -76,7 +77,6 @@ private:
     uint8_t orangePwmCounter;
     
     void writeServoMicroseconds(uint16_t us);
-    void writeRGB(bool r_on, bool g_on, bool b_on);
 };
 
 #endif // SDAS_ACTUATORS_H

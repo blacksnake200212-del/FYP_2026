@@ -17,12 +17,18 @@ void ActuatorManager::begin() {
     // Load saved polarity & mute preferences from Flash
     Preferences prefs;
     prefs.begin("sdas_act", false);
+    #if !RGB_IS_COMMON_ANODE
+    // Explicitly configure Common Cathode (HW-478 Module: '-' to GND, Active HIGH)
+    isCommonAnode = false;
+    prefs.putBool("rgb_ca", false);
+    #else
     isCommonAnode = prefs.getBool("rgb_ca", RGB_IS_COMMON_ANODE);
+    #endif
     isMuted = prefs.getBool("buzzer_mute", false);
     prefs.end();
     
     Serial.printf("[RGB] LED Polarity configured as: %s\n",
-        isCommonAnode ? "COMMON ANODE (Active LOW, 3.3V to Anode)" : "COMMON CATHODE (Active HIGH, GND to Cathode)");
+        isCommonAnode ? "COMMON ANODE (Active LOW, 3.3V to Anode)" : "COMMON CATHODE (Active HIGH, GND to Cathode - HW-478 Standard)");
     if (isMuted) {
         Serial.println("[BUZZER] 🔇 Buzzer is currently MUTED in Flash (Send 'UNMUTE' in Serial Monitor to enable audio).");
     }

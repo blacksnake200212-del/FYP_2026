@@ -43,6 +43,10 @@ void printSerialHelp() {
     Serial.println("  SMS 1 / 2 / 3 / 4: Send test SMS to specific registered contact");
     Serial.println("  SMS <+94...>    : Send test SMS directly to any custom number");
     Serial.println("  RGB             : Toggle RGB LED polarity (Common Anode <-> Cathode)");
+    Serial.println("  CATHODE / CC    : Set RGB to Common Cathode (Active HIGH - for HW-478)");
+    Serial.println("  ANODE / CA      : Set RGB to Common Anode (Active LOW)");
+    Serial.println("  RED / GREEN / BLUE / OFF : Direct color output test on HW-478 LED");
+    Serial.println("  TEST LED        : Run automated hardware cycle test on RGB LED");
     Serial.println("  DIAG or SIM     : Run full SIM800L diagnostics (CSQ, CREG, CPIN, Volts)");
     Serial.println("  TEST            : Run hardware visual & audio cycle (Green->Yellow->Orange->Red)");
     Serial.println("  LEVEL <0-100>   : Simulate water level % (e.g. LEVEL 25 for Green, LEVEL 65 for Yellow)");
@@ -85,6 +89,29 @@ void handleSerialCommand(String cmd) {
         actuatorManager.testBuzzerTone(2400, 800);
     } else if (upper.equals("RGB")) {
         actuatorManager.togglePolarity();
+    } else if (upper.equals("CATHODE") || upper.equals("CC")) {
+        actuatorManager.setCommonAnode(false);
+        Serial.println("[RGB] Set to COMMON CATHODE (Active HIGH - for HW-478).");
+    } else if (upper.equals("ANODE") || upper.equals("CA")) {
+        actuatorManager.setCommonAnode(true);
+        Serial.println("[RGB] Set to COMMON ANODE (Active LOW).");
+    } else if (upper.equals("RED")) {
+        actuatorManager.writeRGB(true, false, false);
+        Serial.println("[RGB DIRECT] RED forced ON (GPIO32 HIGH)");
+    } else if (upper.equals("GREEN")) {
+        actuatorManager.writeRGB(false, true, false);
+        Serial.println("[RGB DIRECT] GREEN forced ON (GPIO33 HIGH)");
+    } else if (upper.equals("BLUE")) {
+        actuatorManager.writeRGB(false, false, true);
+        Serial.println("[RGB DIRECT] BLUE forced ON (GPIO13 HIGH)");
+    } else if (upper.equals("WHITE")) {
+        actuatorManager.writeRGB(true, true, true);
+        Serial.println("[RGB DIRECT] WHITE forced ON (R+G+B)");
+    } else if (upper.equals("OFF") || upper.equals("BLACK")) {
+        actuatorManager.writeRGB(false, false, false);
+        Serial.println("[RGB DIRECT] All LEDs forced OFF");
+    } else if (upper.equals("TEST LED") || upper.equals("TEST RGB")) {
+        actuatorManager.runHardwareCycleTest();
     } else if (upper.equals("DIAG") || upper.equals("SIM")) {
         gsmManager.printDiagnostics();
     } else if (upper.equals("TEST")) {
@@ -132,17 +159,26 @@ void handleSerialCommand(String cmd) {
     } else if (upper.equals("OPEN")) {
         stateMachine.requestManualGatePercent(20, 0);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.println("[CMD] Sluice gate set to 20% (Manual mode, holding indefinitely)");
+        actuatorManager.setRGBAlert(STATE_CLEAR_AREA); // Orange
+        Serial.println("[CMD] Sluice gate set to 20% (Manual mode, holding indefinitely, Orange LED)");
     } else if (upper.startsWith("OPEN ")) {
         int pct = upper.substring(5).toInt();
         pct = constrain(pct, 0, GATE_PCT_MAX_LIMIT);
         stateMachine.requestManualGatePercent(pct, 0);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        if (pct >= GATE_PCT_DANGER) {
+            actuatorManager.setRGBAlert(STATE_DANGER); // Red
+        } else if (pct >= GATE_PCT_CLEAR_AREA) {
+            actuatorManager.setRGBAlert(STATE_CLEAR_AREA); // Orange
+        } else {
+            actuatorManager.setRGBAlert(STATE_PRE_WARNING);
+        }
         Serial.printf("[CMD] Sluice gate set to %d%% (Manual mode, holding indefinitely)\n", pct);
     } else if (upper.equals("CLOSE")) {
         stateMachine.requestManualGatePercent(GATE_PCT_CLOSED, 0);
         actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        actuatorManager.setRGBAlert(stateMachine.getStatus().alertState); // Green
         Serial.println("[CMD] Sluice gate CLOSED to 0% (MANUAL CLOSE - Holding closed in Manual mode)");
     } else if (upper.startsWith("SPEED ")) {
         float spd = upper.substring(6).toFloat();
@@ -206,13 +242,24 @@ void onRemoteOperatorCommand(const char* command, int param) {
         int clampedParam = constrain(param, 0, GATE_PCT_MAX_LIMIT);
         // Indefinite manual hold (duration = 0 prevents auto-revert to AUTO)
         stateMachine.requestManualGatePercent(clampedParam, 0);
+        actuatorManager.setTargetGatePercent(clampedParam);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        // Instant visual LED feedback on HW-478 module (< 5ms)
+        if (clampedParam >= GATE_PCT_DANGER) {
+            actuatorManager.setRGBAlert(STATE_DANGER); // Red for 50%
+        } else if (clampedParam >= GATE_PCT_CLEAR_AREA) {
+            actuatorManager.setRGBAlert(STATE_CLEAR_AREA); // Orange for 20%
+        } else {
+            actuatorManager.setRGBAlert(STATE_PRE_WARNING);
+        }
         Serial.printf("[CMD] Sluice gate set to %d%% (MANUAL MODE - Holding indefinitely)\n", clampedParam);
     } else if (strcmp(command, "CLOSE") == 0) {
         // Manual Close: Closes gate to 0% and STAYS in MANUAL mode!
         stateMachine.requestManualGatePercent(0, 0);
         actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        // Instant visual LED feedback on HW-478 module (< 5ms)
+        actuatorManager.setRGBAlert(stateMachine.getStatus().alertState); // Green if reservoir is safe
         Serial.println("[CMD] Sluice gate CLOSED to 0% (MANUAL MODE - Holding closed)");
     } else if (strcmp(command, "MANUAL") == 0) {
         // Explicitly lock into Manual Mode holding current gate position

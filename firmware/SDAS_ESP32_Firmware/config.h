@@ -23,11 +23,11 @@
 #define PIN_DHT              4     // DHT22 Data line (with 10k pull-up to 3.3V)
 #define DHT_TYPE             DHT22
 
-// --- RGB LED Module Polarity & Pins ---
-// Set to true for Common Anode (Longest pin to 3.3V - Standard SDAS Blueprint design)
-// Set to false for Common Cathode (Longest pin to GND)
-// Note: You can also toggle polarity dynamically at runtime by sending 'RGB' in the Serial Monitor!
-#define RGB_IS_COMMON_ANODE  true
+// --- RGB LED Module Polarity & Pins (HW-478 SMD Module) ---
+// Set to false for Common Cathode (HW-478 has '-' pin connected to GND, Active HIGH)
+// Set to true for Common Anode (Longest pin to 3.3V, Active LOW)
+// Note: You can also toggle polarity dynamically at runtime by sending 'RGB', 'CATHODE', or 'ANODE'!
+#define RGB_IS_COMMON_ANODE  false
 
 // Resistors: Red=220 Ohm, Green=100 Ohm, Blue=100 Ohm (Current Balanced)
 #define PIN_LED_RED          32
