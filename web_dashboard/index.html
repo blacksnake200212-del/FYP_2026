@@ -323,20 +323,42 @@
                 </div>
               </div>
 
-              <!-- Action Buttons Grid -->
+              <!-- Mode Switcher & Action Buttons Grid -->
+              <div class="mode-select-banner">
+                <span class="mode-select-label">SYSTEM REGULATION MODE:</span>
+                <div class="mode-select-buttons">
+                  <button id="btn-cmd-auto" class="cmd-btn btn-auto" title="Restore autonomous sensor-driven flood control">
+                    <span class="btn-icon">🟢</span>
+                    <div class="btn-text">
+                      <strong>AUTO MODE</strong>
+                      <small>Autonomous Sensor Control</small>
+                    </div>
+                  </button>
+
+                  <button id="btn-cmd-manual" class="cmd-btn btn-manual" title="Engage Operator Manual Override (Locks position, prevents auto-close)">
+                    <span class="btn-icon">🟡</span>
+                    <div class="btn-text">
+                      <strong>MANUAL MODE</strong>
+                      <small>Operator Direct Lock</small>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Manual Positioning Actions -->
               <div class="gate-actions-grid">
-                <button id="btn-cmd-auto" class="cmd-btn btn-auto" title="Restore autonomous sensor-driven flood control">
-                  <span class="btn-icon">🟢</span>
+                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate (Holds 0% in Manual Mode)">
+                  <span class="btn-icon">⚪</span>
                   <div class="btn-text">
-                    <strong>AUTO MODE</strong>
-                    <small>Autonomous Sensor Control</small>
+                    <strong>MANUAL CLOSE (0%)</strong>
+                    <small>Full Closure (0° Hold)</small>
                   </div>
                 </button>
 
                 <button id="btn-cmd-open20" class="cmd-btn btn-open20" title="Open gate to 20% Clear Area relief">
                   <span class="btn-icon">🟡</span>
                   <div class="btn-text">
-                    <strong>OPEN 20%</strong>
+                    <strong>MANUAL OPEN 20%</strong>
                     <small>Clear Area Relief (36°)</small>
                   </div>
                 </button>
@@ -344,16 +366,8 @@
                 <button id="btn-cmd-open50" class="cmd-btn btn-open50" title="Open gate to 50% Maximum Safe travel">
                   <span class="btn-icon">🔴</span>
                   <div class="btn-text">
-                    <strong>OPEN 50%</strong>
+                    <strong>MANUAL OPEN 50%</strong>
                     <small>Max Safe Limit (90°)</small>
-                  </div>
-                </button>
-
-                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate">
-                  <span class="btn-icon">⚪</span>
-                  <div class="btn-text">
-                    <strong>CLOSE GATE (0%)</strong>
-                    <small>Full Closure (0°)</small>
                   </div>
                 </button>
 

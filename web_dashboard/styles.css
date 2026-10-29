@@ -970,6 +970,32 @@ footer {
   line-height: 1.5;
 }
 
+/* Mode Selector Banner */
+.mode-select-banner {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mode-select-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #94A3B8;
+  text-transform: uppercase;
+}
+
+.mode-select-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 /* Gate Command Buttons Grid */
 .gate-actions-grid {
   display: grid;
@@ -988,6 +1014,7 @@ footer {
   transition: all 0.2s ease;
   text-align: left;
   user-select: none;
+  position: relative;
 }
 
 .cmd-btn:hover {
@@ -997,6 +1024,34 @@ footer {
 
 .cmd-btn:active {
   transform: translateY(0);
+}
+
+.cmd-btn.active-mode {
+  border-width: 2px;
+  box-shadow: 0 0 16px rgba(14, 165, 233, 0.7) !important;
+}
+
+.cmd-btn.active-mode::after {
+  content: 'ACTIVE';
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  letter-spacing: 0.6px;
+}
+
+.btn-auto.active-mode::after {
+  color: #34D399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.btn-manual.active-mode::after {
+  color: #FBBF24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
 }
 
 .cmd-btn .btn-icon {
@@ -1028,6 +1083,17 @@ footer {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.35) 0%, rgba(5, 150, 105, 0.5) 100%);
   border-color: #10B981;
   box-shadow: 0 0 16px rgba(16, 185, 129, 0.3);
+}
+
+.btn-manual {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.25) 0%, rgba(202, 138, 4, 0.35) 100%);
+  border-color: rgba(234, 179, 8, 0.45);
+  color: #FEF08A;
+}
+.btn-manual:hover {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.35) 0%, rgba(202, 138, 4, 0.5) 100%);
+  border-color: #EAB308;
+  box-shadow: 0 0 16px rgba(234, 179, 8, 0.3);
 }
 
 .btn-open20 {

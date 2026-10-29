@@ -26,11 +26,22 @@ void SDASStateMachine::begin() {
     lastBtnCloseState = digitalRead(PIN_BTN_CLOSE);
     lastBtnStopState  = digitalRead(PIN_BTN_STOP);
     
-    // Load last persistent gate position from ESP32 NVS flash
+    // Load last persistent gate position & control mode from ESP32 NVS flash
     preferences.begin("sdas_fsm", false);
     int savedGate = loadGateStateFromNVS();
     currentStatus.targetGatePercent = savedGate;
     currentStatus.actualGatePercent = savedGate;
+
+    int savedMode = preferences.getInt("ctrl_mode", (int)MODE_AUTO);
+    if (savedMode == (int)MODE_MANUAL) {
+        currentStatus.controlMode = MODE_MANUAL;
+        currentStatus.manualModeExpiryMs = 0; // 0 = Indefinite Manual Lock (Operator holds full control)
+        Serial.printf("[FSM] Restored persistent MANUAL mode from NVS (Gate: %d%%)\n", savedGate);
+    } else {
+        currentStatus.controlMode = MODE_AUTO;
+        currentStatus.manualModeExpiryMs = 0;
+        Serial.printf("[FSM] Operating in autonomous AUTO mode (Gate: %d%%)\n", savedGate);
+    }
 }
 
 int SDASStateMachine::loadGateStateFromNVS() {
@@ -135,6 +146,8 @@ void SDASStateMachine::triggerEmergencyStop(ActuatorManager* actuators) {
 
 void SDASStateMachine::releaseEmergencyStop() {
     currentStatus.controlMode = MODE_AUTO;
+    currentStatus.manualModeExpiryMs = 0;
+    preferences.putInt("ctrl_mode", (int)MODE_AUTO);
     currentStatus.lastAlertMessage = "NORMAL: Emergency cleared. Resumed autonomous regulation.";
 }
 
@@ -144,13 +157,23 @@ void SDASStateMachine::requestManualGatePercent(int targetPercent, uint32_t dura
     currentStatus.controlMode = MODE_MANUAL;
     // Hard clamp to safety limit (never exceed 50% max limit)
     currentStatus.targetGatePercent = constrain(targetPercent, 0, GATE_PCT_MAX_LIMIT);
-    currentStatus.manualModeExpiryMs = millis() + (durationSec * 1000UL);
+    
+    // If durationSec == 0, manual mode is held indefinitely until operator explicitly commands AUTO!
+    if (durationSec == 0) {
+        currentStatus.manualModeExpiryMs = 0; // Indefinite manual hold
+    } else {
+        currentStatus.manualModeExpiryMs = millis() + (durationSec * 1000UL);
+    }
+    
     saveGateStateToNVS(currentStatus.targetGatePercent);
+    preferences.putInt("ctrl_mode", (int)MODE_MANUAL);
 }
 
 void SDASStateMachine::revertToAuto() {
     currentStatus.controlMode = MODE_AUTO;
     currentStatus.manualModeExpiryMs = 0;
+    preferences.putInt("ctrl_mode", (int)MODE_AUTO);
+    Serial.println("[FSM] 🟢 Control mode set to AUTO (Autonomous flood regulation active).");
 }
 
 bool SDASStateMachine::checkAndClearSmsTrigger(bool* isPriorityOut) {
@@ -171,8 +194,11 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     checkPhysicalButtons(&actuators);
     
     // --- Step 1: Watchdog Auto-Revert for Manual Mode ---
-    if (currentStatus.controlMode == MODE_MANUAL) {
+    // Only auto-revert if an explicit timed duration was set (> 0).
+    // If manualModeExpiryMs == 0, manual mode holds indefinitely as commanded by the operator!
+    if (currentStatus.controlMode == MODE_MANUAL && currentStatus.manualModeExpiryMs > 0) {
         if (now >= currentStatus.manualModeExpiryMs) {
+            Serial.println("[WATCHDOG] Manual timed override elapsed. Reverting to AUTO mode.");
             revertToAuto();
         }
     }

@@ -254,8 +254,32 @@ function renderUI(rawRow) {
   const opDischarge = document.getElementById('op-discharge-status');
   if (opGatePct) opGatePct.textContent = `${state.gatePercent}%`;
   if (opServoAngle) opServoAngle.textContent = `${servoAngle}°`;
-  if (opGateMode) opGateMode.textContent = state.controlMode;
+  if (opGateMode) {
+    if (state.controlMode === 'AUTO') {
+      opGateMode.innerHTML = `<span style="color:#34D399; font-weight:800;">🟢 AUTO</span>`;
+    } else if (state.controlMode === 'MANUAL') {
+      opGateMode.innerHTML = `<span style="color:#FBBF24; font-weight:800;">🟡 MANUAL</span>`;
+    } else {
+      opGateMode.innerHTML = `<span style="color:#EF4444; font-weight:800;">🛑 ESTOP</span>`;
+    }
+  }
   if (opDischarge) opDischarge.textContent = state.gatePercent > 0 ? `Active (${state.gatePercent}%)` : 'Closed';
+
+  // Synchronize active mode button indicators
+  const btnAutoMode = document.getElementById('btn-cmd-auto');
+  const btnManualMode = document.getElementById('btn-cmd-manual');
+  if (btnAutoMode && btnManualMode) {
+    if (state.controlMode === 'AUTO') {
+      btnAutoMode.classList.add('active-mode');
+      btnManualMode.classList.remove('active-mode');
+    } else if (state.controlMode === 'MANUAL') {
+      btnManualMode.classList.add('active-mode');
+      btnAutoMode.classList.remove('active-mode');
+    } else {
+      btnAutoMode.classList.remove('active-mode');
+      btnManualMode.classList.remove('active-mode');
+    }
+  }
 
   // 6. Sensor 1 (HC-SR04 Primary)
   const s1Ok = isOnline && state.sensor1Dist > 0;
@@ -1035,14 +1059,38 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
   const dbLabel = supabaseSuccess ? '☁️ Supabase Audited (Executing via Cloud Sync)' : '⚠️ DB Sync Pending';
   showCommandFeedback(`[${timeStr}] Command '${cmdType}' (${clampedPct}%) &bull; ${dbLabel} &bull; ${mqttLabel}`, 'success');
 
-  // Optimistically update local control mode if AUTO
+  // Optimistically update local control mode
   if (cmdType === 'AUTO') {
     state.controlMode = 'AUTO';
+  } else if (cmdType === 'ESTOP') {
+    state.controlMode = 'EMERGENCY_STOP';
   } else {
     state.controlMode = 'MANUAL';
   }
   const opGateMode = document.getElementById('op-gate-mode');
-  if (opGateMode) opGateMode.textContent = state.controlMode;
+  if (opGateMode) {
+    if (state.controlMode === 'AUTO') {
+      opGateMode.innerHTML = `<span style="color:#34D399; font-weight:800;">🟢 AUTO</span>`;
+    } else if (state.controlMode === 'MANUAL') {
+      opGateMode.innerHTML = `<span style="color:#FBBF24; font-weight:800;">🟡 MANUAL</span>`;
+    } else {
+      opGateMode.innerHTML = `<span style="color:#EF4444; font-weight:800;">🛑 ESTOP</span>`;
+    }
+  }
+  const btnAutoMode = document.getElementById('btn-cmd-auto');
+  const btnManualMode = document.getElementById('btn-cmd-manual');
+  if (btnAutoMode && btnManualMode) {
+    if (state.controlMode === 'AUTO') {
+      btnAutoMode.classList.add('active-mode');
+      btnManualMode.classList.remove('active-mode');
+    } else if (state.controlMode === 'MANUAL') {
+      btnManualMode.classList.add('active-mode');
+      btnAutoMode.classList.remove('active-mode');
+    } else {
+      btnAutoMode.classList.remove('active-mode');
+      btnManualMode.classList.remove('active-mode');
+    }
+  }
 }
 
 // Emergency Contacts Management
@@ -1500,12 +1548,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // Gate Command Action Buttons
   const btnAuto = document.getElementById('btn-cmd-auto');
+  const btnManual = document.getElementById('btn-cmd-manual');
   const btnOpen20 = document.getElementById('btn-cmd-open20');
   const btnOpen50 = document.getElementById('btn-cmd-open50');
   const btnClose = document.getElementById('btn-cmd-close');
   const btnEstop = document.getElementById('btn-cmd-estop');
 
   if (btnAuto) btnAuto.addEventListener('click', () => dispatchGateCommand('AUTO', 0));
+  if (btnManual) btnManual.addEventListener('click', () => dispatchGateCommand('MANUAL', state.gatePercent));
   if (btnOpen20) btnOpen20.addEventListener('click', () => dispatchGateCommand('OPEN_20', 20));
   if (btnOpen50) btnOpen50.addEventListener('click', () => dispatchGateCommand('OPEN_50', 50));
   if (btnClose) btnClose.addEventListener('click', () => dispatchGateCommand('CLOSE', 0));

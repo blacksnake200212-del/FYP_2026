@@ -137,6 +137,8 @@ void TelemetryManager::mqttCallback(char* topic, byte* payload, unsigned int len
             g_commandHandler("CLOSE", 0);
         } else if (strstr(message, "STOP") || strstr(message, "ESTOP")) {
             g_commandHandler("ESTOP", 0);
+        } else if (strstr(message, "MANUAL")) {
+            g_commandHandler("MANUAL", 0);
         } else if (strstr(message, "AUTO")) {
             g_commandHandler("AUTO", 0);
         } else if (strstr(message, "PREWARN_SMS")) {
@@ -258,6 +260,8 @@ void TelemetryManager::pollSupabaseCommands() {
                 strcpy(cmdType, "CLOSE"); targetPct = 0;
             } else if (payload.indexOf("\"STOP\"") >= 0 || payload.indexOf("\"ESTOP\"") >= 0) {
                 strcpy(cmdType, "ESTOP"); targetPct = 0;
+            } else if (payload.indexOf("\"MANUAL\"") >= 0) {
+                strcpy(cmdType, "MANUAL"); targetPct = 0;
             } else if (payload.indexOf("\"AUTO\"") >= 0) {
                 strcpy(cmdType, "AUTO"); targetPct = 0;
             } else if (payload.indexOf("\"PREWARN_SMS\"") >= 0) {

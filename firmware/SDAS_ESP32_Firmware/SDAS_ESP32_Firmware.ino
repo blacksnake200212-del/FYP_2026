@@ -119,21 +119,25 @@ void handleSerialCommand(String cmd) {
         }
     } else if (upper.equals("BTN") || upper.equals("BUTTONS") || upper.equals("BUTTON")) {
         stateMachine.printButtonStatus();
-    } else if (upper.equals("OPEN")) {
-        stateMachine.requestManualGatePercent(20, MANUAL_WATCHDOG_TIMEOUT_SEC);
+    } else if (upper.equals("MANUAL")) {
+        stateMachine.requestManualGatePercent(actuatorManager.getCurrentGatePercent(), 0);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.println("[CMD] Sluice gate set to 20% (Manual mode, 300s watchdog)");
+        Serial.println("[CMD] Switched to MANUAL mode (Operator lock active, auto-revert disabled).");
+    } else if (upper.equals("OPEN")) {
+        stateMachine.requestManualGatePercent(20, 0);
+        actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.println("[CMD] Sluice gate set to 20% (Manual mode, holding indefinitely)");
     } else if (upper.startsWith("OPEN ")) {
         int pct = upper.substring(5).toInt();
         pct = constrain(pct, 0, GATE_PCT_MAX_LIMIT);
-        stateMachine.requestManualGatePercent(pct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        stateMachine.requestManualGatePercent(pct, 0);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.printf("[CMD] Sluice gate set to %d%% (Manual mode, 300s watchdog)\n", pct);
+        Serial.printf("[CMD] Sluice gate set to %d%% (Manual mode, holding indefinitely)\n", pct);
     } else if (upper.equals("CLOSE")) {
-        stateMachine.requestManualGatePercent(GATE_PCT_CLOSED, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        stateMachine.requestManualGatePercent(GATE_PCT_CLOSED, 0);
         actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.println("[CMD] Sluice gate closing to 0% (Closed)");
+        Serial.println("[CMD] Sluice gate CLOSED to 0% (MANUAL CLOSE - Holding closed in Manual mode)");
     } else if (upper.equals("STOP") || upper.equals("ESTOP")) {
         const SystemStatus& s = stateMachine.getStatus();
         if (s.controlMode == MODE_EMERGENCY) {
@@ -147,7 +151,7 @@ void handleSerialCommand(String cmd) {
     } else if (upper.equals("AUTO") || upper.equals("RESET") || upper.equals("CLEAR")) {
         stateMachine.releaseEmergencyStop();
         stateMachine.revertToAuto();
-        Serial.println("[CMD] Overrides cleared. Returned to autonomous mode.");
+        Serial.println("[CMD] Overrides cleared. Returned to autonomous AUTO mode.");
     } else if (upper.equals("STATUS")) {
         const SystemStatus& status = stateMachine.getStatus();
         Serial.println("\n--- [CURRENT SYSTEM STATUS] ---");
@@ -173,22 +177,35 @@ void handleSerialCommand(String cmd) {
     }
 }
 
-// Command Callback for MQTT Remote Operator Overrides
+// Command Callback for MQTT & Supabase Remote Operator Overrides
 void onRemoteOperatorCommand(const char* command, int param) {
     Serial.printf("[CMD] Received Remote Command: %s (Param: %d)\n", command, param);
     
     if (strcmp(command, "OPEN") == 0) {
         int clampedParam = constrain(param, 0, GATE_PCT_MAX_LIMIT);
-        stateMachine.requestManualGatePercent(clampedParam, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        // Indefinite manual hold (duration = 0 prevents auto-revert to AUTO)
+        stateMachine.requestManualGatePercent(clampedParam, 0);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.printf("[CMD] Sluice gate set to %d%% (MANUAL MODE - Holding indefinitely)\n", clampedParam);
     } else if (strcmp(command, "CLOSE") == 0) {
-        stateMachine.requestManualGatePercent(0, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        // Manual Close: Closes gate to 0% and STAYS in MANUAL mode!
+        stateMachine.requestManualGatePercent(0, 0);
+        actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.println("[CMD] Sluice gate CLOSED to 0% (MANUAL MODE - Holding closed)");
+    } else if (strcmp(command, "MANUAL") == 0) {
+        // Explicitly lock into Manual Mode holding current gate position
+        stateMachine.requestManualGatePercent(stateMachine.getStatus().actualGatePercent, 0);
+        actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.println("[CMD] Switched to MANUAL mode (Autonomous auto-close inhibited)");
+    } else if (strcmp(command, "AUTO") == 0) {
+        // Return to Autonomous Mode
+        stateMachine.revertToAuto();
+        actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
+        Serial.println("[CMD] Returned to AUTO mode (Autonomous sensor control active)");
     } else if (strcmp(command, "ESTOP") == 0) {
         // Halt servo and sound continuous alarm immediately on Core 1
         stateMachine.triggerEmergencyStop(&actuatorManager);
-    } else if (strcmp(command, "AUTO") == 0) {
-        stateMachine.revertToAuto();
     } else if (strcmp(command, "PREWARN_SMS") == 0) {
         // Operator manually triggered staged pre-warning SMS from app
         gsmManager.broadcastAlert("SDAS PRE-WARNING: Reservoir approaching 60% capacity. Monitor local advisories.", false);
