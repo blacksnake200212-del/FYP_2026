@@ -729,6 +729,24 @@ footer {
   box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
 }
 
+.operator-badge.mqtt-online {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.operator-badge.mqtt-connecting {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #FDE68A;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.operator-badge.mqtt-offline {
+  background-color: rgba(100, 116, 139, 0.15);
+  color: #94A3B8;
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
 .dot-auth {
   width: 8px;
   height: 8px;

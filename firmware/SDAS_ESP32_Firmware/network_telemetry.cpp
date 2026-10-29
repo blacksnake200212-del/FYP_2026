@@ -66,6 +66,7 @@ void TelemetryManager::runNetworkLoop() {
             if (shouldSend) {
                 sendSupabaseTelemetry(localSensors, localStatus);
                 publishMqttTelemetry(localSensors, localStatus);
+                pollSupabaseCommands();
             }
         }
         
@@ -221,4 +222,66 @@ void TelemetryManager::update(unsigned long millisNow, const SensorData& sensors
         hasFreshData = true;
         xSemaphoreGive(dataMutex);
     }
+}
+
+// Poll Supabase commands table for pending operator commands (Cloud Sync Redundancy)
+void TelemetryManager::pollSupabaseCommands() {
+    if (WiFi.status() != WL_CONNECTED || g_commandHandler == nullptr) return;
+    
+    WiFiClientSecure secClient;
+    secClient.setInsecure();
+    
+    HTTPClient http;
+    String base = String(SUPABASE_URL);
+    if (!base.endsWith("/rest/v1")) {
+        base += base.endsWith("/") ? "rest/v1" : "/rest/v1";
+    }
+    String endpoint = base + "/commands?status=eq.PENDING&order=created_at.desc&limit=1";
+    http.begin(secClient, endpoint);
+    http.setTimeout(3000);
+    
+    http.addHeader("apikey", SUPABASE_ANON_KEY);
+    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    
+    int httpCode = http.GET();
+    if (httpCode == 200) {
+        String payload = http.getString();
+        if (payload.length() > 15) {
+            char cmdType[32] = {0};
+            int targetPct = 0;
+            
+            if (payload.indexOf("\"OPEN_20\"") >= 0 || payload.indexOf("\"OPEN_30\"") >= 0) {
+                strcpy(cmdType, "OPEN"); targetPct = GATE_PCT_CLEAR_AREA;
+            } else if (payload.indexOf("\"OPEN_50\"") >= 0 || payload.indexOf("\"OPEN_100\"") >= 0) {
+                strcpy(cmdType, "OPEN"); targetPct = GATE_PCT_DANGER;
+            } else if (payload.indexOf("\"CLOSE\"") >= 0) {
+                strcpy(cmdType, "CLOSE"); targetPct = 0;
+            } else if (payload.indexOf("\"STOP\"") >= 0 || payload.indexOf("\"ESTOP\"") >= 0) {
+                strcpy(cmdType, "ESTOP"); targetPct = 0;
+            } else if (payload.indexOf("\"AUTO\"") >= 0) {
+                strcpy(cmdType, "AUTO"); targetPct = 0;
+            } else if (payload.indexOf("\"PREWARN_SMS\"") >= 0) {
+                strcpy(cmdType, "PREWARN_SMS"); targetPct = 0;
+            }
+            
+            if (strlen(cmdType) > 0) {
+                Serial.printf("[CLOUD SYNC] Executing Supabase command: %s (%d%%)\n", cmdType, targetPct);
+                g_commandHandler(cmdType, targetPct);
+                
+                // Extract command UUID to mark EXECUTED
+                int idIdx = payload.indexOf("\"id\":\"");
+                if (idIdx >= 0) {
+                    String cmdId = payload.substring(idIdx + 6, idIdx + 42);
+                    http.end();
+                    String patchEndpoint = base + "/commands?id=eq." + cmdId;
+                    http.begin(secClient, patchEndpoint);
+                    http.addHeader("Content-Type", "application/json");
+                    http.addHeader("apikey", SUPABASE_ANON_KEY);
+                    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+                    http.PATCH("{\"status\":\"EXECUTED\"}");
+                }
+            }
+        }
+    }
+    http.end();
 }

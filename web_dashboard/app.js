@@ -525,28 +525,61 @@ const DEFAULT_CONTACTS = [
 
 let contactsList = [...DEFAULT_CONTACTS];
 
-// HiveMQ MQTT WebSocket Client
+// Multi-Broker Resilient MQTT WebSocket Client (EMQX Primary with HiveMQ Fallback)
 let pahoMqttClient = null;
 let isMqttConnected = false;
 
+const MQTT_BROKERS = [
+  { name: 'EMQX', host: 'broker.emqx.io', portWs: 8083, portWss: 8084, path: '/mqtt' },
+  { name: 'HiveMQ', host: 'broker.hivemq.com', portWs: 8000, portWss: 8884, path: '/mqtt' }
+];
+let activeBrokerIndex = 0;
+
+function updateMqttStatusPill(status, details) {
+  const pill = document.getElementById('mqtt-status-pill');
+  const label = document.getElementById('mqtt-status-label');
+  if (!pill || !label) return;
+
+  if (status === 'online') {
+    pill.className = 'operator-badge mqtt-online';
+    label.textContent = `🟢 MQTT: ${details || 'Online'}`;
+    pill.title = 'Sub-second MQTT link active. Click to reconnect.';
+  } else if (status === 'connecting') {
+    pill.className = 'operator-badge mqtt-connecting';
+    label.textContent = `🟡 MQTT: ${details || 'Connecting...'}`;
+    pill.title = 'Connecting to MQTT broker. Click to retry.';
+  } else {
+    pill.className = 'operator-badge mqtt-offline';
+    label.textContent = `⚪ MQTT: ${details || 'Cloud Sync Active'}`;
+    pill.title = 'MQTT direct offline. Commands will execute via Supabase Cloud Sync. Click to retry.';
+  }
+}
+
 function initMqttWebSocket() {
   if (typeof Paho === 'undefined' || !Paho.MQTT) {
-    console.warn('[MQTT WebSocket] Paho library not loaded, using Supabase REST fallback.');
+    console.warn('[MQTT WebSocket] Paho library not loaded, using Supabase Cloud Sync.');
+    updateMqttStatusPill('offline', 'Using Cloud Sync');
     return;
   }
 
+  const broker = MQTT_BROKERS[activeBrokerIndex];
   const isHttps = window.location.protocol === 'https:';
-  const brokerHost = 'broker.hivemq.com';
-  const brokerPort = isHttps ? 8884 : 8000;
-  const path = '/mqtt';
+  const brokerHost = broker.host;
+  const brokerPort = isHttps ? broker.portWss : broker.portWs;
+  const path = broker.path;
   const clientId = 'SDAS_Web_' + Math.random().toString(16).substring(2, 10);
+
+  updateMqttStatusPill('connecting', `${broker.name}...`);
 
   try {
     pahoMqttClient = new Paho.MQTT.Client(brokerHost, Number(brokerPort), path, clientId);
 
     pahoMqttClient.onConnectionLost = (responseObject) => {
-      console.warn('[MQTT WebSocket] Connection lost:', responseObject.errorMessage);
+      console.warn(`[MQTT] Connection lost (${broker.name}):`, responseObject.errorMessage);
       isMqttConnected = false;
+      updateMqttStatusPill('offline', 'Reconnecting...');
+      // Switch to alternative broker on disconnect
+      activeBrokerIndex = (activeBrokerIndex + 1) % MQTT_BROKERS.length;
       setTimeout(initMqttWebSocket, 5000);
     };
 
@@ -556,24 +589,29 @@ function initMqttWebSocket() {
 
     pahoMqttClient.connect({
       useSSL: isHttps,
-      timeout: 5,
+      timeout: 10, // 10-second resilient handshake
       keepAliveInterval: 30,
       cleanSession: true,
       onSuccess: () => {
-        console.log(`[MQTT WebSocket] Connected to ${brokerHost}:${brokerPort} via WebSocket!`);
+        console.log(`[MQTT WebSocket] Connected to ${broker.name} (${brokerHost}:${brokerPort})!`);
         isMqttConnected = true;
+        updateMqttStatusPill('online', broker.name);
         try {
           pahoMqttClient.subscribe('dam/puttalam/commands');
         } catch (e) {}
       },
       onFailure: (err) => {
-        console.warn('[MQTT WebSocket] Connection failed:', err.errorMessage);
+        console.warn(`[MQTT WebSocket] ${broker.name} failed:`, err.errorMessage || err);
         isMqttConnected = false;
-        setTimeout(initMqttWebSocket, 10000);
+        updateMqttStatusPill('offline', 'Cloud Sync Active');
+        // Try next candidate broker
+        activeBrokerIndex = (activeBrokerIndex + 1) % MQTT_BROKERS.length;
+        setTimeout(initMqttWebSocket, 6000);
       }
     });
   } catch (err) {
     console.warn('[MQTT WebSocket] Init exception:', err.message);
+    updateMqttStatusPill('offline', 'Cloud Sync Active');
   }
 }
 
@@ -993,9 +1031,9 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
   }
 
   // Construct status report
-  const mqttLabel = mqttSuccess ? '⚡ MQTT Sent' : '⚠️ MQTT Offline';
-  const dbLabel = supabaseSuccess ? '☁️ Supabase Audited' : '⚠️ DB Sync Pending';
-  showCommandFeedback(`[${timeStr}] Command '${cmdType}' issued by ${operatorSession.fullName} (${clampedPct}%). ${mqttLabel} &bull; ${dbLabel}`, 'success');
+  const mqttLabel = mqttSuccess ? '⚡ MQTT Sent (<100ms)' : '⚠️ Direct MQTT Offline';
+  const dbLabel = supabaseSuccess ? '☁️ Supabase Audited (Executing via Cloud Sync)' : '⚠️ DB Sync Pending';
+  showCommandFeedback(`[${timeStr}] Command '${cmdType}' (${clampedPct}%) &bull; ${dbLabel} &bull; ${mqttLabel}`, 'success');
 
   // Optimistically update local control mode if AUTO
   if (cmdType === 'AUTO') {
@@ -1330,6 +1368,14 @@ window.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('resize', drawChart);
 
   // Operator Auth Modal event listeners
+  const mqttPill = document.getElementById('mqtt-status-pill');
+  if (mqttPill) {
+    mqttPill.addEventListener('click', () => {
+      updateMqttStatusPill('connecting', 'Reconnecting...');
+      initMqttWebSocket();
+    });
+  }
+
   const btnToggleAuth = document.getElementById('btn-toggle-auth');
   const btnAddOperator = document.getElementById('btn-add-operator-modal');
   const btnUnlockPrompt = document.getElementById('btn-unlock-prompt');

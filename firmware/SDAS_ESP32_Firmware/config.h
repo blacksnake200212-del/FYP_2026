@@ -129,7 +129,7 @@
 
 // MQTT Broker Configuration (EMQX / HiveMQ TLS & Auth capable)
 #ifndef MQTT_BROKER
-  #define MQTT_BROKER              "broker.hivemq.com"
+  #define MQTT_BROKER              "broker.emqx.io" // High-availability public MQTT cluster
 #endif
 #ifndef MQTT_PORT
   #define MQTT_PORT                1883

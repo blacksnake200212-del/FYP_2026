@@ -53,6 +53,7 @@ private:
     void maintainMQTT();
     void sendSupabaseTelemetry(const SensorData& sensors, const SystemStatus& status);
     void publishMqttTelemetry(const SensorData& sensors, const SystemStatus& status);
+    void pollSupabaseCommands();
     static void mqttCallback(char* topic, byte* payload, unsigned int length);
 };
 
