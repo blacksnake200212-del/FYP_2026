@@ -22,11 +22,16 @@ void SensorManager::begin() {
     Preferences prefs;
     prefs.begin("sdas_sens", false);
     activeSensorCount = prefs.getUChar("sens_cnt", ACTIVE_ULTRASONIC_COUNT);
+    // When ACTIVE_ULTRASONIC_COUNT is set to 2, automatically activate dual sensor voting mode
+    if (ACTIVE_ULTRASONIC_COUNT >= 2) {
+        activeSensorCount = 2;
+        prefs.putUChar("sens_cnt", 2);
+    }
     prefs.end();
     
     Serial.printf("[SENSORS] Active Ultrasonic Sensors: %d (%s)\n",
         activeSensorCount,
-        activeSensorCount == 1 ? "Single Sensor Mode - Primary HC-SR04 on GPIO5/19" : "Dual Sensor Voting Mode");
+        activeSensorCount == 1 ? "Single Sensor Mode - Primary HC-SR04 on GPIO5/19" : "Dual Sensor Voting Mode - S1(GPIO5/19) + S2(GPIO18/21)");
     
     // Default initial readings
     currentData.temperature_c = 28.0f; // Typical Puttalam ambient baseline

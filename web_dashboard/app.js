@@ -1570,6 +1570,15 @@ window.addEventListener('DOMContentLoaded', () => {
   if (btnClose) btnClose.addEventListener('click', () => dispatchGateCommand('CLOSE', 0));
   if (btnEstop) btnEstop.addEventListener('click', () => dispatchGateCommand('ESTOP', 0));
 
+  // Dual Sensors Toggle Button in Diagnostic Matrix
+  const btnDualSensors = document.getElementById('btn-toggle-dual-sensors');
+  if (btnDualSensors) {
+    btnDualSensors.addEventListener('click', () => {
+      dispatchGateCommand('SENSOR_2', 2);
+      showCommandFeedback('⚡ Dispatched Dual Sensor Activation (GPIO 5/19 + 18/21) to ESP32!', 'success');
+    });
+  }
+
   // Gate Position Slider
   const gateSlider = document.getElementById('gate-slider');
   const gateSliderVal = document.getElementById('gate-slider-val');

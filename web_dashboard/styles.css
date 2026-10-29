@@ -971,6 +971,23 @@ footer {
 }
 
 /* Mode Selector Banner */
+.btn-toggle-dual {
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #38BDF8;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-toggle-dual:hover {
+  background: rgba(14, 165, 233, 0.3);
+  border-color: #38BDF8;
+  box-shadow: 0 0 10px rgba(14, 165, 233, 0.3);
+}
+
 .mode-select-banner {
   background: rgba(15, 23, 42, 0.7);
   border: 1px solid rgba(56, 189, 248, 0.2);

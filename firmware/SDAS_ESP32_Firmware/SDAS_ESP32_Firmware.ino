@@ -226,6 +226,12 @@ void onRemoteOperatorCommand(const char* command, int param) {
     } else if (strcmp(command, "PREWARN_SMS") == 0) {
         // Operator manually triggered staged pre-warning SMS from app
         gsmManager.broadcastAlert("SDAS PRE-WARNING: Reservoir approaching 60% capacity. Monitor local advisories.", false);
+    } else if (strcmp(command, "SENSOR_2") == 0 || strcmp(command, "DUAL") == 0) {
+        sensorManager.setSensorCount(2);
+        Serial.println("[CMD] Remote command enabled Dual HC-SR04 Sensors (GPIO5/19 + GPIO18/21)!");
+    } else if (strcmp(command, "SENSOR_1") == 0 || strcmp(command, "SINGLE") == 0) {
+        sensorManager.setSensorCount(1);
+        Serial.println("[CMD] Remote command set to Single HC-SR04 Sensor (GPIO5/19)!");
     }
 }
 

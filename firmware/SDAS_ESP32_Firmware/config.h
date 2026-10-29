@@ -15,9 +15,9 @@
 #define PIN_ECHO_2           21    // HC-SR04 #2 Echo    (via Level Shifter Ch4)
 
 // Active Ultrasonic Sensor Count:
-// Set to 1 if testing with ONE HC-SR04 sensor (prevents phantom noise on unconnected Sensor 2!)
-// Set to 2 if both dual HC-SR04 sensors are wired. (Can also toggle via Serial: 'SENSOR 1' / 'SENSOR 2')
-#define ACTIVE_ULTRASONIC_COUNT 1
+// Set to 2: Dual HC-SR04 sensors active with cross-sensor voting & plausibility check.
+// Sensor 1: Trig GPIO5, Echo GPIO19. Sensor 2: Trig GPIO18, Echo GPIO21.
+#define ACTIVE_ULTRASONIC_COUNT 2
 
 // --- Environmental Sensing ---
 #define PIN_DHT              4     // DHT22 Data line (with 10k pull-up to 3.3V)

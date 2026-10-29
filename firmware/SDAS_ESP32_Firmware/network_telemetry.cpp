@@ -143,6 +143,10 @@ void TelemetryManager::mqttCallback(char* topic, byte* payload, unsigned int len
             g_commandHandler("AUTO", 0);
         } else if (strstr(message, "PREWARN_SMS")) {
             g_commandHandler("PREWARN_SMS", 0);
+        } else if (strstr(message, "SENSOR_2") || strstr(message, "DUAL")) {
+            g_commandHandler("SENSOR_2", 2);
+        } else if (strstr(message, "SENSOR_1") || strstr(message, "SINGLE")) {
+            g_commandHandler("SENSOR_1", 1);
         }
     }
 }
@@ -266,6 +270,10 @@ void TelemetryManager::pollSupabaseCommands() {
                 strcpy(cmdType, "AUTO"); targetPct = 0;
             } else if (payload.indexOf("\"PREWARN_SMS\"") >= 0) {
                 strcpy(cmdType, "PREWARN_SMS"); targetPct = 0;
+            } else if (payload.indexOf("\"SENSOR_2\"") >= 0 || payload.indexOf("\"DUAL\"") >= 0) {
+                strcpy(cmdType, "SENSOR_2"); targetPct = 2;
+            } else if (payload.indexOf("\"SENSOR_1\"") >= 0 || payload.indexOf("\"SINGLE\"") >= 0) {
+                strcpy(cmdType, "SENSOR_1"); targetPct = 1;
             }
             
             if (strlen(cmdType) > 0) {
