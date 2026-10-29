@@ -50,6 +50,8 @@ void printSerialHelp() {
     Serial.println("  OPEN            : Open sluice gate to 20% (Manual mode)");
     Serial.println("  OPEN <0-50>     : Manually open sluice gate to specified percentage");
     Serial.println("  CLOSE           : Manually close sluice gate (0%)");
+    Serial.println("  SPEED <1-10>    : Adjust servo movement speed (e.g. SPEED 3 = standard, SPEED 6 = fast)");
+    Serial.println("  FAST / NORMAL   : Instant presets for brisk or rapid servo travel");
     Serial.println("  STOP or ESTOP   : Toggle Emergency Stop mode");
     Serial.println("  AUTO or RESET   : Return system to autonomous control mode");
     Serial.println("  STATUS          : Print complete hardware and sensor telemetry status");
@@ -138,6 +140,21 @@ void handleSerialCommand(String cmd) {
         actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
         Serial.println("[CMD] Sluice gate CLOSED to 0% (MANUAL CLOSE - Holding closed in Manual mode)");
+    } else if (upper.startsWith("SPEED ")) {
+        float spd = upper.substring(6).toFloat();
+        if (spd >= 0.5f && spd <= 15.0f) {
+            actuatorManager.setServoStepDeg(spd);
+            Serial.printf("[SERVO] Motion speed updated to %.1f deg/step (~%d ms for 50%% travel).\n",
+                spd, (int)((90.0f / spd) * 15.0f));
+        } else {
+            Serial.println("[SERVO] Invalid speed. Enter a number between 1.0 and 10.0 (e.g. 'SPEED 5').");
+        }
+    } else if (upper.equals("FAST") || upper.equals("SPEED FAST")) {
+        actuatorManager.setServoStepDeg(6.0f);
+        Serial.println("[SERVO] Motion speed set to FAST (6.0 deg/step - ~225ms full travel).");
+    } else if (upper.equals("NORMAL") || upper.equals("SPEED NORMAL")) {
+        actuatorManager.setServoStepDeg(3.0f);
+        Serial.println("[SERVO] Motion speed set to BRISK NORMAL (3.0 deg/step - ~450ms full travel).");
     } else if (upper.equals("STOP") || upper.equals("ESTOP")) {
         const SystemStatus& s = stateMachine.getStatus();
         if (s.controlMode == MODE_EMERGENCY) {

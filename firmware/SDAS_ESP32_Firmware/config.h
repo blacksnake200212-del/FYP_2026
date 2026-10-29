@@ -44,6 +44,12 @@
 #define SERVO_MIN_US         500   // 0 degrees
 #define SERVO_MAX_US         2500  // 180 degrees
 
+// Servo travel step size (degrees per 15ms loop update)
+// 1.0f = Realistic heavy sluice gate speed (~1.35s to 50%)
+// 3.0f = Brisk, responsive prototype speed (~450ms to 50% - Standard Recommended)
+// 5.0f = High-speed rapid response (~270ms to 50%)
+#define SERVO_STEP_DEG       3.0f
+
 // --- Buzzer Driver ---
 // Driven via BC547/2N2222 NPN transistor with 1k base resistor & 1N4007 clamp diode
 #define PIN_BUZZER           27

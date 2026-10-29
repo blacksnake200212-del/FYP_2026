@@ -126,8 +126,8 @@ float SensorManager::measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, f
     delayMicroseconds(10);
     digitalWrite(trigPin, LOW);
     
-    // Measure echo pulse width (timeout 30,000 us ~= 5 meters)
-    unsigned long durationUs = pulseIn(echoPin, HIGH, 30000UL);
+    // Measure echo pulse width (timeout 12,000 us ~= 2.0 meters, eliminates blocking loop delay)
+    unsigned long durationUs = pulseIn(echoPin, HIGH, 12000UL);
     
     if (durationUs == 0) {
         return -1.0f; // Timeout / No echo returned

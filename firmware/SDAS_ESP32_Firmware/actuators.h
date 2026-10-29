@@ -31,6 +31,8 @@ public:
     int  getTargetGatePercent() const { return targetPercent; }
     int  getCurrentAngleDeg() const { return (int)currentAngle; }
     bool isMoving() const { return (fabsf(currentAngle - targetAngle) > 0.5f); }
+    void setServoStepDeg(float step) { servoStepDeg = constrain(step, 0.5f, 15.0f); }
+    float getServoStepDeg() const { return servoStepDeg; }
     
     // Indicators & Alarms
     void setRGBAlert(AlertState state);
@@ -61,6 +63,7 @@ private:
     bool  isMuted;
     float currentAngle;
     float targetAngle;
+    float servoStepDeg;
     int   currentPercent;
     int   targetPercent;
     unsigned long lastServoStepMs;

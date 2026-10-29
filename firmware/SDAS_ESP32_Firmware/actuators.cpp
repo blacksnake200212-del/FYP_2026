@@ -3,7 +3,7 @@
 
 ActuatorManager::ActuatorManager()
     : isCommonAnode(RGB_IS_COMMON_ANODE), isMuted(false),
-      currentAngle(0.0f), targetAngle(0.0f), currentPercent(0), targetPercent(0),
+      currentAngle(0.0f), targetAngle(0.0f), servoStepDeg(SERVO_STEP_DEG), currentPercent(0), targetPercent(0),
       lastServoStepMs(0), currentBuzzerPattern(BUZZER_OFF),
       lastBuzzerToggleMs(0), buzzerState(false),
       currentAlertState(STATE_NORMAL), orangePwmCounter(0) {}
@@ -85,16 +85,16 @@ void ActuatorManager::setTargetGatePercent(int percent) {
 
 void ActuatorManager::updateServoMotion() {
     unsigned long now = millis();
-    // Move servo by 1 degree every 15 ms for smooth, surge-free travel
+    // Move servo smoothly by servoStepDeg degrees every 15 ms
     if (now - lastServoStepMs >= 15) {
         lastServoStepMs = now;
         
         if (fabsf(currentAngle - targetAngle) > 0.5f) {
             if (currentAngle < targetAngle) {
-                currentAngle += 1.0f;
+                currentAngle += servoStepDeg;
                 if (currentAngle > targetAngle) currentAngle = targetAngle;
             } else {
-                currentAngle -= 1.0f;
+                currentAngle -= servoStepDeg;
                 if (currentAngle < targetAngle) currentAngle = targetAngle;
             }
             
