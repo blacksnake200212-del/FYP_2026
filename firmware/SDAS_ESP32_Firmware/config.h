@@ -62,12 +62,11 @@
 #define SIM_BAUD_RATE        9600
 
 // --- Physical Manual Override Push Buttons ---
-// Set to false for bench test / demo setup to prevent floating pin noise from toggling modes.
-// Set to true only when physical normally-open tactile buttons are wired between GPIO and GND.
-#define ENABLE_PHYSICAL_BUTTONS false
-#define PIN_BTN_OPEN         14    // Manual OPEN button
-#define PIN_BTN_CLOSE        26    // Manual CLOSE button
-#define PIN_BTN_STOP         22    // Emergency STOP button
+// Set to true to enable tactile push buttons wired to GPIO 14 (OPEN), 26 (CLOSE), 22 (STOP)
+#define ENABLE_PHYSICAL_BUTTONS true
+#define PIN_BTN_OPEN         14    // Manual OPEN button (0% -> 20% -> 50%)
+#define PIN_BTN_CLOSE        26    // Manual CLOSE button (Direct 0%)
+#define PIN_BTN_STOP         22    // Emergency STOP button (Toggle E-STOP / Lock)
 
 // --- Optional Rain Gauge (Tipping Bucket) ---
 // Input-only pin GPIO34 (requires external 10k pull-up)
