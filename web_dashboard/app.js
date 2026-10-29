@@ -294,8 +294,17 @@ function renderUI(rawRow) {
   el.s2Card.className = s2Ok ? 'sensor-card active' : 'sensor-card fault';
   el.s2Dist.textContent = state.sensor2Dist > 0 ? state.sensor2Dist.toFixed(1) : '--';
   el.s2Status.className = s2Ok ? 'sensor-state-pill ok' : 'sensor-state-pill fault';
-  el.s2Status.textContent = isOnline ? (state.sensor2Dist > 0 ? 'ECHO OK' : 'TIMEOUT') : 'OFFLINE';
-  el.s2Agreement.textContent = isOnline ? (state.sensorsAgreed ? 'Dual-Sensor Verified' : 'Echo Disagreement') : 'Hardware Not Connected';
+  
+  if (!isOnline) {
+    el.s2Status.textContent = 'OFFLINE';
+    el.s2Agreement.textContent = 'Hardware Not Connected';
+  } else if (state.sensor2Dist > 0) {
+    el.s2Status.textContent = 'ECHO OK';
+    el.s2Agreement.textContent = state.sensorsAgreed ? 'Dual-Sensor Verified (±5cm)' : 'Sensor Disagreement';
+  } else {
+    el.s2Status.textContent = 'STANDBY';
+    el.s2Agreement.textContent = 'Single-Sensor Mode (Sensor #2 Idle)';
+  }
 
   // 8. DHT22 Microclimate Sensor
   const dhtOk = isOnline && (state.temperatureC > 0 || state.humidityPct > 0);
