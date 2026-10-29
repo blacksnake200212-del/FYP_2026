@@ -227,11 +227,13 @@ SensorData SensorManager::sampleAndVerify() {
             currentData.degraded_mode = false;
             currentData.critical_sensor_fault = false;
         } else {
-            // Divergence > 5.0 cm: Primary Sensor 1 takes precedence (prevents divergence lockup!)
+            // Divergence > 5.0 cm: Industrial Fail-Safe Principle (High-Water Priority)
+            // Whichever sensor detects the closer obstacle / higher water level takes precedence: min(d1, d2).
+            // This guarantees that BOTH Sensor 1 AND Sensor 2 can independently trigger emergency gate relief!
+            fusedDistanceCm = (d1 < d2) ? d1 : d2;
             currentData.sensors_in_agreement = false;
             currentData.degraded_mode = true;
             currentData.critical_sensor_fault = false;
-            fusedDistanceCm = d1;
         }
     } else if (currentData.sensor_1_valid) {
         // Operating cleanly on Primary Sensor 1
