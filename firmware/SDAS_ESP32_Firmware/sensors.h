@@ -36,6 +36,7 @@ public:
     // Dynamic Sensor Count Control (Single vs Dual)
     void setSensorCount(uint8_t count);
     uint8_t getSensorCount() const { return activeSensorCount; }
+    void testRawPing();
 
 private:
     uint8_t activeSensorCount;

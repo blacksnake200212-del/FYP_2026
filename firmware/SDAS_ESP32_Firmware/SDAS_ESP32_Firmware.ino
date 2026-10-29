@@ -35,6 +35,7 @@ void printSerialHelp() {
     Serial.println("  BTN or BUTTONS  : Inspect live physical state of OPEN (14), CLOSE (26), STOP (22)");
     Serial.println("  SENSOR 1        : Use Single HC-SR04 Sensor #1 (GPIO5/19) - Bench Testing");
     Serial.println("  SENSOR DUAL     : Enable Dual HC-SR04 Sensor Voting (GPIO5/19 + GPIO18/21)");
+    Serial.println("  PING / ECHO     : Test raw microsecond pulse returns from both sensors");
     Serial.println("  BUZZ or BEEP    : Test active buzzer with a 500ms DC pulse");
     Serial.println("  BUZZ ON         : Force GPIO27 HIGH continuously (for DMM voltmeter check)");
     Serial.println("  BUZZ OFF        : Force GPIO27 LOW (0V)");
@@ -78,6 +79,8 @@ void handleSerialCommand(String cmd) {
         sensorManager.setSensorCount(1);
     } else if (upper.equals("SENSOR 2") || upper.equals("SENSOR DUAL")) {
         sensorManager.setSensorCount(2);
+    } else if (upper.equals("PING") || upper.equals("SENSORS") || upper.equals("ECHO")) {
+        sensorManager.testRawPing();
     } else if (upper.equals("BUZZ") || upper.equals("BEEP")) {
         actuatorManager.testBuzzerChirp(500);
     } else if (upper.equals("BUZZ ON")) {

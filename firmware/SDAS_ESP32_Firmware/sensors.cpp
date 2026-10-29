@@ -122,17 +122,18 @@ void SensorManager::readDHTSensors() {
 }
 
 float SensorManager::measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound) {
-    // Clear trigger
+    // Clear trigger line cleanly
     digitalWrite(trigPin, LOW);
-    delayMicroseconds(4);
+    delayMicroseconds(5);
     
-    // 10 microsecond HIGH pulse to activate HC-SR04 burst (standard RNT timing)
+    // 15 microsecond HIGH pulse to activate HC-SR04 burst
+    // (15us ensures 100% reliable trigger edge propagation across level shifters)
     digitalWrite(trigPin, HIGH);
-    delayMicroseconds(10);
+    delayMicroseconds(15);
     digitalWrite(trigPin, LOW);
     
-    // Measure echo pulse width (timeout 12,000 us ~= 2.0 meters, eliminates blocking loop delay)
-    unsigned long durationUs = pulseIn(echoPin, HIGH, 12000UL);
+    // Measure echo pulse width (timeout 24,000 us ~= 4.1 meters, covers full room/tank range)
+    unsigned long durationUs = pulseIn(echoPin, HIGH, 24000UL);
     
     if (durationUs == 0) {
         return -1.0f; // Timeout / No echo returned
@@ -141,6 +142,46 @@ float SensorManager::measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, f
     // Distance in cm = (Time in s * Speed in cm/s) / 2
     float distanceCm = (durationUs * 1e-6f * (speedOfSound * 100.0f)) / 2.0f;
     return distanceCm;
+}
+
+void SensorManager::testRawPing() {
+    Serial.println("\n=======================================================");
+    Serial.println("     RAW ULTRASONIC HARDWARE PING DIAGNOSTIC");
+    Serial.println("=======================================================");
+    
+    // Sensor 1: GPIO 5 (Trig) / GPIO 19 (Echo)
+    digitalWrite(PIN_TRIG_1, LOW);
+    delayMicroseconds(5);
+    digitalWrite(PIN_TRIG_1, HIGH);
+    delayMicroseconds(15);
+    digitalWrite(PIN_TRIG_1, LOW);
+    unsigned long dur1 = pulseIn(PIN_ECHO_1, HIGH, 25000UL);
+    float d1 = (dur1 > 0) ? (dur1 * 1e-6f * (currentData.speed_of_sound_mps * 100.0f)) / 2.0f : -1.0f;
+    
+    delay(50);
+    
+    // Sensor 2: GPIO 18 (Trig) / GPIO 21 (Echo)
+    digitalWrite(PIN_TRIG_2, LOW);
+    delayMicroseconds(5);
+    digitalWrite(PIN_TRIG_2, HIGH);
+    delayMicroseconds(15);
+    digitalWrite(PIN_TRIG_2, LOW);
+    unsigned long dur2 = pulseIn(PIN_ECHO_2, HIGH, 25000UL);
+    float d2 = (dur2 > 0) ? (dur2 * 1e-6f * (currentData.speed_of_sound_mps * 100.0f)) / 2.0f : -1.0f;
+    
+    Serial.printf("Sensor 1 (Trig 5 / Echo 19):   Raw = %lu us -> %.1f cm [%s]\n",
+        dur1, d1, dur1 > 0 ? "ECHO OK" : "TIMEOUT (0 us)");
+    Serial.printf("Sensor 2 (Trig 18 / Echo 21): Raw = %lu us -> %.1f cm [%s]\n",
+        dur2, d2, dur2 > 0 ? "ECHO OK" : "TIMEOUT (0 us)");
+    if (dur1 == 0 && dur2 > 0) {
+        Serial.println("\n[DIAGNOSTIC] Sensor 2 is ECHOING, but Sensor 1 is TIMING OUT!");
+        Serial.println("Common causes for Sensor 1:");
+        Serial.println("  1. Level Converter HV1/LV1 or HV2/LV2 channel loose or miswired.");
+        Serial.println("  2. Direct TRIG Recommendation: Wire Sensor 1 TRIG directly to GPIO 5!");
+        Serial.println("     (ESP32 3.3V triggers HC-SR04 directly with no level shifter needed)");
+        Serial.println("  3. Only ECHO needs level shifting: Sensor 1 ECHO -> Level Converter HV -> LV -> GPIO 19.");
+    }
+    Serial.println("=======================================================\n");
 }
 
 // 3-Sample Median Filter to reject acoustic spikes, multipath glitches, and dropouts
