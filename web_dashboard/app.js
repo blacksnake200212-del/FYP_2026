@@ -1579,6 +1579,15 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // RGB LED Polarity Inversion Button
+  const btnToggleRgb = document.getElementById('btn-toggle-rgb');
+  if (btnToggleRgb) {
+    btnToggleRgb.addEventListener('click', () => {
+      dispatchGateCommand('RGB', 0);
+      showCommandFeedback('🎨 Dispatched RGB Polarity Inversion (Anode/Cathode) to ESP32!', 'success');
+    });
+  }
+
   // Gate Position Slider
   const gateSlider = document.getElementById('gate-slider');
   const gateSliderVal = document.getElementById('gate-slider-val');

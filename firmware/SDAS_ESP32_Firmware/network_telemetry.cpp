@@ -147,6 +147,8 @@ void TelemetryManager::mqttCallback(char* topic, byte* payload, unsigned int len
             g_commandHandler("SENSOR_2", 2);
         } else if (strstr(message, "SENSOR_1") || strstr(message, "SINGLE")) {
             g_commandHandler("SENSOR_1", 1);
+        } else if (strstr(message, "RGB") || strstr(message, "TOGGLE_RGB")) {
+            g_commandHandler("RGB", 0);
         }
     }
 }
@@ -274,6 +276,8 @@ void TelemetryManager::pollSupabaseCommands() {
                 strcpy(cmdType, "SENSOR_2"); targetPct = 2;
             } else if (payload.indexOf("\"SENSOR_1\"") >= 0 || payload.indexOf("\"SINGLE\"") >= 0) {
                 strcpy(cmdType, "SENSOR_1"); targetPct = 1;
+            } else if (payload.indexOf("\"RGB\"") >= 0 || payload.indexOf("\"TOGGLE_RGB\"") >= 0) {
+                strcpy(cmdType, "RGB"); targetPct = 0;
             }
             
             if (strlen(cmdType) > 0) {

@@ -308,10 +308,26 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     }
     
     // --- Step 5: Update Visual and Audible Actuators ---
-    // Always display the true reservoir water level alert state on the RGB LED!
-    actuators.setRGBAlert(currentStatus.alertState);
+    // In AUTO: reflects true reservoir flood stage. In MANUAL: reflects active discharge stage!
+    AlertState displayAlert = currentStatus.alertState;
+    if (currentStatus.controlMode == MODE_MANUAL) {
+        if (currentStatus.targetGatePercent >= GATE_PCT_DANGER) {
+            displayAlert = STATE_DANGER;      // 50% Emergency flood release: RED
+        } else if (currentStatus.targetGatePercent >= GATE_PCT_CLEAR_AREA) {
+            displayAlert = STATE_CLEAR_AREA;  // 20% Advisory relief: ORANGE
+        } else if (currentStatus.targetGatePercent > 0) {
+            displayAlert = STATE_PRE_WARNING; // Partial gate: YELLOW
+        } else {
+            // Sluice gate is 0% closed: reflect real water level alert (NORMAL = Green)
+            displayAlert = currentStatus.alertState;
+        }
+    } else if (currentStatus.controlMode == MODE_EMERGENCY) {
+        displayAlert = STATE_DANGER; // Red for emergency stop
+    }
     
-    if (currentStatus.alertState == STATE_DANGER) {
+    actuators.setRGBAlert(displayAlert);
+    
+    if (displayAlert == STATE_DANGER) {
         actuators.setBuzzerPattern(BUZZER_PULSE_DANGER);
     } else if (!actuators.isBeeping()) {
         // Preserve short confirmation beeps from being prematurely silenced

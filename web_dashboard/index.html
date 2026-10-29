@@ -161,12 +161,15 @@
           <div class="card-title">
             <span class="icon">📡</span> All-Sensors Live Hardware Health & Diagnostic Matrix
           </div>
-          <div style="display: flex; gap: 10px; align-items: center;">
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
             <button id="btn-toggle-dual-sensors" class="btn-toggle-dual" title="Activate Dual HC-SR04 Sensors on hardware">
               ⚡ Enable Dual Sensors
             </button>
+            <button id="btn-toggle-rgb" class="btn-toggle-dual" style="border-color: rgba(234, 179, 8, 0.4); color: #FBBF24;" title="Invert RGB LED Polarity (Common Cathode GND vs Common Anode 3.3V)">
+              🎨 Invert LED Polarity
+            </button>
             <div style="font-size: 11px; color: var(--text-muted);">
-              Real hardware signals from ESP32 GPIO Pins
+              ESP32 GPIO Pins
             </div>
           </div>
         </div>

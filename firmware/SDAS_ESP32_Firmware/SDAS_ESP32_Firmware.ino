@@ -232,6 +232,10 @@ void onRemoteOperatorCommand(const char* command, int param) {
     } else if (strcmp(command, "SENSOR_1") == 0 || strcmp(command, "SINGLE") == 0) {
         sensorManager.setSensorCount(1);
         Serial.println("[CMD] Remote command set to Single HC-SR04 Sensor (GPIO5/19)!");
+    } else if (strcmp(command, "RGB") == 0 || strcmp(command, "TOGGLE_RGB") == 0) {
+        bool ca = actuatorManager.togglePolarity();
+        Serial.printf("[CMD] Remote command toggled RGB LED polarity: %s\n",
+            ca ? "COMMON ANODE (Active LOW)" : "COMMON CATHODE (Active HIGH)");
     }
 }
 
