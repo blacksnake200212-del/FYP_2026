@@ -1068,12 +1068,12 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
   const dbLabel = supabaseSuccess ? '☁️ Supabase Audited (Executing via Cloud Sync)' : '⚠️ DB Sync Pending';
   showCommandFeedback(`[${timeStr}] Command '${cmdType}' (${clampedPct}%) &bull; ${dbLabel} &bull; ${mqttLabel}`, 'success');
 
-  // Optimistically update local control mode
+  // Optimistically update local control mode only for mode-altering commands
   if (cmdType === 'AUTO') {
     state.controlMode = 'AUTO';
   } else if (cmdType === 'ESTOP') {
     state.controlMode = 'EMERGENCY_STOP';
-  } else {
+  } else if (['MANUAL', 'OPEN', 'OPEN_20', 'OPEN_50', 'CLOSE'].includes(cmdType)) {
     state.controlMode = 'MANUAL';
   }
   const opGateMode = document.getElementById('op-gate-mode');

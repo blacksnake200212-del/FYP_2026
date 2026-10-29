@@ -62,7 +62,9 @@
 #define SIM_BAUD_RATE        9600
 
 // --- Physical Manual Override Push Buttons ---
-// Wired to GND with internal INPUT_PULLUP and 20ms software debounce
+// Set to false for bench test / demo setup to prevent floating pin noise from toggling modes.
+// Set to true only when physical normally-open tactile buttons are wired between GPIO and GND.
+#define ENABLE_PHYSICAL_BUTTONS false
 #define PIN_BTN_OPEN         14    // Manual OPEN button
 #define PIN_BTN_CLOSE        26    // Manual CLOSE button
 #define PIN_BTN_STOP         22    // Emergency STOP button

@@ -149,6 +149,10 @@ void TelemetryManager::mqttCallback(char* topic, byte* payload, unsigned int len
             g_commandHandler("SENSOR_1", 1);
         } else if (strstr(message, "RGB") || strstr(message, "TOGGLE_RGB")) {
             g_commandHandler("RGB", 0);
+        } else if (strstr(message, "BTN_ON")) {
+            g_commandHandler("BTN_ON", 0);
+        } else if (strstr(message, "BTN_OFF")) {
+            g_commandHandler("BTN_OFF", 0);
         }
     }
 }
@@ -278,6 +282,10 @@ void TelemetryManager::pollSupabaseCommands() {
                 strcpy(cmdType, "SENSOR_1"); targetPct = 1;
             } else if (payload.indexOf("\"RGB\"") >= 0 || payload.indexOf("\"TOGGLE_RGB\"") >= 0) {
                 strcpy(cmdType, "RGB"); targetPct = 0;
+            } else if (payload.indexOf("\"BTN_ON\"") >= 0) {
+                strcpy(cmdType, "BTN_ON"); targetPct = 0;
+            } else if (payload.indexOf("\"BTN_OFF\"") >= 0) {
+                strcpy(cmdType, "BTN_OFF"); targetPct = 0;
             }
             
             if (strlen(cmdType) > 0) {

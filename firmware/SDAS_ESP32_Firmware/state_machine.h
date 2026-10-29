@@ -38,9 +38,11 @@ public:
     void releaseEmergencyStop();
     void revertToAuto();
     
-    // Hardware button polling (with 20ms debounce and optional direct actuator trigger)
+    // Hardware button polling (with 250ms sustained-hold debounce and optional direct actuator trigger)
     void checkPhysicalButtons(ActuatorManager* actuators = nullptr);
     void printButtonStatus() const;
+    void setButtonsEnabled(bool enabled);
+    bool areButtonsEnabled() const { return physicalButtonsEnabled; }
     
     const SystemStatus& getStatus() const { return currentStatus; }
     bool checkAndClearSmsTrigger(bool* isPriorityOut = nullptr);
@@ -49,14 +51,15 @@ private:
     SystemStatus currentStatus;
     Preferences  preferences;
     bool         previousFaultState;
+    bool         physicalButtonsEnabled;
     
-    // Button debouncing and edge-detection state
-    unsigned long lastBtnOpenMs;
-    unsigned long lastBtnCloseMs;
-    unsigned long lastBtnStopMs;
-    int lastBtnOpenState;
-    int lastBtnCloseState;
-    int lastBtnStopState;
+    // Button sustained-hold debouncing state (250ms continuous hold required)
+    unsigned long btnStopHoldStartMs;
+    unsigned long btnCloseHoldStartMs;
+    unsigned long btnOpenHoldStartMs;
+    bool btnStopHandled;
+    bool btnCloseHandled;
+    bool btnOpenHandled;
     
     void saveGateStateToNVS(int percent);
     int  loadGateStateFromNVS();

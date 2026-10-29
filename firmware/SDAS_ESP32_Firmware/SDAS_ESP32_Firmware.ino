@@ -119,6 +119,10 @@ void handleSerialCommand(String cmd) {
                 Serial.println("[CMD] Invalid level! Enter a percentage between 0 and 100 (e.g. LEVEL 65).");
             }
         }
+    } else if (upper.equals("BTN ON") || upper.equals("BUTTONS ON")) {
+        stateMachine.setButtonsEnabled(true);
+    } else if (upper.equals("BTN OFF") || upper.equals("BUTTONS OFF")) {
+        stateMachine.setButtonsEnabled(false);
     } else if (upper.equals("BTN") || upper.equals("BUTTONS") || upper.equals("BUTTON")) {
         stateMachine.printButtonStatus();
     } else if (upper.equals("MANUAL")) {
@@ -236,6 +240,10 @@ void onRemoteOperatorCommand(const char* command, int param) {
         bool ca = actuatorManager.togglePolarity();
         Serial.printf("[CMD] Remote command toggled RGB LED polarity: %s\n",
             ca ? "COMMON ANODE (Active LOW)" : "COMMON CATHODE (Active HIGH)");
+    } else if (strcmp(command, "BTN_ON") == 0) {
+        stateMachine.setButtonsEnabled(true);
+    } else if (strcmp(command, "BTN_OFF") == 0) {
+        stateMachine.setButtonsEnabled(false);
     }
 }
 

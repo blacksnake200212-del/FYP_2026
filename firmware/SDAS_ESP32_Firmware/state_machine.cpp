@@ -2,8 +2,9 @@
 
 SDASStateMachine::SDASStateMachine()
     : previousFaultState(false),
-      lastBtnOpenMs(0), lastBtnCloseMs(0), lastBtnStopMs(0),
-      lastBtnOpenState(HIGH), lastBtnCloseState(HIGH), lastBtnStopState(HIGH) {
+      physicalButtonsEnabled(ENABLE_PHYSICAL_BUTTONS),
+      btnStopHoldStartMs(0), btnCloseHoldStartMs(0), btnOpenHoldStartMs(0),
+      btnStopHandled(false), btnCloseHandled(false), btnOpenHandled(false) {
     memset(&currentStatus, 0, sizeof(SystemStatus));
     currentStatus.alertState = STATE_NORMAL;
     currentStatus.controlMode = MODE_AUTO;
@@ -15,19 +16,20 @@ SDASStateMachine::SDASStateMachine()
 }
 
 void SDASStateMachine::begin() {
-    // Configure hardware buttons with internal pullups
-    pinMode(PIN_BTN_OPEN, INPUT_PULLUP);
-    pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
-    pinMode(PIN_BTN_STOP, INPUT_PULLUP);
+    preferences.begin("sdas_fsm", false);
     
-    // Sample initial button states on boot to prevent spurious edge triggers
-    delay(10);
-    lastBtnOpenState  = digitalRead(PIN_BTN_OPEN);
-    lastBtnCloseState = digitalRead(PIN_BTN_CLOSE);
-    lastBtnStopState  = digitalRead(PIN_BTN_STOP);
+    // Check if physical push buttons are enabled
+    physicalButtonsEnabled = preferences.getBool("btn_en", ENABLE_PHYSICAL_BUTTONS);
+    if (physicalButtonsEnabled) {
+        pinMode(PIN_BTN_OPEN, INPUT_PULLUP);
+        pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
+        pinMode(PIN_BTN_STOP, INPUT_PULLUP);
+        Serial.println("[BUTTONS] Physical push buttons ENABLED (GPIO14=Open, GPIO26=Close, GPIO22=Stop)");
+    } else {
+        Serial.println("[BUTTONS] Physical push buttons DISABLED (Prevents floating-pin noise during bench tests)");
+    }
     
     // Load last persistent gate position & control mode from ESP32 NVS flash
-    preferences.begin("sdas_fsm", false);
     int savedGate = loadGateStateFromNVS();
     currentStatus.targetGatePercent = savedGate;
     currentStatus.actualGatePercent = savedGate;
@@ -44,6 +46,17 @@ void SDASStateMachine::begin() {
     }
 }
 
+void SDASStateMachine::setButtonsEnabled(bool enabled) {
+    physicalButtonsEnabled = enabled;
+    preferences.putBool("btn_en", enabled);
+    if (enabled) {
+        pinMode(PIN_BTN_OPEN, INPUT_PULLUP);
+        pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
+        pinMode(PIN_BTN_STOP, INPUT_PULLUP);
+    }
+    Serial.printf("[BUTTONS] Physical buttons %s (Saved to Flash)\n", enabled ? "ENABLED" : "DISABLED");
+}
+
 int SDASStateMachine::loadGateStateFromNVS() {
     int saved = preferences.getInt("gate_pct", 0);
     if (saved < 0 || saved > GATE_PCT_MAX_LIMIT) saved = 0;
@@ -55,6 +68,12 @@ void SDASStateMachine::saveGateStateToNVS(int percent) {
 }
 
 void SDASStateMachine::printButtonStatus() const {
+    if (!physicalButtonsEnabled) {
+        Serial.println("\n[BUTTONS] Physical push buttons are currently DISABLED in software.");
+        Serial.println("Type 'BUTTONS ON' in Serial Monitor to enable hardware push buttons.\n");
+        return;
+    }
+    
     int readOpen  = digitalRead(PIN_BTN_OPEN);
     int readClose = digitalRead(PIN_BTN_CLOSE);
     int readStop  = digitalRead(PIN_BTN_STOP);
@@ -79,61 +98,76 @@ void SDASStateMachine::printButtonStatus() const {
 }
 
 void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
+    // If buttons are disabled or not installed, abort immediately
+    if (!physicalButtonsEnabled) return;
+    
     unsigned long now = millis();
     int readStop  = digitalRead(PIN_BTN_STOP);
-    int readOpen  = digitalRead(PIN_BTN_OPEN);
     int readClose = digitalRead(PIN_BTN_CLOSE);
+    int readOpen  = digitalRead(PIN_BTN_OPEN);
     
-    // 1. Emergency STOP Button (GPIO22) - Highest priority edge transition
-    if (lastBtnStopState == HIGH && readStop == LOW) {
-        if (now - lastBtnStopMs >= 80) { // 80ms debounce
-            lastBtnStopMs = now;
+    // Continuous Sustained-Hold Debounce (Requires continuous LOW for >= 250ms)
+    // Rejects all single-sample transient spikes, inductive noise, and floating pin glitches!
+    
+    // 1. Emergency STOP Button (GPIO 22)
+    if (readStop == LOW) {
+        if (btnStopHoldStartMs == 0) {
+            btnStopHoldStartMs = now;
+        } else if (!btnStopHandled && (now - btnStopHoldStartMs >= 250)) {
+            btnStopHandled = true;
             if (currentStatus.controlMode == MODE_EMERGENCY) {
                 releaseEmergencyStop();
-                if (actuators != nullptr) {
-                    actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
-                }
-                Serial.println("[BUTTON] 🟢 Physical STOP Button pressed: Released E-STOP! Resumed AUTO mode.");
+                if (actuators != nullptr) actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
+                Serial.println("[BUTTON] 🟢 Physical STOP held for 250ms: Released E-STOP! Resumed AUTO mode.");
             } else {
                 triggerEmergencyStop(actuators);
-                Serial.println("[BUTTON] 🔴 Physical STOP Button pressed: Triggered E-STOP! Sluice gate locked in position.");
+                Serial.println("[BUTTON] 🔴 Physical STOP held for 250ms: Triggered E-STOP! Sluice gate locked.");
             }
         }
+    } else {
+        btnStopHoldStartMs = 0;
+        btnStopHandled = false;
     }
-    lastBtnStopState = readStop;
     
     // If currently in hardware E-STOP, ignore other manual buttons
     if (currentStatus.controlMode == MODE_EMERGENCY) return;
     
-    // 2. Manual CLOSE Button (GPIO26) - Direct Immediate Gate Closure to 0%
-    if (lastBtnCloseState == HIGH && readClose == LOW) {
-        if (now - lastBtnCloseMs >= 80) {
-            lastBtnCloseMs = now;
-            int targetPct = GATE_PCT_CLOSED; // Directly close gate to 0%!
-            requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+    // 2. Manual CLOSE Button (GPIO 26) - Direct Gate Closure to 0%
+    if (readClose == LOW) {
+        if (btnCloseHoldStartMs == 0) {
+            btnCloseHoldStartMs = now;
+        } else if (!btnCloseHandled && (now - btnCloseHoldStartMs >= 250)) {
+            btnCloseHandled = true;
+            requestManualGatePercent(GATE_PCT_CLOSED, 0); // Indefinite manual lock
             if (actuators != nullptr) {
                 actuators->setTargetGatePercent(GATE_PCT_CLOSED);
                 actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
             }
-            Serial.printf("[BUTTON] 🔽 Physical CLOSE Button pressed (GPIO26) -> Sluice Gate CLOSING to 0%% (Watchdog: %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.println("[BUTTON] 🔽 Physical CLOSE held for 250ms -> Sluice Gate CLOSING to 0% (Manual Hold)");
         }
+    } else {
+        btnCloseHoldStartMs = 0;
+        btnCloseHandled = false;
     }
-    lastBtnCloseState = readClose;
     
-    // 3. Manual OPEN Button (GPIO14) - Stepped Gate Opening (0% -> 20% -> 50% Max)
-    if (lastBtnOpenState == HIGH && readOpen == LOW) {
-        if (now - lastBtnOpenMs >= 80) {
-            lastBtnOpenMs = now;
+    // 3. Manual OPEN Button (GPIO 14) - Stepped Gate Opening
+    if (readOpen == LOW) {
+        if (btnOpenHoldStartMs == 0) {
+            btnOpenHoldStartMs = now;
+        } else if (!btnOpenHandled && (now - btnOpenHoldStartMs >= 250)) {
+            btnOpenHandled = true;
             int targetPct = (currentStatus.targetGatePercent < GATE_PCT_CLEAR_AREA) ? GATE_PCT_CLEAR_AREA : GATE_PCT_DANGER;
-            requestManualGatePercent(targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            requestManualGatePercent(targetPct, 0); // Indefinite manual lock
             if (actuators != nullptr) {
                 actuators->setTargetGatePercent(targetPct);
                 actuators->setBuzzerPattern(BUZZER_SHORT_BEEP);
             }
-            Serial.printf("[BUTTON] 🔼 Physical OPEN Button pressed (GPIO14) -> Sluice Gate OPENING to %d%% (Watchdog: %d s)\n", targetPct, MANUAL_WATCHDOG_TIMEOUT_SEC);
+            Serial.printf("[BUTTON] 🔼 Physical OPEN held for 250ms -> Sluice Gate OPENING to %d%% (Manual Hold)\n", targetPct);
         }
+    } else {
+        btnOpenHoldStartMs = 0;
+        btnOpenHandled = false;
     }
-    lastBtnOpenState = readOpen;
 }
 
 void SDASStateMachine::triggerEmergencyStop(ActuatorManager* actuators) {
@@ -232,16 +266,10 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     AlertState previousAlert = currentStatus.alertState;
     AlertState nextAlert = previousAlert;
     
-    // SAFETY OVERRIDE: If water reaches Danger (>= 85%), override Manual mode unless operator recently commanded it
+    // In MANUAL mode, respect operator lock indefinitely. If reservoir hits Critical Danger (>= 85%),
+    // escalate alert state so alarms/LED warn the dam facility, without hijacking the operator's mode lock!
     if (currentStatus.controlMode == MODE_MANUAL && level >= THRESH_DANGER_PCT) {
-        unsigned long manualElapsedMs = (currentStatus.manualModeExpiryMs > now) ? 
-            ((MANUAL_WATCHDOG_TIMEOUT_SEC * 1000UL) - (currentStatus.manualModeExpiryMs - now)) : 999999UL;
-        
-        // Allow operator manual control for at least 15 seconds before autonomous flood protection kicks in
-        if (manualElapsedMs > 15000UL) {
-            revertToAuto();
-            Serial.println("[SAFETY] DANGER threshold (85%) reached! Overriding MANUAL mode to AUTO for flood protection.");
-        }
+        nextAlert = STATE_DANGER;
     }
     
     switch (previousAlert) {
