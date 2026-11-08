@@ -4,8 +4,7 @@ SDASStateMachine::SDASStateMachine()
     : previousFaultState(false),
       physicalButtonsEnabled(ENABLE_PHYSICAL_BUTTONS),
       btnStopHoldStartMs(0), btnCloseHoldStartMs(0), btnOpenHoldStartMs(0),
-      btnStopHandled(false), btnCloseHandled(false), btnOpenHandled(false),
-      btnStopArmed(false), btnCloseArmed(false), btnOpenArmed(false) {
+      btnStopHandled(false), btnCloseHandled(false), btnOpenHandled(false) {
     memset(&currentStatus, 0, sizeof(SystemStatus));
     currentStatus.alertState = STATE_NORMAL;
     currentStatus.controlMode = MODE_AUTO;
@@ -31,12 +30,6 @@ void SDASStateMachine::begin() {
     pinMode(PIN_BTN_CLOSE, INPUT_PULLUP);
     pinMode(PIN_BTN_STOP, INPUT_PULLUP);
     
-    // Safety Boot Arming: Only arm buttons that are cleanly HIGH on boot!
-    // Prevents rotated tactile switches or floating lines from hijacking mode on startup.
-    btnOpenArmed  = (digitalRead(PIN_BTN_OPEN) == HIGH);
-    btnCloseArmed = (digitalRead(PIN_BTN_CLOSE) == HIGH);
-    btnStopArmed  = (digitalRead(PIN_BTN_STOP) == HIGH);
-    
     if (physicalButtonsEnabled) {
         Serial.println("[BUTTONS] Physical push buttons ENABLED (GPIO14=Open, GPIO26=Close, GPIO22=Stop)");
         // Print live startup diagnostic
@@ -44,11 +37,11 @@ void SDASStateMachine::begin() {
         int rC = digitalRead(PIN_BTN_CLOSE);
         int rS = digitalRead(PIN_BTN_STOP);
         Serial.printf("[BUTTONS] Boot Check -> OPEN(14): %s | CLOSE(26): %s | STOP(22): %s\n",
-            rO == LOW ? "LOW (⚠️ PRESSED / SHORTED TO GND - DISARMED)" : "HIGH (IDLE / ARMED)",
-            rC == LOW ? "LOW (⚠️ PRESSED / SHORTED TO GND - DISARMED)" : "HIGH (IDLE / ARMED)",
-            rS == LOW ? "LOW (⚠️ PRESSED / SHORTED TO GND - DISARMED)" : "HIGH (IDLE / ARMED)");
+            rO == LOW ? "LOW (⚠️ PRESSED / SHORTED TO GND)" : "HIGH (IDLE / OK)",
+            rC == LOW ? "LOW (⚠️ PRESSED / SHORTED TO GND)" : "HIGH (IDLE / OK)",
+            rS == LOW ? "LOW (⚠️ PRESSED / SHORTED TO GND)" : "HIGH (IDLE / OK)");
         if (rO == LOW || rC == LOW || rS == LOW) {
-            Serial.println("[BUTTONS] ⚠️ Notice: Pressed buttons are DISARMED until physically released to prevent mode flipping!");
+            Serial.println("[BUTTONS] ⚠️ WARNING: If a button is LOW without touching it, rotate the tactile switch 90 degrees on your breadboard!");
         }
     } else {
         Serial.println("[BUTTONS] Physical push buttons DISABLED in software.");
@@ -131,18 +124,14 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
     int readClose = digitalRead(PIN_BTN_CLOSE);
     int readOpen  = digitalRead(PIN_BTN_OPEN);
     
-    // Continuous Sustained-Hold Debounce (80ms human tap filter + stuck switch suppression)
-    // Completely eliminates electrical contact bounce, inductive motor spikes, and floating line flipping!
+    // Continuous Sustained-Hold Debounce (40ms response - crisp, instant human tap)
+    // Rejects all single-sample transient spikes, inductive noise, and contact bounce!
     
     // 1. Emergency STOP Button (GPIO 22)
-    if (readStop == HIGH) {
-        btnStopArmed = true; // Pin released cleanly -> re-arm for next legitimate tap
-        btnStopHoldStartMs = 0;
-        btnStopHandled = false;
-    } else if (btnStopArmed) {
+    if (readStop == LOW) {
         if (btnStopHoldStartMs == 0) {
             btnStopHoldStartMs = now;
-        } else if (!btnStopHandled && (now - btnStopHoldStartMs >= 80)) {
+        } else if (!btnStopHandled && (now - btnStopHoldStartMs >= 40)) {
             btnStopHandled = true;
             if (currentStatus.controlMode == MODE_EMERGENCY) {
                 releaseEmergencyStop();
@@ -158,24 +147,20 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
                 }
                 Serial.println("[BUTTON] 🔴 Physical STOP pressed (GPIO22): Triggered E-STOP! Sluice gate locked in position.");
             }
-        } else if (now - btnStopHoldStartMs >= 3000) {
-            btnStopArmed = false; // Disarm stuck button
-            Serial.println("[BUTTON] ⚠️ STOP switch held/stuck LOW for > 3s! Disarming until released.");
         }
+    } else {
+        btnStopHoldStartMs = 0;
+        btnStopHandled = false;
     }
     
     // If currently in hardware E-STOP, ignore other manual buttons
     if (currentStatus.controlMode == MODE_EMERGENCY) return;
     
     // 2. Manual CLOSE Button (GPIO 26) - Direct Immediate Gate Closure to 0%
-    if (readClose == HIGH) {
-        btnCloseArmed = true; // Pin released cleanly -> re-arm
-        btnCloseHoldStartMs = 0;
-        btnCloseHandled = false;
-    } else if (btnCloseArmed) {
+    if (readClose == LOW) {
         if (btnCloseHoldStartMs == 0) {
             btnCloseHoldStartMs = now;
-        } else if (!btnCloseHandled && (now - btnCloseHoldStartMs >= 80)) {
+        } else if (!btnCloseHandled && (now - btnCloseHoldStartMs >= 40)) {
             btnCloseHandled = true;
             requestManualGatePercent(GATE_PCT_CLOSED, 0); // Indefinite manual lock
             if (actuators != nullptr) {
@@ -184,21 +169,17 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
                 actuators->setRGBAlert(currentStatus.alertState); // Green
             }
             Serial.println("[BUTTON] 🔽 Physical CLOSE pressed (GPIO26) -> Sluice Gate CLOSING to 0% (Manual Lock, Green LED)");
-        } else if (now - btnCloseHoldStartMs >= 3000) {
-            btnCloseArmed = false; // Disarm stuck button
-            Serial.println("[BUTTON] ⚠️ CLOSE switch held/stuck LOW for > 3s! Disarming until released.");
         }
+    } else {
+        btnCloseHoldStartMs = 0;
+        btnCloseHandled = false;
     }
     
     // 3. Manual OPEN Button (GPIO 14) - Stepped Gate Opening (0% -> 20% -> 50%)
-    if (readOpen == HIGH) {
-        btnOpenArmed = true; // Pin released cleanly -> re-arm
-        btnOpenHoldStartMs = 0;
-        btnOpenHandled = false;
-    } else if (btnOpenArmed) {
+    if (readOpen == LOW) {
         if (btnOpenHoldStartMs == 0) {
             btnOpenHoldStartMs = now;
-        } else if (!btnOpenHandled && (now - btnOpenHoldStartMs >= 80)) {
+        } else if (!btnOpenHandled && (now - btnOpenHoldStartMs >= 40)) {
             btnOpenHandled = true;
             int targetPct = (currentStatus.targetGatePercent < GATE_PCT_CLEAR_AREA) ? GATE_PCT_CLEAR_AREA : GATE_PCT_DANGER;
             requestManualGatePercent(targetPct, 0); // Indefinite manual lock
@@ -212,10 +193,10 @@ void SDASStateMachine::checkPhysicalButtons(ActuatorManager* actuators) {
                 }
             }
             Serial.printf("[BUTTON] 🔼 Physical OPEN pressed (GPIO14) -> Sluice Gate OPENING to %d%% (Manual Lock)\n", targetPct);
-        } else if (now - btnOpenHoldStartMs >= 3000) {
-            btnOpenArmed = false; // Disarm stuck button
-            Serial.println("[BUTTON] ⚠️ OPEN switch held/stuck LOW for > 3s! Disarming until released.");
         }
+    } else {
+        btnOpenHoldStartMs = 0;
+        btnOpenHandled = false;
     }
 }
 
