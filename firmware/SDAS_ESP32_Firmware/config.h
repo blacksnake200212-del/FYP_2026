@@ -8,11 +8,14 @@
 // ============================================================================
 
 // --- Ultrasonic Sensors (HC-SR04 Dual Ultrasonic Modules) ---
-// Note: Level converter HV=5V, LV=3.3V protects ESP32 GPIOs from 5V Echo
-#define PIN_TRIG_1           5     // HC-SR04 #1 Trigger (via Level Shifter Ch1)
-#define PIN_ECHO_1           19    // HC-SR04 #1 Echo    (via Level Shifter Ch2)
-#define PIN_TRIG_2           18    // HC-SR04 #2 Trigger (via Level Shifter Ch3)
-#define PIN_ECHO_2           21    // HC-SR04 #2 Echo    (via Level Shifter Ch4)
+// Golden Rule for 100% Reliable Dual-Sensor Operation:
+// 1. TRIG: Connect DIRECTLY from ESP32 to HC-SR04 (ESP32 3.3V logic cleanly triggers 5V HC-SR04 with 0ns delay)
+// 2. ECHO: MUST pass through Level Shifter (5V HC-SR04 Echo -> HV -> LV -> 3.3V ESP32 GPIO)
+// 3. Level Shifter Power: HV must connect to +5V, LV must connect to ESP32 3V3, GND to Common GND!
+#define PIN_TRIG_1           5     // HC-SR04 #1 Trigger (Direct wire from ESP32 GPIO5)
+#define PIN_ECHO_1           19    // HC-SR04 #1 Echo    (via Level Shifter HV1 -> LV1 -> GPIO19)
+#define PIN_TRIG_2           18    // HC-SR04 #2 Trigger (Direct wire from ESP32 GPIO18)
+#define PIN_ECHO_2           21    // HC-SR04 #2 Echo    (via Level Shifter HV2 -> LV2 -> GPIO21)
 
 // Active Ultrasonic Sensor Count:
 // Set to 2: Dual HC-SR04 sensors active with cross-sensor voting & plausibility check.

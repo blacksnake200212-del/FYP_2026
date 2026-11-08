@@ -53,13 +53,16 @@ private:
     bool         previousFaultState;
     bool         physicalButtonsEnabled;
     
-    // Button sustained-hold debouncing state (250ms continuous hold required)
+    // Button sustained-hold debouncing state (with stuck-button detection & boot-arm safety)
     unsigned long btnStopHoldStartMs;
     unsigned long btnCloseHoldStartMs;
     unsigned long btnOpenHoldStartMs;
     bool btnStopHandled;
     bool btnCloseHandled;
     bool btnOpenHandled;
+    bool btnStopArmed;
+    bool btnCloseArmed;
+    bool btnOpenArmed;
     
     void saveGateStateToNVS(int percent);
     int  loadGateStateFromNVS();

@@ -22,6 +22,7 @@ const state = {
   freeboardM: DAM_TOTAL_HEIGHT_M,
   gatePercent: 0,
   controlMode: 'AUTO',
+  commandGraceUntil: 0,
   alertState: 'NORMAL',
   alertCode: 0,
   sensor1Dist: -1.0,
@@ -121,7 +122,13 @@ function processTelemetryRow(row) {
   state.gatePercent = row.gate_percent !== undefined ? parseInt(row.gate_percent, 10) : 0;
   
   const modeMap = ['AUTO', 'MANUAL', 'EMERGENCY_STOP'];
-  state.controlMode = row.control_mode !== undefined ? (modeMap[row.control_mode] || 'AUTO') : 'AUTO';
+  const incomingMode = row.control_mode !== undefined ? (modeMap[row.control_mode] || 'AUTO') : 'AUTO';
+  const now = Date.now();
+  // Protect against telemetry race conditions overriding manual commands (5s lock)
+  if (!state.commandGraceUntil || now > state.commandGraceUntil || incomingMode === state.controlMode) {
+    state.controlMode = incomingMode;
+    state.commandGraceUntil = 0;
+  }
 
   state.alertCode = row.alert_state !== undefined ? parseInt(row.alert_state, 10) : 0;
   const stateMap = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
@@ -1068,7 +1075,8 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
   const dbLabel = supabaseSuccess ? '☁️ Supabase Audited (Executing via Cloud Sync)' : '⚠️ DB Sync Pending';
   showCommandFeedback(`[${timeStr}] Command '${cmdType}' (${clampedPct}%) &bull; ${dbLabel} &bull; ${mqttLabel}`, 'success');
 
-  // Optimistically update local control mode only for mode-altering commands
+  // Optimistically update local control mode and lock against stale telemetry (6s lock)
+  state.commandGraceUntil = Date.now() + 6000;
   if (cmdType === 'AUTO') {
     state.controlMode = 'AUTO';
   } else if (cmdType === 'ESTOP') {
