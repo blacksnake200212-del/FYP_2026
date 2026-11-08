@@ -9,7 +9,7 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
-def generate_sdas_dataset(num_hours: int = 168, output_path: str = "dataset_tank_simulation.csv"):
+def generate_sdas_dataset(num_hours: int = 168, output_path: str = "backend_ml/data/dataset_tank_simulation.csv"):
     """
     Generates 7 days (168 hours) of 1-minute sampled telemetry (10,080 samples).
     """
@@ -137,4 +137,4 @@ def generate_sdas_dataset(num_hours: int = 168, output_path: str = "dataset_tank
     return df
 
 if __name__ == "__main__":
-    generate_sdas_dataset(num_hours=168, output_path="dataset_tank_simulation.csv")
+    generate_sdas_dataset(num_hours=168, output_path="backend_ml/data/dataset_tank_simulation.csv")

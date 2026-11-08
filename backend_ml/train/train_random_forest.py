@@ -11,7 +11,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, confusion_matrix
 
-def train_rf_classifier(data_path: str = "dataset_tank_simulation.csv", model_dir: str = "backend_ml/saved_models"):
+def train_rf_classifier(data_path: str = "backend_ml/data/dataset_tank_simulation.csv", model_dir: str = "backend_ml/saved_models"):
     print("[TRAIN-RF] Loading dataset from:", data_path)
     df = pd.read_csv(data_path)
     

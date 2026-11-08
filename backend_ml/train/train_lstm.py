@@ -12,7 +12,7 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
-def train_forecasting_model(data_path: str = "dataset_tank_simulation.csv", model_dir: str = "backend_ml/saved_models"):
+def train_forecasting_model(data_path: str = "backend_ml/data/dataset_tank_simulation.csv", model_dir: str = "backend_ml/saved_models"):
     print("[TRAIN-FORECAST] Loading dataset from:", data_path)
     df = pd.read_csv(data_path)
     

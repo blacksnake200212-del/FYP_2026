@@ -35,16 +35,25 @@ FYP_2026/
 │   ├── POWER_AND_BATTERY_DESIGN.md # 12V 5A power calculations & 3S Li-ion UPS design
 │   └── CALIBRATION_AND_TESTING_GUIDE.md # 7-stage verification & 100-cycle stress test
 ├── proposal_report/                 # Academic Proposals & Blueprints
-│   ├── SDAS_Corrected_Proposal_V2.md # Fully updated academic proposal (IEEE format)
+│   ├── SDAS_Project_Proposal_Report.pdf # Official 16-section compiled PDF proposal (IEEE style)
+│   ├── SDAS_Project_Proposal_Report.html # Interactive report with A4 print stylesheet
+│   ├── SDAS_Project_Proposal_Report.md  # Comprehensive GitHub-flavored markdown source
 │   └── SDAS_System_Architecture_Blueprint.md # 3 decoupled paths, state diagrams, dataflow
+├── web_dashboard/                   # Web Telemetry & Actuator Override Console
+│   ├── index.html                   # Live monitoring dashboard with SVG gauges
+│   ├── app.js                       # Real-time WebSocket, MQTT & Supabase data sync
+│   ├── styles.css                   # Responsive dark-theme industrial SCADA CSS
+│   └── server.js                    # Node.js production web server
 ├── backend_ml/                      # Machine Learning Inference Server (FastAPI)
 │   ├── app/
 │   │   ├── main.py                  # FastAPI REST endpoints (/forecast, /anomaly-check)
 │   │   ├── ml_service.py            # Neural forecaster, autoencoder & RF inference
 │   │   ├── models.py                # Pydantic schemas
 │   │   └── weather_service.py       # Open-Meteo live precipitation client
+│   ├── data/
+│   │   └── dataset_tank_simulation.csv # 7-day hydrological simulation dataset
 │   ├── train/
-│   │   ├── generate_synthetic_data.py # 7-day hydrological tank simulation generator
+│   │   ├── generate_synthetic_data.py # Hydrological tank simulation generator
 │   │   ├── train_lstm.py            # 1-hour ahead neural sequence forecaster
 │   │   ├── train_autoencoder.py     # Deep autoencoder sensor anomaly detector
 │   │   └── train_random_forest.py   # Multi-class hazard tier classifier
@@ -53,13 +62,22 @@ FYP_2026/
 │   │   └── test_api.py              # Full automated test suite (5 passing tests)
 │   └── requirements.txt
 ├── database/                        # Supabase PostgreSQL Database Architecture
-│   ├── schema.sql                   # Tables, RLS security policies, and public view
+│   ├── schema.sql                   # Tables, RLS security policies, views, triggers
 │   ├── seed_data.sql                # Calibrated baseline telemetry and contact seeds
 │   └── README.md
-└── mobile_apps/                     # Mobile Applications (React Native & Expo)
-    ├── operator_app/                # Authenticated console (MQTT commands, manual override)
-    ├── public_app/                  # Zero-login portal (4-tier color alerts, emergency dials)
-    └── README.md
+├── mobile_apps/                     # Mobile Applications (React Native & Expo)
+│   ├── operator_app/                # Authenticated console (MQTT commands, manual override)
+│   ├── public_app/                  # Zero-login portal (4-tier color alerts, emergency dials)
+│   └── README.md
+├── google_sheets/                   # Secondary Real-time Telemetry Mirroring
+│   ├── SDAS_GoogleSheets_Logger.gs  # Google Apps Script HTTP POST webhook listener
+│   └── README.md
+├── wokwi_simulation/                # Virtual Hardware Simulation (Wokwi IoT)
+│   ├── diagram.json                 # Interactive breadboard wiring layout
+│   └── sketch/                      # Firmware mirror for browser-based testing
+└── tools/                           # Field Utilities & Diagram Generators
+    ├── sync_readings_to_sheets.js   # Automated telemetry streamer
+    └── diagram_generators/          # Circuit schematic generation utilities
 ```
 
 ---
