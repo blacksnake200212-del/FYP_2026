@@ -2,7 +2,9 @@
 
 > **Smart Dam Alert System (SDAS) - Tabbowa Dam Station #01**  
 > Dual React Native (Expo) Architecture with Shared Supabase Backend  
-> Author: SDAS Engineering Team | Last Updated: October 2026
+> Author: SDAS Engineering Team | Last Updated: November 2026
+>
+> **Note:** `database/schema.sql` is the source of truth for the data model. The SQL below is a summary and omits some columns (e.g. `schema_version`, `sensors_agreed`, `app_version`).
 
 ---
 
@@ -33,9 +35,9 @@ The state is represented simultaneously with **Color + Icon + Text** to guarante
 | Stage | Color | Hex Code | Icon | Description | Safety Action |
 |---|---|---|---|---|---|
 | **NORMAL** | Emerald Green | `#10B981` | 🟢 / 🛡️ | Safe operating levels (< 60%) | Normal routine monitoring |
-| **PRE-WARNING** | Amber Yellow | `#EAB308` | 🟡 / ⚠️ | Level rising towards 60% | Gate closed; prepare downstream |
-| **CLEAR AREA** | Bright Orange | `#F97316` | 🟠 / 📢 | Water reaches 80% (Gate 20-30%) | Evacuate spillway & low crossings |
-| **DANGER** | Crimson Red | `#EF4444` | 🔴 / 🚨 | Water breaches 85% (Gate 50%) | Immediate evacuation to high ground |
+| **PRE-WARNING** | Amber Yellow | `#EAB308` | 🟡 / ⚠️ | Level between 60% and 80% | Gate closed; prepare downstream |
+| **CLEAR AREA** | Bright Orange | `#F97316` | 🟠 / 📢 | Level between 80% and 85% (Gate 20%) | Evacuate spillway & low crossings |
+| **DANGER** | Crimson Red | `#EF4444` | 🔴 / 🚨 | Level at or above 85% (Gate 50%) | Immediate evacuation to high ground |
 
 ### 1.2 Staleness Rule (2-Minute Threshold)
 If `NOW() - updated_at > 120 seconds`:
@@ -152,7 +154,7 @@ CREATE TABLE public.alerts (
 -- 4. Operator Commands
 CREATE TABLE public.commands (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    type VARCHAR(30) NOT NULL CHECK (type IN ('OPEN_20', 'OPEN_50', 'CLOSE', 'ESTOP', 'AUTO', 'PREWARN_SMS')),
+    type VARCHAR(30) NOT NULL CHECK (type IN ('OPEN_20', 'OPEN_50', 'CLOSE', 'ESTOP', 'AUTO', 'MANUAL', 'PREWARN_SMS', 'SENSOR_2', 'RGB')),
     params JSONB DEFAULT '{}'::jsonb,
     issued_by UUID REFERENCES auth.users(id),
     status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ACKNOWLEDGED', 'EXECUTED', 'EXPIRED', 'REJECTED')),

@@ -259,15 +259,18 @@ export default function ContactsScreen({ onBack, operatorUser }) {
     setNewPhone('');
     setShowAddModal(false);
 
+    // The ESP32 downloads opted-in numbers from this table every 10 minutes (get_sms_recipients,
+    // needs the device key) and falls back to its config.h numbers if it cannot.
     if (dbSuccess) {
       Alert.alert(
         '✓ Contact Saved to Database',
-        `"${trimmedName}" (${trimmedPhone}) has been saved to the SDAS Emergency Contacts database.\n\nReady for automated cellular SMS and broadcast alerts.`
+        `"${trimmedName}" (${trimmedPhone}) has been saved to the SDAS Emergency Contacts database.\n\n` +
+          'The dam node refreshes its SMS list every 10 minutes, so automatic SIM800L alerts will include this number after the next refresh (first 10 contacts, once the device key is set up).'
       );
     } else {
       Alert.alert(
-        '✓ Contact Saved Locally',
-        `"${trimmedName}" (${trimmedPhone}) has been added to your local directory and will be included in all SMS dispatches.`
+        'Saved on This Phone Only',
+        `"${trimmedName}" (${trimmedPhone}) could not be saved to the database and is stored only on this phone.`
       );
     }
   };
@@ -284,10 +287,14 @@ export default function ContactsScreen({ onBack, operatorUser }) {
           setContacts(updated);
           await saveContactsLocally(updated);
 
+          // FIX: database errors were ignored, so a contact could reappear on the next refresh
           try {
-            await supabase.from('contacts').delete().eq('id', id);
+            const { error } = await supabase.from('contacts').delete().eq('id', id);
+            if (error) {
+              Alert.alert('Not Deleted on Server', `"${name}" was removed from this phone but the database delete failed: ${error.message}`);
+            }
           } catch (e) {
-            // Local delete succeeded
+            Alert.alert('Not Deleted on Server', `"${name}" was removed from this phone but the network request failed.`);
           }
         }
       }
@@ -349,12 +356,23 @@ export default function ContactsScreen({ onBack, operatorUser }) {
       if (!smsErr) jobQueued = true;
 
       // 2. Insert into public.alerts
+      // FIX: every operator message was published on the PUBLIC app's alert timeline as
+      // "CRITICAL DANGER" at a made-up 68% level. Use the real latest stage and level instead.
+      const { data: latest } = await supabase
+        .from('readings')
+        .select('alert_state, level_pct, gate_percent')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const stageNames = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+      const realStage = latest && latest.length > 0 ? stageNames[latest[0].alert_state] : null;
       await supabase.from('alerts').insert([
         {
-          stage: 'DANGER',
+          // An operator broadcast is at least a pre-warning; never lower than the real stage
+          stage: realStage && realStage !== 'NORMAL' && realStage !== 'MAINTENANCE' ? realStage : 'PRE_WARNING',
           source: 'MANUAL',
           message: msg,
-          water_level_pct: 68.0
+          water_level_pct: latest && latest.length > 0 ? latest[0].level_pct : null,
+          gate_percent: latest && latest.length > 0 ? latest[0].gate_percent : null
         }
       ]);
 
@@ -382,10 +400,12 @@ export default function ContactsScreen({ onBack, operatorUser }) {
         }
       ]);
 
+      // FIX: nothing reads sms_jobs, so no SIM800L SMS is sent from here. Say so honestly and
+      // point the operator to the native SMS composer, which really sends the message.
       Alert.alert(
-        '✓ Emergency Alert Dispatched',
-        `Dispatched to ${targetContacts.length} saved demo contacts in the database!\n\n` +
-          `• GSM SIM800L Job: ${jobQueued ? 'QUEUED in Database' : 'Logged Locally'}\n` +
+        'Alert Logged - Not Yet Sent',
+        `Your message was ${jobQueued ? 'logged in the database' : 'NOT logged (database error)'} and posted to the alert timeline.\n\n` +
+          'The ESP32 does not send custom messages. Tap "Open Native SMS" to send it from this phone.\n\n' +
           `• Target Recipients: ${targetContacts.map((c) => c.name).join(', ')}\n` +
           `• Phone Numbers: ${targetContacts.map((c) => c.phone).join(', ')}`,
         [
@@ -398,8 +418,8 @@ export default function ContactsScreen({ onBack, operatorUser }) {
       );
     } catch (err) {
       Alert.alert(
-        '✓ Alert Dispatched',
-        `Broadcast sent to ${targetContacts.length} emergency contacts.`
+        'Alert NOT Sent',
+        `Network or database error: ${err.message || 'unknown'}. Use "Open Native SMS" or call the contacts directly.`
       );
     } finally {
       setIsSendingAlert(false);

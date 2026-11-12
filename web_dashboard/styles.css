@@ -674,6 +674,19 @@ footer {
   .col-gauge, .col-tank, .col-actuator {
     grid-column: span 12;
   }
+  /* FIX: card headers and the 4-tile gate summary did not fit at phone width */
+  .card-header, .subpanel-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .gate-live-summary,
+  .broadcast-actions-box,
+  .mode-select-buttons {
+    grid-template-columns: 1fr 1fr;
+  }
+  .btn-estop {
+    grid-column: auto;
+  }
   header {
     padding: 10px 16px;
   }
@@ -700,6 +713,7 @@ footer {
 .operator-auth-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* FIX: badges and buttons overflowed the card on phones */
   gap: 12px;
 }
 
@@ -1455,6 +1469,9 @@ footer {
 .contact-role-pill.police { background: rgba(59, 130, 246, 0.15); color: #60A5FA; }
 .contact-role-pill.fire_rescue { background: rgba(239, 68, 68, 0.15); color: #F87171; }
 .contact-role-pill.community { background: rgba(16, 185, 129, 0.15); color: #34D399; }
+/* FIX: roles used by the seeded contacts had no colour rule */
+.contact-role-pill.district_secretariat { background: rgba(168, 85, 247, 0.15); color: #C084FC; }
+.contact-role-pill.dmc_officer { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
 
 .contact-status-active {
   color: #34D399;

@@ -88,6 +88,18 @@
 #define SENSOR_MIN_VALID_DIST_CM 2.0f  // HC-SR04 blind zone limit (closer than 2cm clamped to 100% / DANGER)
 #define SENSOR_MAX_VALID_DIST_CM 400.0f// Greater than 400cm indicates echo loss / out-of-range
 
+// FIX: fault handling tunables
+#define SENSOR_FAULT_CONFIRM_CYCLES 3          // 3 failed 2-second cycles in a row = SENSOR FAULT
+#define DHT_STALE_MS             30000UL       // DHT22 reading older than 30 s = invalid (sent as null)
+#define FAULT_SMS_MIN_INTERVAL_MS (30UL * 60UL * 1000UL) // at most one fault SMS per 30 min
+
+// FIX: SMS recipients are downloaded from the Supabase "contacts" table (opted-in numbers),
+// so numbers added in the dashboard / operator app really receive SIM800L alerts.
+// Needs SDAS_DEVICE_KEY in secrets.h and the same key registered in the database
+// (see database/schema.sql section 21). Without it, the CONTACT_* numbers below are used.
+#define MAX_SMS_CONTACTS         10           // max numbers per broadcast (SMS queue holds 16)
+#define CONTACT_SYNC_INTERVAL_MS (10UL * 60UL * 1000UL) // refresh every 10 minutes
+
 // SMS Queue Capacity
 #define SMS_QUEUE_SIZE           16    // Expanded buffer for staged multi-recipient alert broadcasts
 
@@ -118,20 +130,23 @@
 #define GATE_DEG_MAX_LIMIT       90    // 50% of 180 degrees
 
 // Manual Mode Safety Watchdog Timeout (Seconds)
-// Automatically reverts to AUTO if operator does not send commands
+// FIX: this value existed but was never used, so a REMOTE manual command (app / dashboard)
+// held the gate forever and AUTO flood control stayed off if the operator walked away.
+// Remote MANUAL / OPEN / CLOSE commands and a MANUAL mode restored after a reboot now revert
+// to AUTO after this time. Physical buttons and Serial commands (someone is on site) stay
+// indefinite. Set to 0 to restore the old "hold forever" behaviour.
 #define MANUAL_WATCHDOG_TIMEOUT_SEC 300
 
 // ============================================================================
 // NETWORK & CLOUD CREDENTIALS
 // Real credentials are kept in "secrets.h" (ignored by git).
 // ============================================================================
+// FIX: the Wi-Fi name and password used to be written here as a fallback, which put them in
+// the public GitHub repo. Copy secrets.example.h to secrets.h and fill it in instead.
 #if __has_include("secrets.h")
   #include "secrets.h"
 #else
-  #define WIFI_SSID                "ADRIAN iPhone"
-  #define WIFI_PASSWORD            "1122335566"
-  #define SUPABASE_URL             "https://gpxakbveqnzqqpxvtkgf.supabase.co"
-  #define SUPABASE_ANON_KEY        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdweGFrYnZlcW56cXFweHZ0a2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4MzAwNjcsImV4cCI6MjEwNzQwNjA2N30.dv_53Z7HzHIl8e-5BhVBx1OYYbE2L5GhyZZkbzTvEgU"
+  #error "secrets.h not found: copy secrets.example.h to secrets.h and enter your Wi-Fi and Supabase details."
 #endif
 
 // MQTT Broker Configuration (EMQX / HiveMQ TLS & Auth capable)
@@ -147,6 +162,18 @@
 #ifndef MQTT_PASS
   #define MQTT_PASS                ""    // Optional authenticated password
 #endif
+// SECURITY: broker.emqx.io is a PUBLIC broker with no password. Anyone who knows the topic
+// below (it is in the public repo) can publish "OPEN_50" or "ESTOP" and this node will obey.
+// Set to 0 to accept commands only from Supabase (slower, ~5 s, but needs the database key).
+// For a real deployment use a private broker with MQTT_USER / MQTT_PASS and TLS.
+// FIX: default is now 0 (safe). Commands still arrive through Supabase within ~5 s.
+#ifndef MQTT_ACCEPT_COMMANDS
+  #define MQTT_ACCEPT_COMMANDS     0
+#endif
+// Ignore the Supabase copy of a command already received over MQTT within this window
+// (the web dashboard sends every command both ways).
+#define CMD_DEDUP_WINDOW_MS      15000UL
+
 #define MQTT_TOPIC_TELEMETRY     "dam/puttalam/telemetry"
 #define MQTT_TOPIC_COMMANDS      "dam/puttalam/commands"
 #define MQTT_TOPIC_ALERTS        "dam/puttalam/alerts"

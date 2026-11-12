@@ -16,15 +16,20 @@ import { supabase } from './supabaseClient';
 export default function ReportFloodScreen({ t, userLocation, onReportSubmitted, onBack }) {
   const [description, setDescription] = useState('');
   const [photoUrl, setPhotoUrl] = useState(null);
-  const [locationName, setLocationName] = useState(userLocation?.city ? `${userLocation.city}, ${userLocation.district || 'Trincomalee'}` : 'Kantalai, Trincomalee');
+  // FIX: the location was a fake toggle between two fixed place names. The citizen now types
+  // where the flooding is (this app has no GPS permission yet), pre-filled from userLocation if given.
+  const [locationName, setLocationName] = useState(userLocation?.city ? `${userLocation.city}, ${userLocation.district || 'Trincomalee'}` : '');
+  const [isEditingLocation, setIsEditingLocation] = useState(!userLocation?.city);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPhotoSelected, setIsPhotoSelected] = useState(false);
 
   // Sample photo toggle for demonstration
   const handleTogglePhoto = () => {
+    // FIX: this attached a STOCK internet photo of a different flood to the citizen's report,
+    // which operators would treat as evidence. There is no camera/photo picker in this app yet
+    // (expo-image-picker is not installed), so no photo is attached.
     if (!isPhotoSelected) {
-      setIsPhotoSelected(true);
-      setPhotoUrl('https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500');
+      Alert.alert('Photo Upload Not Available', 'Photo upload is not available in this version. Please describe the situation in the text box.');
     } else {
       setIsPhotoSelected(false);
       setPhotoUrl(null);
@@ -36,11 +41,19 @@ export default function ReportFloodScreen({ t, userLocation, onReportSubmitted, 
       Alert.alert(t.reportFlood, 'Please enter a brief description of the flood situation.');
       return;
     }
+    if (!locationName.trim()) {
+      Alert.alert(t.location, 'Please type the village, road or landmark where you see the flooding.');
+      setIsEditingLocation(true);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      const lat = userLocation?.latitude || 8.5312;
-      const lon = userLocation?.longitude || 80.9985;
+      // Database requires coordinates; without GPS the dam location is used and the report
+      // says so, instead of looking like a real citizen location.
+      const hasGps = Boolean(userLocation?.latitude && userLocation?.longitude);
+      const lat = hasGps ? userLocation.latitude : 8.5312;
+      const lon = hasGps ? userLocation.longitude : 80.9985;
 
       const { data, error } = await supabase
         .from('flood_reports')
@@ -48,20 +61,23 @@ export default function ReportFloodScreen({ t, userLocation, onReportSubmitted, 
           {
             dam_id: 'KANTALAI-01',
             reporter_name: 'Citizen (Public App)',
-            location_name: locationName,
+            location_name: hasGps ? locationName.trim() : `${locationName.trim()} (typed by citizen, no GPS)`,
             latitude: lat,
             longitude: lon,
-            distance_km: 2.4,
+            distance_km: userLocation?.distanceKm ?? null,   // FIX: was always 2.4 km
             description: description.trim(),
-            photo_url: photoUrl,
-            water_depth_est: '0.5 m',
+            photo_url: null,          // FIX: no real photo upload exists (see above)
+            water_depth_est: null,    // FIX: was always "0.5 m" whatever the citizen saw
             status: 'PENDING'
           }
         ])
         .select();
 
+      // FIX: a failed insert still said "Report sent"; the operator never received it.
       if (error) {
         console.warn('Supabase Insert Report Error:', error.message);
+        Alert.alert('Report NOT Sent', 'Your report could not be sent. Check your internet connection and try again. In an emergency call 117.');
+        return;
       }
 
       Alert.alert(
@@ -76,8 +92,7 @@ export default function ReportFloodScreen({ t, userLocation, onReportSubmitted, 
       );
     } catch (err) {
       console.warn('Submit error:', err.message);
-      Alert.alert('Report Sent', t.reportSuccess);
-      if (onReportSubmitted) onReportSubmitted();
+      Alert.alert('Report NOT Sent', 'Your report could not be sent. Check your internet connection and try again. In an emergency call 117.');
     } finally {
       setIsSubmitting(false);
     }
@@ -124,17 +139,31 @@ export default function ReportFloodScreen({ t, userLocation, onReportSubmitted, 
           <Text style={styles.locationPinIcon}>📍</Text>
           <View style={styles.locationTexts}>
             <Text style={styles.locationLabel}>{t.location}</Text>
-            <Text style={styles.locationVal}>{locationName}</Text>
+            {isEditingLocation ? (
+              <TextInput
+                style={[styles.locationVal, styles.locationInput]}
+                value={locationName}
+                onChangeText={setLocationName}
+                placeholder="Village, road or landmark"
+                placeholderTextColor="#94A3B8"
+                maxLength={120}
+                autoFocus={false}
+                returnKeyType="done"
+                onSubmitEditing={() => { if (locationName.trim()) setIsEditingLocation(false); }}
+              />
+            ) : (
+              <Text style={styles.locationVal}>{locationName}</Text>
+            )}
           </View>
         </View>
         <TouchableOpacity
           style={styles.changeBtn}
           onPress={() => {
-            const newLoc = locationName.includes('Kantalai') ? 'Mahaweli Road, Kantalai' : 'Kantalai, Trincomalee';
-            setLocationName(newLoc);
+            if (isEditingLocation && !locationName.trim()) return;
+            setIsEditingLocation(!isEditingLocation);
           }}
         >
-          <Text style={styles.changeBtnText}>{t.changeLocation}</Text>
+          <Text style={styles.changeBtnText}>{isEditingLocation ? 'OK' : t.changeLocation}</Text>
         </TouchableOpacity>
       </View>
 
@@ -244,6 +273,7 @@ const styles = StyleSheet.create({
   locationTexts: { flex: 1 },
   locationLabel: { fontSize: 11, color: '#64748B', fontWeight: '600' },
   locationVal: { fontSize: 14, color: '#0F172A', fontWeight: '700', marginTop: 1 },
+  locationInput: { borderBottomWidth: 1, borderBottomColor: '#CBD5E1', paddingVertical: 2, paddingHorizontal: 0 },
   changeBtn: { paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#EFF6FF', borderRadius: 8 },
   changeBtnText: { color: '#2563EB', fontSize: 12, fontWeight: '700' },
 

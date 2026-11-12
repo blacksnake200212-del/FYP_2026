@@ -26,13 +26,23 @@ VALUES
 (NOW() - INTERVAL '1 minute', 'DANGER', 'AUTO', 'Water breached 85% critical threshold. Automated 50% gate release and local siren active.', 85.5, 50);
 
 -- 4. Insert emergency contacts (Configured with User Testing Numbers)
+-- FIX: schema.sql already inserts these same 4 numbers (as plain '+94...'). Inserting them
+-- again here created duplicate rows, so each phone could receive every alert twice.
+-- Only insert a number if it is not stored yet in either format.
+-- NOTE: 'enc_aes256_' is only a text prefix, NOT encryption. See FIXES.md.
 INSERT INTO public.contacts
 (name, phone_encrypted, role, recipient_group, tier, opted_in)
-VALUES
-('Testing Number 1 (Adrian)', 'enc_aes256_+94740099235', 'OPERATOR', 'ENGINEERS', 1, true),
-('Testing Number 2 (Disaster Unit)', 'enc_aes256_+94778364925', 'OPERATOR', 'ENGINEERS', 1, true),
-('Testing Number 3 (Aadhil)', 'enc_aes256_+94712833936', 'OPERATOR', 'ENGINEERS', 1, true),
-('Testing Number 4 (Dilshan / DMC)', 'enc_aes256_+94781099235', 'DMC_OFFICER', 'DMC', 2, true);
+SELECT v.name, v.phone, v.role, v.grp, v.tier, true
+FROM (VALUES
+    ('Testing Number 1 (Adrian)', 'enc_aes256_+94740099235', 'OPERATOR', 'ENGINEERS', 1),
+    ('Testing Number 2 (Disaster Unit)', 'enc_aes256_+94778364925', 'OPERATOR', 'ENGINEERS', 1),
+    ('Testing Number 3 (Aadhil)', 'enc_aes256_+94712833936', 'OPERATOR', 'ENGINEERS', 1),
+    ('Testing Number 4 (Dilshan / DMC)', 'enc_aes256_+94781099235', 'DMC_OFFICER', 'DMC', 2)
+) AS v(name, phone, role, grp, tier)
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.contacts c
+    WHERE c.phone_encrypted IN (v.phone, replace(v.phone, 'enc_aes256_', ''))
+);
 
 -- 5. Insert App Config version metadata (OTA & Store Update Control)
 INSERT INTO public.app_config

@@ -24,14 +24,14 @@ void ActuatorManager::begin() {
     #else
     isCommonAnode = prefs.getBool("rgb_ca", RGB_IS_COMMON_ANODE);
     #endif
-    isMuted = prefs.getBool("buzzer_mute", false);
+    // FIX: MUTE used to be saved to flash, so a buzzer muted during bench testing stayed
+    // silent after every reboot, including during a real DANGER. Mute now lasts until reboot.
+    isMuted = false;
+    prefs.remove("buzzer_mute"); // clear any mute saved by older firmware
     prefs.end();
     
     Serial.printf("[RGB] LED Polarity configured as: %s\n",
         isCommonAnode ? "COMMON ANODE (Active LOW, 3.3V to Anode)" : "COMMON CATHODE (Active HIGH, GND to Cathode - HW-478 Standard)");
-    if (isMuted) {
-        Serial.println("[BUZZER] 🔇 Buzzer is currently MUTED in Flash (Send 'UNMUTE' in Serial Monitor to enable audio).");
-    }
     
     // Hardware Startup Self-Test: Red -> Green -> Blue -> Off
     Serial.println("[RGB] Running LED Hardware Self-Test: RED -> GREEN -> BLUE -> OFF");
@@ -283,17 +283,12 @@ void ActuatorManager::updateBuzzer(unsigned long millisNow) {
 
 void ActuatorManager::setMuted(bool muted) {
     isMuted = muted;
-    Preferences prefs;
-    prefs.begin("sdas_act", false);
-    prefs.putBool("buzzer_mute", isMuted);
-    prefs.end();
-    
     if (isMuted) {
         digitalWrite(PIN_BUZZER, LOW);
         buzzerState = false;
-        Serial.println("[BUZZER] 🔇 Buzzer MUTED (Saved to Flash). Siren silenced for quiet testing.");
+        Serial.println("[BUZZER] 🔇 Buzzer MUTED until next reboot. Siren silenced for quiet testing.");
     } else {
-        Serial.println("[BUZZER] 🔊 Buzzer UNMUTED (Saved to Flash). Normal alarm operation restored.");
+        Serial.println("[BUZZER] 🔊 Buzzer UNMUTED. Normal alarm operation restored.");
     }
 }
 

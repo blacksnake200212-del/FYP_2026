@@ -1,18 +1,66 @@
 import os
+import subprocess
 from PIL import Image, ImageDraw, ImageFont
 
+# FIX: paths are relative to the project root (the folder that contains hardware_docs/),
+# no matter which folder you run the script from.
+
+def _project_root():
+    here = os.path.dirname(os.path.abspath(__file__))
+    while True:
+        if os.path.isdir(os.path.join(here, 'hardware_docs')):
+            return here
+        parent = os.path.dirname(here)
+        if parent == here:
+            return os.getcwd()
+        here = parent
+
+
+PROJECT_ROOT = _project_root()
+IMG_REL = os.path.join('hardware_docs', 'sdas_corrected_circuit_schematic.jpg')
+
+
+def load_font(candidates, size):
+    # FIX: Windows-only font paths crashed the script (OSError) on macOS/Linux
+    for path in candidates:
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
+REG = ['C:/Windows/Fonts/arial.ttf', '/System/Library/Fonts/Supplemental/Arial.ttf',
+       '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
+BOLD = ['C:/Windows/Fonts/arialbd.ttf', '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf']
+
+
+def restore_original():
+    """The pixel coordinates below assume the ORIGINAL committed image. The old script ran
+    os.system('git checkout ...') blindly: it ignored failures (then drew over an already-edited
+    image) and silently threw away any uncommitted edits to the jpg. Now we check the result."""
+    try:
+        subprocess.run(['git', 'checkout', '--', IMG_REL], cwd=PROJECT_ROOT, check=True,
+                       capture_output=True, text=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print("WARNING: could not restore the original schematic from git:", getattr(e, 'stderr', e))
+        return False
+
+
 def fix_schematic():
-    # Load pristine original schematic
-    os.system('git checkout hardware_docs/sdas_corrected_circuit_schematic.jpg')
-    img_path = 'hardware_docs/sdas_corrected_circuit_schematic.jpg'
+    if not restore_original():
+        answer = input("Drawing over the current image may double-apply the fixes. Continue? [y/N] ")
+        if answer.strip().lower() != 'y':
+            return
+    img_path = os.path.join(PROJECT_ROOT, IMG_REL)
     img = Image.open(img_path).convert('RGB')
     draw = ImageDraw.Draw(img)
 
     # Fonts
-    font_bold = ImageFont.truetype('C:/Windows/Fonts/arialbd.ttf', 13)
-    font_title = ImageFont.truetype('C:/Windows/Fonts/arialbd.ttf', 15)
-    font_small_bold = ImageFont.truetype('C:/Windows/Fonts/arialbd.ttf', 11)
-    font_small = ImageFont.truetype('C:/Windows/Fonts/arial.ttf', 10)
+    font_bold = load_font(BOLD, 13)
+    font_title = load_font(BOLD, 15)
+    font_small_bold = load_font(BOLD, 11)
+    font_small = load_font(REG, 10)
 
     # ----------------------------------------------------
     # 1. FIX "3.3V Feltage" -> "3.3V Voltage" in Legend Box
@@ -27,13 +75,15 @@ def fix_schematic():
     servo_icon = img.crop((1015, 600, 1145, 715))
 
     # ----------------------------------------------------
-    # 3. FIX TOP-RIGHT: MG996R SERVO MOTOR
+    # 3. FIX TOP-RIGHT: MG90S SERVO MOTOR
+    # FIX: this label said MG996R, but the rest of the project (master schematic, XL4015 guide,
+    # dashboard) uses ONE TowerPro MG90S. MG996R draws ~2.5 A stall vs ~0.8 A for MG90S.
     # ----------------------------------------------------
     # Clear entire top-right under the legends down to y: 310
     draw.rectangle([880, 125, 1370, 310], fill=(255, 255, 255))
 
     # Re-draw title
-    draw.text((1150, 135), "MG996R SERVO MOTOR", fill=(0, 0, 0), font=font_title)
+    draw.text((1150, 135), "MG90S SERVO MOTOR", fill=(0, 0, 0), font=font_title)
     draw.text((1185, 153), "(Sluice Gate)", fill=(80, 80, 80), font=font_small_bold)
 
     # Paste Servo Motor Icon at top right: x: 1175, y: 180
@@ -41,7 +91,7 @@ def fix_schematic():
     servo_y = 180
     img.paste(servo_icon, (servo_x, servo_y))
 
-    # Connect the 3 proper wires into the MG996R Servo:
+    # Connect the 3 proper wires into the MG90S Servo:
     # Wire 1: +5V Rail (Red, coming from 5V rail at y: 195)
     vcc_y = 200
     draw.line([(870, vcc_y), (servo_x, vcc_y)], fill=(190, 40, 40), width=3)
@@ -121,15 +171,23 @@ def fix_schematic():
     draw.text((leg_x + 10, leg_y + 112), "Note: Active LOW Logic Control", fill=(80, 80, 80), font=font_small)
 
     # Save outputs
-    out_jpg = 'hardware_docs/sdas_corrected_circuit_schematic.jpg'
-    out_png = 'hardware_docs/sdas_corrected_circuit_schematic.png'
-    out_brain = 'C:/Users/adria/.gemini/antigravity/brain/0c14942f-4bad-47bf-874a-33bdb3daeaf3/sdas_circuit_diagram_1791839333607.jpg'
+    out_jpg = os.path.join(PROJECT_ROOT, 'hardware_docs', 'sdas_corrected_circuit_schematic.jpg')
+    out_png = os.path.join(PROJECT_ROOT, 'hardware_docs', 'sdas_corrected_circuit_schematic.png')
 
     img.save(out_jpg, 'JPEG', quality=98)
     img.save(out_png, 'PNG')
-    img.save(out_brain, 'JPEG', quality=98)
+    saved = [out_jpg, out_png]
 
-    print("Schematic successfully fixed and saved to:", out_jpg, out_png, out_brain)
+    # FIX: the third copy went to a hard-coded C:/Users/adria/.gemini/... path and crashed
+    # (FileNotFoundError) on any other PC. Set SDAS_EXTRA_OUTPUT_DIR for an extra copy.
+    extra_dir = os.environ.get('SDAS_EXTRA_OUTPUT_DIR')
+    if extra_dir:
+        os.makedirs(extra_dir, exist_ok=True)
+        extra = os.path.join(extra_dir, 'sdas_circuit_diagram.jpg')
+        img.save(extra, 'JPEG', quality=98)
+        saved.append(extra)
+
+    print("Schematic successfully fixed and saved to:", *saved)
 
 if __name__ == '__main__':
     fix_schematic()

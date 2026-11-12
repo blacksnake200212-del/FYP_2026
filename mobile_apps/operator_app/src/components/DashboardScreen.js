@@ -21,6 +21,7 @@ import {
 } from '../Icons';
 import CircularGauge from '../CircularGauge';
 import { supabase } from '../supabaseClient';
+import { sendGateCommand } from '../commandService';
 
 export default function DashboardScreen({ operatorUser }) {
   const [telemetry, setTelemetry] = useState({
@@ -146,14 +147,12 @@ export default function DashboardScreen({ operatorUser }) {
   const handleCommand = async (type, desc) => {
     setIsSendingCommand(true);
     try {
-      await supabase.from('commands').insert([
-        {
-          type,
-          issued_by: operatorUser?.id || null,
-          status: 'PENDING',
-          expires_at: new Date(Date.now() + 300000).toISOString()
-        }
-      ]);
+      const target = type === 'OPEN_50' ? 50 : type === 'OPEN_20' ? 20 : 0;
+      const result = await sendGateCommand(type, operatorUser, target);
+      if (!result.ok) {
+        Alert.alert('Command NOT Sent', `${desc} was rejected by the server: ${result.message}`);
+        return;
+      }
 
       if (type === 'OPEN_20' || type === 'OPEN_50') {
         setTelemetry((prev) => ({ ...prev, gatePercent: type === 'OPEN_50' ? 50 : 20, controlMode: 'MANUAL' }));
@@ -165,9 +164,9 @@ export default function DashboardScreen({ operatorUser }) {
         setTelemetry((prev) => ({ ...prev, controlMode: 'MANUAL' }));
       }
 
-      Alert.alert('Command Dispatched', `${desc} sent to ESP32 Sluice Actuator.`);
+      Alert.alert('Command Queued', `${desc} saved. The ESP32 picks it up within about 5 seconds if it is online.`);
     } catch (err) {
-      Alert.alert('Command Recorded', `${desc} recorded in session.`);
+      Alert.alert('Command NOT Sent', err.message || 'Network error');
     } finally {
       setIsSendingCommand(false);
     }

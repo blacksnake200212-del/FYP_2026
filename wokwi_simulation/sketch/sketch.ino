@@ -25,7 +25,7 @@
 #define PIN_DHT              4     // DHT22 Ambient Sensor (Temp/Humidity)
 #define DHTTYPE              DHT22
 
-#define PIN_SERVO            25    // MG996R Sluice Gate Servo PWM
+#define PIN_SERVO            25    // MG90S Sluice Gate Servo PWM (same as the real build)
 #define PIN_BUZZER           27    // BC547 Driven 5V Buzzer
 
 #define PIN_LED_RED          32    // RGB LED - Red Cathode (Active LOW)
@@ -39,13 +39,13 @@
 // ----------------------------------------------------------------------------
 // TANK GEOMETRY & HYDRAULIC THRESHOLDS
 // ----------------------------------------------------------------------------
-const float SENSOR_MOUNT_HEIGHT_CM = 65.0f; // Sensor to tank floor
+const float SENSOR_MOUNT_HEIGHT_CM = 50.0f; // Sensor to tank floor (same as firmware config.h)
 const float TANK_MAX_DEPTH_CM      = 40.0f; // Max usable depth (100% full)
 const float SENSOR_MAX_DELTA_CM    = 5.0f;  // Plausibility divergence threshold
 
 // 4-Tier Disaster Alert Percentages
 // Level >= 85%  -> DANGER (Gate opens to 50% / 90 deg)
-// Level >= 80%  -> CLEAR AREA (Gate opens to 30% / 54 deg)
+// Level >= 80%  -> CLEAR AREA (Gate opens to 20% / 36 deg)
 // Level >= 60%  -> PRE-WARNING (Gate held closed 0% to conserve water)
 // Level < 60%   -> NORMAL (Gate closed 0%)
 const float THRESH_NORMAL_PCT      = 60.0f;
@@ -170,7 +170,9 @@ float measureAcousticDistance(uint8_t trigPin, uint8_t echoPin, float soundSpeed
     digitalWrite(trigPin, LOW);
 
     long durationUs = pulseIn(echoPin, HIGH, 50000); // 50ms timeout (~8.5m)
-    if (durationUs <= 0) return 65.0f; // Default to tank baseline if no echo
+    // FIX: no echo used to return the tank baseline (= "empty tank, NORMAL"), which hid a dead
+    // or unplugged sensor. Like the real firmware, no echo is now INVALID (-1).
+    if (durationUs <= 0) return -1.0f;
 
     // Distance = (Velocity * time) / 2
     // Velocity in m/s -> cm/us = (m/s) / 10,000
@@ -265,7 +267,7 @@ void applyAutoGateForState(AlertState state) {
             currentBuzzerCadence = BUZZ_CHIRP;
             break;
         case STATE_CLEAR_AREA:
-            applyGatePosition(GATE_PCT_CLEAR_AREA); // 30% release (54 deg)
+            applyGatePosition(GATE_PCT_CLEAR_AREA); // 20% release (36 deg)
             currentBuzzerCadence = BUZZ_PULSE;
             break;
         case STATE_DANGER:
@@ -324,10 +326,13 @@ void evaluateStateMachine(float levelPct) {
             break;
 
         case STATE_SENSOR_FAULT:
+            // FIX: recovery evaluates the real level (used to jump straight to NORMAL at 60-79%)
             if (levelPct >= THRESH_DANGER_PCT) {
                 nextState = STATE_DANGER;
             } else if (levelPct >= THRESH_CLEARAREA_PCT) {
                 nextState = STATE_CLEAR_AREA;
+            } else if (levelPct >= THRESH_PREWARN_PCT) {
+                nextState = STATE_PRE_WARNING;
             } else {
                 nextState = STATE_NORMAL;
             }
@@ -587,24 +592,32 @@ void loop() {
         sensor2DistCm = measureAcousticDistance(PIN_TRIG_2, PIN_ECHO_2, soundSpeed);
 
         // D. Smart Sensor Fusion & Plausibility Engine
-        // If one sensor is moved by user in Wokwi (<=65cm) while other is untouched (>65cm),
-        // seamlessly follow the active sensor so interactive testing is effortless!
-        float effectiveDist = 65.0f;
+        // A reading counts as valid if there was an echo (> 0). In Wokwi, a sensor left at its
+        // default distance (beyond the 50 cm mount) is treated as "not in use" so you can drive the
+        // level with one slider. No echo on BOTH sensors = SENSOR FAULT (as in the real firmware).
+        bool v1 = sensor1DistCm > 0.0f;
+        bool v2 = sensor2DistCm > 0.0f;
+        bool inTank1 = v1 && sensor1DistCm <= SENSOR_MOUNT_HEIGHT_CM;
+        bool inTank2 = v2 && sensor2DistCm <= SENSOR_MOUNT_HEIGHT_CM;
+        float effectiveDist = SENSOR_MOUNT_HEIGHT_CM;
+        bool levelValid = true;
 
-        if (sensor1DistCm <= 65.0f && sensor2DistCm > 65.0f) {
+        if (!v1 && !v2) {
+            levelValid = false;
+        } else if (inTank1 && !inTank2) {
             effectiveDist = sensor1DistCm;
-            sensorsAgreed = true;
-            degradedModeActive = false;
-        } else if (sensor2DistCm <= 65.0f && sensor1DistCm > 65.0f) {
+            sensorsAgreed = v2 ? false : true;
+            degradedModeActive = !v2;
+        } else if (inTank2 && !inTank1) {
             effectiveDist = sensor2DistCm;
-            sensorsAgreed = true;
-            degradedModeActive = false;
-        } else {
+            sensorsAgreed = v1 ? false : true;
+            degradedModeActive = !v1;
+        } else if (v1 && v2) {
             float delta = fabsf(sensor1DistCm - sensor2DistCm);
-            if (delta <= SENSOR_MAX_DELTA_CM) {
+            if (delta <= SENSOR_MAX_DELTA_CM || (!inTank1 && !inTank2)) {
                 sensorsAgreed = true;
                 degradedModeActive = false;
-                effectiveDist = (sensor1DistCm + sensor2DistCm) / 2.0f;
+                effectiveDist = min((sensor1DistCm + sensor2DistCm) / 2.0f, SENSOR_MOUNT_HEIGHT_CM);
             } else {
                 sensorsAgreed = false;
                 degradedModeActive = true;
@@ -613,10 +626,30 @@ void loop() {
                 Serial.printf("[WARNING] Sensor Divergence! S1=%.1fcm, S2=%.1fcm (Delta=%.1fcm > 5cm)\n",
                     sensor1DistCm, sensor2DistCm, delta);
             }
+        } else {
+            // Only one sensor answers and it reads beyond the tank: use it, flag degraded
+            effectiveDist = v1 ? min(sensor1DistCm, SENSOR_MOUNT_HEIGHT_CM) : min(sensor2DistCm, SENSOR_MOUNT_HEIGHT_CM);
+            sensorsAgreed = false;
+            degradedModeActive = true;
         }
 
+        if (!levelValid) {
+            // FIX: both sensors silent -> the level is unknown. Enter SENSOR FAULT instead of
+            // reporting an empty tank. Operator control (MANUAL / E-STOP) is not overridden.
+            sensorsAgreed = false;
+            degradedModeActive = true;
+            if (currentControlMode == MODE_AUTO && currentAlertState != STATE_SENSOR_FAULT) {
+                Serial.println("[FAULT] No echo from BOTH ultrasonic sensors - water level unknown!");
+                previousAlertState = currentAlertState;
+                currentAlertState = STATE_SENSOR_FAULT;
+                applyAutoGateForState(STATE_SENSOR_FAULT);
+            }
+            updateAlertLED(STATE_SENSOR_FAULT);
+            Serial.println("[SDAS TELEMETRY] Water Level: UNKNOWN | State: SENSOR FAULT (check HC-SR04 wiring / 5V power)");
+        } else {
+
         // E. Compute Reservoir Water Level %
-        // Depth = Mount Height (65cm) - Measured Distance
+        // Depth = Mount Height (50cm) - Measured Distance
         // % = (Depth / Max Usable Depth (40cm)) * 100
         float depthCm = SENSOR_MOUNT_HEIGHT_CM - effectiveDist;
         currentWaterLevelPct = constrain((depthCm / TANK_MAX_DEPTH_CM) * 100.0f, 0.0f, 100.0f);
@@ -636,6 +669,7 @@ void loop() {
             modeNames[currentControlMode]);
         Serial.printf("                 Dist1: %4.1fcm | Dist2: %4.1fcm | Temp: %4.1fC | Humid: %4.1f%%\n",
             sensor1DistCm, sensor2DistCm, currentTempC, currentHumidityPct);
+        } // end levelValid
     }
 
     // 3. Cloud Synchronization Loop (Every 10 Seconds)

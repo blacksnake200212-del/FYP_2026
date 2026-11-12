@@ -73,6 +73,30 @@ CREATE TABLE IF NOT EXISTS public.commands (
 
 CREATE INDEX IF NOT EXISTS idx_commands_status ON public.commands (status, created_at DESC);
 
+-- FIX: the web dashboard also sends MANUAL, SENSOR_2 and RGB. The old CHECK only allowed
+-- 6 types, so those inserts were rejected (HTTP 400, error 23514). CREATE TABLE IF NOT EXISTS
+-- does not update an existing table, so the constraint is replaced here explicitly.
+DO $$
+DECLARE c RECORD;
+BEGIN
+    FOR c IN
+        SELECT conname FROM pg_constraint
+        WHERE conrelid = 'public.commands'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%OPEN_20%'
+    LOOP
+        EXECUTE format('ALTER TABLE public.commands DROP CONSTRAINT %I', c.conname);
+    END LOOP;
+END $$;
+
+ALTER TABLE public.commands
+    ADD CONSTRAINT commands_type_check
+    CHECK (type IN ('OPEN_20', 'OPEN_50', 'CLOSE', 'ESTOP', 'AUTO', 'MANUAL', 'PREWARN_SMS', 'SENSOR_2', 'RGB'));
+
+-- FIX: older databases created before schema_version existed would reject the dashboard insert
+ALTER TABLE public.commands ADD COLUMN IF NOT EXISTS schema_version INT DEFAULT 1 NOT NULL;
+ALTER TABLE public.readings ADD COLUMN IF NOT EXISTS sensors_agreed BOOLEAN DEFAULT TRUE NOT NULL;
+
 -- ============================================================================
 -- 5. SMS_JOBS TABLE (Cellular emergency dispatch tracking via SIM800L)
 -- ============================================================================
@@ -112,6 +136,8 @@ CREATE TABLE IF NOT EXISTS public.push_tokens (
     platform VARCHAR(20),
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
+
+ALTER TABLE public.push_tokens ADD COLUMN IF NOT EXISTS app_version VARCHAR(20) DEFAULT '2.0.0' NOT NULL;
 
 -- ============================================================================
 -- 8. APP_CONFIG TABLE (OTA & Store Version Control for Both Mobile Apps)
@@ -622,10 +648,83 @@ END $$;
 -- ============================================================================
 -- 20. INITIAL SEED: EMERGENCY CONTACT DIRECTORY (4 Demo Test Numbers)
 -- ============================================================================
+-- FIX: "ON CONFLICT DO NOTHING" never triggered because contacts has no unique column, so
+-- every re-run of this file added the same 4 numbers again (and the SIM800L texted them twice).
+-- Each number is now inserted only if it is not already stored (in either format).
 INSERT INTO public.contacts (name, phone_encrypted, role, recipient_group, tier, opted_in)
-VALUES 
-    ('District Secretariat & DMC', '+94740099235', 'DISTRICT_SECRETARIAT', 'OPERATOR', 1, true),
-    ('Disaster Management Field Unit', '+94778364925', 'OFFICER', 'OPERATOR', 1, true),
-    ('Police Emergency Operations', '+94712833936', 'POLICE', 'OPERATOR', 1, true),
-    ('Fire & Rescue Service Command', '+94781099235', 'FIRE_RESCUE', 'OPERATOR', 1, true)
-ON CONFLICT DO NOTHING;
+SELECT v.name, v.phone, v.role, 'OPERATOR', 1, true
+FROM (VALUES
+    ('District Secretariat & DMC', '+94740099235', 'DISTRICT_SECRETARIAT'),
+    ('Disaster Management Field Unit', '+94778364925', 'OFFICER'),
+    ('Police Emergency Operations', '+94712833936', 'POLICE'),
+    ('Fire & Rescue Service Command', '+94781099235', 'FIRE_RESCUE')
+) AS v(name, phone, role)
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.contacts c
+    WHERE c.phone_encrypted IN (v.phone, 'enc_aes256_' || v.phone)
+);
+
+-- ============================================================================
+-- 21. SMS RECIPIENTS FOR THE ESP32 NODE (key-protected, works after rls_hardening.sql)
+-- ============================================================================
+-- FIX: contacts added in the dashboard / operator app were never texted, because the firmware
+-- only used the 4 numbers hard-coded in config.h. The node now calls
+--   POST /rest/v1/rpc/get_sms_recipients   body: {"p_key": "<SDAS_DEVICE_KEY from secrets.h>"}
+-- every 10 minutes. The function returns the opted-in numbers ONLY if the key matches a hash
+-- stored in private.device_keys, so the public anon key alone still cannot read phone numbers.
+--
+-- ONE-TIME SETUP (run once in the SQL editor, using the same text you put in secrets.h):
+--   INSERT INTO private.device_keys (device_id, key_hash)
+--   VALUES ('ESP32_PUTTALAM_01', encode(extensions.digest('YOUR-DEVICE-KEY', 'sha256'), 'hex'))
+--   ON CONFLICT (device_id) DO UPDATE SET key_hash = EXCLUDED.key_hash;
+CREATE SCHEMA IF NOT EXISTS private;
+REVOKE ALL ON SCHEMA private FROM PUBLIC;
+DO $$
+BEGIN
+    EXECUTE 'REVOKE ALL ON SCHEMA private FROM anon, authenticated';
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS private.device_keys (
+    device_id  TEXT PRIMARY KEY,
+    key_hash   TEXT NOT NULL,               -- hex SHA-256 of the key, never the key itself
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+REVOKE ALL ON private.device_keys FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.get_sms_recipients(p_key TEXT)
+RETURNS TABLE (phone TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, private, extensions
+AS $$
+BEGIN
+    IF p_key IS NULL OR length(p_key) < 12 OR NOT EXISTS (
+        SELECT 1 FROM private.device_keys k
+        WHERE k.key_hash = encode(digest(p_key, 'sha256'), 'hex')   -- pgcrypto (extensions schema on Supabase)
+    ) THEN
+        RETURN;   -- wrong key: return nothing (no error detail for guessing)
+    END IF;
+
+    RETURN QUERY
+    SELECT p.phone FROM (
+        SELECT DISTINCT ON (x.num) x.num AS phone, x.tier, x.created_at
+        FROM (
+            SELECT regexp_replace(c.phone_encrypted, '^enc_aes256_', '') AS num, c.tier, c.created_at
+            FROM public.contacts c
+            WHERE c.opted_in = true
+        ) x
+        WHERE x.num ~ '^\+?[0-9]{7,15}$'
+        ORDER BY x.num, x.tier, x.created_at
+    ) p
+    ORDER BY p.tier, p.created_at
+    LIMIT 10;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_sms_recipients(TEXT) FROM PUBLIC;
+DO $$
+BEGIN
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.get_sms_recipients(TEXT) TO anon, authenticated';
+EXCEPTION WHEN undefined_object THEN NULL;
+END $$;

@@ -343,11 +343,11 @@
                     </div>
                   </button>
 
-                  <button id="btn-cmd-manual" class="cmd-btn btn-manual" title="Engage Operator Manual Override (Locks position, prevents auto-close)">
+                  <button id="btn-cmd-manual" class="cmd-btn btn-manual" title="Operator manual override: holds the current gate position. Remote manual commands return to AUTO after 5 minutes (300 s) unless sent again.">
                     <span class="btn-icon">🟡</span>
                     <div class="btn-text">
                       <strong>MANUAL MODE</strong>
-                      <small>Operator Direct Lock</small>
+                      <small>Holds position · auto-returns to AUTO in 5 min</small>
                     </div>
                   </button>
                 </div>
@@ -355,7 +355,7 @@
 
               <!-- Manual Positioning Actions -->
               <div class="gate-actions-grid">
-                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate (Holds 0% in Manual Mode)">
+                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate (Manual Mode, returns to AUTO after 5 minutes)">
                   <span class="btn-icon">⚪</span>
                   <div class="btn-text">
                     <strong>MANUAL CLOSE (0%)</strong>
@@ -363,7 +363,7 @@
                   </div>
                 </button>
 
-                <button id="btn-cmd-open20" class="cmd-btn btn-open20" title="Open gate to 20% Clear Area relief">
+                <button id="btn-cmd-open20" class="cmd-btn btn-open20" title="Open gate to 20% Clear Area relief (Manual Mode, returns to AUTO after 5 minutes)">
                   <span class="btn-icon">🟡</span>
                   <div class="btn-text">
                     <strong>MANUAL OPEN 20%</strong>
@@ -371,7 +371,7 @@
                   </div>
                 </button>
 
-                <button id="btn-cmd-open50" class="cmd-btn btn-open50" title="Open gate to 50% Maximum Safe travel">
+                <button id="btn-cmd-open50" class="cmd-btn btn-open50" title="Open gate to 50% Maximum Safe travel (Manual Mode, returns to AUTO after 5 minutes)">
                   <span class="btn-icon">🔴</span>
                   <div class="btn-text">
                     <strong>MANUAL OPEN 50%</strong>
@@ -471,7 +471,7 @@
                     </div>
                   </div>
                   <button type="submit" id="btn-save-contact" class="btn-save-contact">
-                    ➕ Add Number to SIM800L Broadcast List
+                    ➕ Add Number to Emergency Directory
                   </button>
                 </form>
               </div>
@@ -522,14 +522,17 @@
 
             <!-- Blueprint Grid Lines -->
             <line x1="50" y1="20" x2="685" y2="20" stroke="#1E2D4A" stroke-dasharray="3,3" />
-            <line x1="50" y1="65" x2="685" y2="65" stroke="rgba(249, 115, 22, 0.25)" stroke-dasharray="3,3" />
-            <line x1="50" y1="105" x2="685" y2="105" stroke="rgba(234, 179, 8, 0.25)" stroke-dasharray="3,3" />
+            <!-- FIX: lines now match app.js drawChart(): y = 185 - (pct/100) * 165 (old 80%/60% lines were at 69%/48%) -->
+            <line x1="50" y1="45" x2="685" y2="45" stroke="rgba(239, 68, 68, 0.3)" stroke-dasharray="3,3" />
+            <line x1="50" y1="53" x2="685" y2="53" stroke="rgba(249, 115, 22, 0.25)" stroke-dasharray="3,3" />
+            <line x1="50" y1="86" x2="685" y2="86" stroke="rgba(234, 179, 8, 0.25)" stroke-dasharray="3,3" />
             <line x1="50" y1="185" x2="685" y2="185" stroke="#1E2D4A" />
 
             <!-- Y Axis Percentage Markers -->
             <text x="12" y="24" fill="#64748B" font-size="10" font-family="sans-serif">100%</text>
-            <text x="12" y="69" fill="#FB923C" font-size="9" font-family="sans-serif">80%</text>
-            <text x="12" y="109" fill="#FDE047" font-size="9" font-family="sans-serif">60%</text>
+            <text x="12" y="44" fill="#F87171" font-size="9" font-family="sans-serif">85%</text>
+            <text x="12" y="57" fill="#FB923C" font-size="9" font-family="sans-serif">80%</text>
+            <text x="12" y="90" fill="#FDE047" font-size="9" font-family="sans-serif">60%</text>
             <text x="12" y="189" fill="#64748B" font-size="10" font-family="sans-serif">0%</text>
 
             <!-- Area and Line Paths -->
@@ -547,7 +550,7 @@
         </div>
       </div>
 
-      <!-- 6. Raw Hardware Packet Inspector (5 cols) -->
+      <!-- 7. Raw Hardware Packet Inspector (5 cols) -->
       <div class="card col-log">
         <div class="card-header">
           <div class="card-title">
@@ -656,9 +659,6 @@
             <div id="signin-success" class="modal-success" style="display: none;"></div>
 
             <div class="modal-actions-bar">
-              <button type="button" id="btn-quick-fill-test" class="btn-quick-demo">
-                ⚡ Quick-Fill Field Account
-              </button>
               <button type="submit" id="btn-submit-signin" class="btn-primary">
                 🚀 Sign In with Supabase
               </button>
@@ -668,13 +668,13 @@
           <!-- Master PIN Fallback Option for Field Emergency / Pending Email Confirmation -->
           <div class="field-fallback-box">
             <span style="font-size: 11px; color: var(--text-muted);">Emergency Field Master Override?</span>
-            <button type="button" id="btn-show-pin-fallback" class="btn-text-link">Unlock with Master PIN (1234)</button>
+            <button type="button" id="btn-show-pin-fallback" class="btn-text-link">Unlock with Master PIN</button>
           </div>
           <div id="pin-fallback-row" style="display: none; margin-top: 10px;">
             <div class="form-group-modal">
               <label for="fallback-pin-input">Master Emergency Key:</label>
               <div style="display: flex; gap: 8px;">
-                <input type="password" id="fallback-pin-input" class="modal-input" maxlength="8" placeholder="Enter PIN (1234)">
+                <input type="password" id="fallback-pin-input" class="modal-input" maxlength="8" placeholder="Enter master PIN">
                 <button type="button" id="btn-submit-pin-fallback" class="btn-secondary" style="white-space: nowrap;">Unlock</button>
               </div>
             </div>
@@ -727,7 +727,7 @@
 
   <!-- Footer -->
   <footer>
-    <div style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: gap: 10px;">
+    <div style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
       <div>
         <strong>SDAS Web Dashboard v2.1</strong> &bull; Tabbowa / Kantalai Dam Telemetry System
       </div>

@@ -1,6 +1,19 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
+
+def find_hardware_docs(start):
+    """Walk up from this script until a folder containing hardware_docs/ is found.
+    The scripts live in tools/diagram_generators/ but the images belong in hardware_docs/."""
+    here = start
+    while True:
+        if os.path.isdir(os.path.join(here, 'hardware_docs')):
+            return os.path.join(here, 'hardware_docs')
+        parent = os.path.dirname(here)
+        if parent == here:
+            return start  # not found: fall back to the script's own folder
+        here = parent
+
 def generate_colorful_schematic():
     W, H = 3400, 2200
     img = Image.new('RGB', (W, H), (248, 250, 252))
@@ -49,19 +62,36 @@ def generate_colorful_schematic():
     W_BTN_ESTOP = (239, 68, 68)    # Emergency Red (STOP Button - GPIO22)
 
     # Fonts
-    try:
-        f_hero = ImageFont.truetype('C:/Windows/Fonts/segoeuib.ttf', 30)
-        f_title = ImageFont.truetype('C:/Windows/Fonts/segoeuib.ttf', 17)
-        f_sub = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 13)
-        f_bold = ImageFont.truetype('C:/Windows/Fonts/segoeuib.ttf', 13)
-        f_reg = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 12)
-        f_small = ImageFont.truetype('C:/Windows/Fonts/segoeui.ttf', 11)
-        f_small_bold = ImageFont.truetype('C:/Windows/Fonts/segoeuib.ttf', 11)
-        f_code = ImageFont.truetype('C:/Windows/Fonts/consola.ttf', 12)
-        f_code_bold = ImageFont.truetype('C:/Windows/Fonts/consolab.ttf', 12)
-        f_badge = ImageFont.truetype('C:/Windows/Fonts/segoeuib.ttf', 10)
-    except Exception:
-        f_hero = f_title = f_sub = f_bold = f_reg = f_small = f_small_bold = f_code = f_code_bold = f_badge = ImageFont.load_default()
+    # FIX: if any single Windows font was missing, ALL fonts fell back to PIL's tiny bitmap
+    # font (unreadable on a 3400 px image). Each font now tries Windows, macOS and Linux paths.
+    def load_font(candidates, size):
+        for path in candidates:
+            if os.path.exists(path):
+                try:
+                    return ImageFont.truetype(path, size)
+                except OSError:
+                    pass
+        return ImageFont.load_default()
+
+    REG = ['C:/Windows/Fonts/segoeui.ttf', 'C:/Windows/Fonts/arial.ttf',
+           '/System/Library/Fonts/Supplemental/Arial.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf']
+    BOLD = ['C:/Windows/Fonts/segoeuib.ttf', 'C:/Windows/Fonts/arialbd.ttf',
+            '/System/Library/Fonts/Supplemental/Arial Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf']
+    MONO = ['C:/Windows/Fonts/consola.ttf', 'C:/Windows/Fonts/cour.ttf',
+            '/System/Library/Fonts/Menlo.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf']
+    MONO_BOLD = ['C:/Windows/Fonts/consolab.ttf', 'C:/Windows/Fonts/courbd.ttf',
+                 '/System/Library/Fonts/Menlo.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf']
+
+    f_hero = load_font(BOLD, 30)
+    f_title = load_font(BOLD, 17)
+    f_sub = load_font(REG, 13)
+    f_bold = load_font(BOLD, 13)
+    f_reg = load_font(REG, 12)
+    f_small = load_font(REG, 11)
+    f_small_bold = load_font(BOLD, 11)
+    f_code = load_font(MONO, 12)
+    f_code_bold = load_font(MONO_BOLD, 12)
+    f_badge = load_font(BOLD, 10)
 
     # Helper: Card Drawer
     def draw_card(x, y, w, h, title, subtitle="", badge="", header_color=(15, 23, 42)):
@@ -132,7 +162,7 @@ def generate_colorful_schematic():
     draw.text((p_x + 28, p_y + 101), "(11.1V - 12.6V BMS)", fill=TEXT_MUTED, font=f_small)
 
     stages = [
-        ("FUSE 5A", "Fast-Blow", (254, 243, 199), (180, 83, 9)),
+        ("FUSE 3A", "Fast-Blow", (254, 243, 199), (180, 83, 9)),
         ("1N5408", "Reverse Diode", (241, 245, 249), TEXT_MAIN),
         ("SMBJ15A", "TVS Clamp", (241, 245, 249), TEXT_MAIN),
         ("SPST SW", "Main Switch", (241, 245, 249), TEXT_MAIN),
@@ -440,7 +470,7 @@ def generate_colorful_schematic():
 
     draw.rounded_rectangle([srv_x + 465, srv_y + 50, srv_x + 1235, srv_y + 225], radius=8, fill=(248, 250, 252), outline=(203, 213, 225), width=1)
     draw.text((srv_x + 480, srv_y + 60), "MANDATORY SLUICE GATE SAFETY PRESETS", fill=TEXT_MAIN, font=f_bold)
-    draw.text((srv_x + 480, srv_y + 90), "• 0%  Position (0° Angle)   : Sluice gate fully closed. Zero spillway discharge (Water < 75%).", fill=TEXT_MAIN, font=f_small)
+    draw.text((srv_x + 480, srv_y + 90), "• 0%  Position (0° Angle)   : Sluice gate fully closed. Zero spillway discharge (Water < 80%).", fill=TEXT_MAIN, font=f_small)
     draw.text((srv_x + 480, srv_y + 118), "• 20% Position (36° Angle)  : CLEAR AREA Advisory. Controlled base release (Level 80% to 85%).", fill=(180, 83, 9), font=f_small_bold)
     draw.text((srv_x + 480, srv_y + 146), "• 50% Position (90° Angle)  : CRITICAL DANGER Max Opening (Level >= 85%). 100% is prohibited.", fill=(220, 38, 38), font=f_bold)
     draw.text((srv_x + 480, srv_y + 174), "Safety Failsafe: Emergency Stop halts servo instantly without delay.", fill=TEXT_MUTED, font=f_small)
@@ -479,8 +509,8 @@ def generate_colorful_schematic():
     # Right: Alert Stages
     draw.rounded_rectangle([rgb_x + 525, rgb_y + 50, rgb_x + 1235, rgb_y + 240], radius=8, fill=(248, 250, 252), outline=(203, 213, 225), width=1)
     draw.text((rgb_x + 540, rgb_y + 60), "SDAS 4-STAGE COLOR CODES", fill=TEXT_MAIN, font=f_bold)
-    draw.text((rgb_x + 540, rgb_y + 90), "Stage 0 (NORMAL):      SOLID GREEN       (GPIO33 LOW, Water Level < 75%)", fill=W_LED_GRN, font=f_code_bold)
-    draw.text((rgb_x + 540, rgb_y + 118), "Stage 1 (PRE-WARNING): SOLID YELLOW/AMBER (Red + Green LOW, 75% <= Level < 80%)", fill=(202, 138, 4), font=f_code_bold)
+    draw.text((rgb_x + 540, rgb_y + 90), "Stage 0 (NORMAL):      SOLID GREEN       (GPIO33 LOW, Water Level < 60%)", fill=W_LED_GRN, font=f_code_bold)
+    draw.text((rgb_x + 540, rgb_y + 118), "Stage 1 (PRE-WARNING): SOLID YELLOW/AMBER (Red + Green LOW, 60% <= Level < 80%)", fill=(202, 138, 4), font=f_code_bold)
     draw.text((rgb_x + 540, rgb_y + 146), "Stage 2 (CLEAR AREA):  SOLID ORANGE      (Red + 25% PWM Green, 80% <= Level < 85%)", fill=(234, 88, 12), font=f_code_bold)
     draw.text((rgb_x + 540, rgb_y + 174), "Stage 3 (DANGER):      SOLID RED         (GPIO32 LOW, Siren Active, Level >= 85%)", fill=W_LED_RED, font=f_code_bold)
     draw.text((rgb_x + 540, rgb_y + 202), "Degraded / Fault:      PULSING BLUE      (GPIO13 Blinking, Sensor Mismatch > 5cm)", fill=W_LED_BLU, font=f_code_bold)
@@ -497,7 +527,7 @@ def generate_colorful_schematic():
     buttons = [
         ("1. OPEN BUTTON",  "ESP32 GPIO14", "[LIGHT ORANGE WIRE]", "Manual gate increment (+10% spillway opening in Auto/Manual)", W_BTN_OPEN),
         ("2. CLOSE BUTTON", "ESP32 GPIO26", "[BROWN WIRE]",        "Manual gate decrement (-10% spillway opening in Auto/Manual)", W_BTN_CLOSE),
-        ("3. STOP (E-STOP)","ESP32 GPIO22", "[EMERGENCY RED WIRE]","HARDWARE E-STOP INTERRUPT: Halts servo immediately (< 1ms)", W_BTN_ESTOP)
+        ("3. STOP (E-STOP)","ESP32 GPIO22", "[EMERGENCY RED WIRE]","E-STOP BUTTON (software-polled, debounced): halts servo on the next control cycle", W_BTN_ESTOP)
     ]
     for idx, (bt, bp, bc, bd, bcol) in enumerate(buttons):
         by = btn_y + 60 + idx * 65
@@ -552,7 +582,7 @@ def generate_colorful_schematic():
         (W_LED_BLU,   "ROYAL BLUE",   "RGB LED Blue Cathode",      "ESP32 GPIO13 -> 100 Ω -> Blue Pin",       "Active LOW",     "100 Ω resistor limits current to 3.0mA (accounts for Vf ≈ 3.0V)."),
         (W_BTN_OPEN,  "LIGHT ORANGE", "Manual OPEN Pushbutton",    "ESP32 GPIO14 -> Pushbutton -> GND",       "Active LOW",     "Internal pull-up enabled; 20ms software debounced. Manual spillway increment (+10%)."),
         (W_BTN_CLOSE, "BROWN/AMBER",  "Manual CLOSE Pushbutton",   "ESP32 GPIO26 -> Pushbutton -> GND",       "Active LOW",     "Internal pull-up enabled; 20ms software debounced. Manual spillway decrement (-10%)."),
-        (W_BTN_ESTOP, "EMERGENCY RED","Emergency STOP Button",     "ESP32 GPIO22 -> Pushbutton -> GND",       "Active LOW",     "Immediate hardware interrupt: freezes servo motion instantly (< 1ms latency)."),
+        (W_BTN_ESTOP, "EMERGENCY RED","Emergency STOP Button",     "ESP32 GPIO22 -> Pushbutton -> GND",       "Active LOW",     "Polled every control-loop cycle with debounce: freezes servo motion within tens of ms."),
     ]
 
     r_y = t_y + 100
@@ -586,7 +616,7 @@ def generate_colorful_schematic():
         "[OK] MODEM 2.8V LOGIC CLAMP: 1 kΩ / 2.2 kΩ divider guarantees SIM800L RX never exceeds 2.27V.",
         "[OK] 4-PIN RGB CURRENT EQUALIZATION: Balanced 220 Ω (Red) and 100 Ω (Green/Blue) resistors.",
         "[OK] ACTIVE SIREN TRANSISTOR DRIVER: BC547 NPN driver with 1N4007 clamp diode absorbs inductive kickback.",
-        "[OK] HARDWARE E-STOP LATCH: Pressing STOP (GPIO22) freezes servo within < 1ms on edge interrupt.",
+        "[OK] E-STOP LATCH: Pressing STOP (GPIO22) freezes the servo on the next control cycle (debounced poll).",
         "[OK] ZERO STRAPPING CONFLICTS: GPIO12 is strictly floating; GPIO0/GPIO2 boot safely into flash."
     ]
     for c_idx, item in enumerate(checklist):
@@ -608,22 +638,27 @@ def generate_colorful_schematic():
     # -------------------------------------------------------------------------
     # 8. SAVE OUTPUT FILES
     # -------------------------------------------------------------------------
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # FIX: save into hardware_docs/ (where the repo keeps these images), not next to the script
+    base_dir = find_hardware_docs(os.path.dirname(os.path.abspath(__file__)))
     os.makedirs(base_dir, exist_ok=True)
     out_master_png = os.path.normpath(os.path.join(base_dir, 'sdas_master_circuit_diagram.png'))
     out_master_jpg = os.path.normpath(os.path.join(base_dir, 'sdas_master_circuit_diagram.jpg'))
 
-    artifact_dir = os.path.normpath(r'C:\Users\adria\.gemini\antigravity\brain\0c14942f-4bad-47bf-874a-33bdb3daeaf3')
-    os.makedirs(artifact_dir, exist_ok=True)
-    out_artifact_png = os.path.normpath(os.path.join(artifact_dir, 'sdas_master_circuit_diagram.png'))
-    out_artifact_jpg = os.path.normpath(os.path.join(artifact_dir, 'sdas_master_circuit_diagram.jpg'))
-
     img.save(out_master_png, 'PNG', optimize=True)
     img.save(out_master_jpg, 'JPEG', quality=95)
-    img.save(out_artifact_png, 'PNG', optimize=True)
-    img.save(out_artifact_jpg, 'JPEG', quality=95)
+    saved = [out_master_png, out_master_jpg]
 
-    print(f"Colorful schematic successfully generated at:\n  {out_master_png}\n  {out_master_jpg}\n  {out_artifact_png}\n  {out_artifact_jpg}")
+    # FIX: no longer writes into one person's C:\Users\adria\.gemini folder.
+    # Set SDAS_EXTRA_OUTPUT_DIR for an extra copy.
+    extra_dir = os.environ.get('SDAS_EXTRA_OUTPUT_DIR')
+    if extra_dir:
+        os.makedirs(extra_dir, exist_ok=True)
+        for src in (out_master_png, out_master_jpg):
+            dst = os.path.join(extra_dir, os.path.basename(src))
+            img.save(dst, 'PNG' if dst.endswith('.png') else 'JPEG', quality=95)
+            saved.append(dst)
+
+    print("Colorful schematic successfully generated at:\n  " + "\n  ".join(saved))
 
 if __name__ == '__main__':
     generate_colorful_schematic()

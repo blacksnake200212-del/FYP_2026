@@ -48,24 +48,11 @@ export default function LoginScreen({ onLoginSuccess }) {
         password: loginPass
       });
 
+      // FIX (security): when Supabase rejected the password, the old code still logged the user
+      // in if the email contained "operator", "admin", "kantalai", "tabbowa" or "sltc.ac.lk",
+      // and the catch block below logged in ANY email with a 4+ character password.
+      // Wrong passwords are now always rejected.
       if (error) {
-        // Fallback for demo or field test user
-        if (
-          loginEmail.toLowerCase().includes('sltc.ac.lk') ||
-          loginEmail.toLowerCase().includes('tabbowa') ||
-          loginEmail.toLowerCase().includes('kantalai') ||
-          loginEmail.toLowerCase().includes('operator') ||
-          loginEmail.toLowerCase().includes('admin')
-        ) {
-          const role = loginEmail.includes('admin') ? 'ADMIN' : 'OPERATOR';
-          onLoginSuccess({
-            id: 'field-operator-session-001',
-            email: loginEmail,
-            role,
-            fullName: role === 'ADMIN' ? 'Chief Disaster Officer' : 'Eng. T. Perera'
-          });
-          return;
-        }
         throw error;
       }
 
@@ -88,17 +75,7 @@ export default function LoginScreen({ onLoginSuccess }) {
         });
       }
     } catch (err) {
-      // Allow instant field demo login if credentials match standard operator patterns
-      if (loginEmail && loginPass.length >= 4) {
-        onLoginSuccess({
-          id: 'field-operator-session-001',
-          email: loginEmail,
-          role: loginEmail.includes('admin') ? 'ADMIN' : 'OPERATOR',
-          fullName: 'Field Hydro Engineer'
-        });
-      } else {
-        Alert.alert('Login Failed', err.message || 'Please check your credentials.');
-      }
+      Alert.alert('Login Failed', err.message || 'Please check your credentials.');
     } finally {
       setIsLoading(false);
     }

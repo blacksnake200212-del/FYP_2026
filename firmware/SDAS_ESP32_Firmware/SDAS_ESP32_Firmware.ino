@@ -27,6 +27,16 @@ unsigned long lastFastUpdateMs      = 0;
 // Bench Testing Simulation Override (-1.0 = use real live sensors)
 float simulatedLevelPct = -1.0f;
 
+// FIX: remote commands arrive on Core 0 (network task) but the servo, state machine and
+// LEDs are driven from Core 1 (loop). Running the command directly on Core 0 changed shared
+// state from two cores at once with no lock, and RGB toggling blocked the network for 750 ms.
+// Commands are now put in a queue and executed by loop() on Core 1.
+struct RemoteCommand {
+    char command[40];
+    int  param;
+};
+static QueueHandle_t remoteCommandQueue = nullptr;
+
 void printSerialHelp() {
     Serial.println("\n=======================================================");
     Serial.println("         SDAS INTERACTIVE SERIAL MONITOR COMMANDS");
@@ -215,8 +225,9 @@ void handleSerialCommand(String cmd) {
     } else if (upper.equals("STATUS")) {
         const SystemStatus& status = stateMachine.getStatus();
         Serial.println("\n--- [CURRENT SYSTEM STATUS] ---");
+        // FIX: in live mode this always printed 0.0%
         Serial.printf("Water Level:       %.1f%% %s\n",
-            simulatedLevelPct >= 0.0f ? simulatedLevelPct : 0.0f,
+            simulatedLevelPct >= 0.0f ? simulatedLevelPct : sensorManager.getLastWaterLevelPct(),
             simulatedLevelPct >= 0.0f ? "(SIMULATED)" : "(LIVE)");
         Serial.printf("Gate Percentage:   %d%% (Target: %d%%)\n", status.actualGatePercent, status.targetGatePercent);
         Serial.printf("Alert State:       %d (%s)\n", (int)status.alertState,
@@ -237,14 +248,40 @@ void handleSerialCommand(String cmd) {
     }
 }
 
-// Command Callback for MQTT & Supabase Remote Operator Overrides
+// Command Callback for MQTT & Supabase Remote Operator Overrides.
+// Called on Core 0: only queues the command (see RemoteCommand above).
 void onRemoteOperatorCommand(const char* command, int param) {
+    if (remoteCommandQueue == nullptr) return;
+    RemoteCommand rc;
+    strncpy(rc.command, command, sizeof(rc.command) - 1);
+    rc.command[sizeof(rc.command) - 1] = '\0';
+    rc.param = param;
+    if (xQueueSend(remoteCommandQueue, &rc, 0) != pdTRUE) {
+        Serial.printf("[CMD] Remote command queue full, dropped: %s\n", command);
+    }
+}
+
+// Executes a remote command on Core 1 (called from loop()).
+void executeRemoteCommand(const char* command, int param) {
     Serial.printf("[CMD] Received Remote Command: %s (Param: %d)\n", command, param);
+    
+    if (strncmp(command, "TEST_SMS", 8) == 0) {
+        // FIX: dashboard / app "Ping" and "Test SMS" buttons. A TEST message, not a flood alert.
+        if (command[8] == ':') {
+            const char* phone = command + 9;
+            Serial.printf("[CMD] Test SMS to single number %s\n", phone);
+            gsmManager.queueSMS(phone, "SDAS TEST: Single-number SMS check from operator console. No flood alert.", false);
+        } else {
+            Serial.println("[CMD] Test SMS to all registered contacts");
+            gsmManager.broadcastAlert("SDAS TEST: SIM800L readiness check from operator console. No flood alert.", false);
+        }
+        return;
+    }
     
     if (strcmp(command, "OPEN") == 0) {
         int clampedParam = constrain(param, 0, GATE_PCT_MAX_LIMIT);
-        // Indefinite manual hold (duration = 0 prevents auto-revert to AUTO)
-        stateMachine.requestManualGatePercent(clampedParam, 0);
+        // Remote manual hold: reverts to AUTO after MANUAL_WATCHDOG_TIMEOUT_SEC (0 = forever)
+        stateMachine.requestManualGatePercent(clampedParam, MANUAL_WATCHDOG_TIMEOUT_SEC);
         actuatorManager.setTargetGatePercent(clampedParam);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
         // Instant visual LED feedback on HW-478 module (< 5ms)
@@ -255,20 +292,20 @@ void onRemoteOperatorCommand(const char* command, int param) {
         } else {
             actuatorManager.setRGBAlert(STATE_PRE_WARNING);
         }
-        Serial.printf("[CMD] Sluice gate set to %d%% (MANUAL MODE - Holding indefinitely)\n", clampedParam);
+        Serial.printf("[CMD] Sluice gate set to %d%% (MANUAL MODE - auto-revert in %d s)\n", clampedParam, MANUAL_WATCHDOG_TIMEOUT_SEC);
     } else if (strcmp(command, "CLOSE") == 0) {
         // Manual Close: Closes gate to 0% and STAYS in MANUAL mode!
-        stateMachine.requestManualGatePercent(0, 0);
+        stateMachine.requestManualGatePercent(0, MANUAL_WATCHDOG_TIMEOUT_SEC);
         actuatorManager.setTargetGatePercent(GATE_PCT_CLOSED);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
         // Instant visual LED feedback on HW-478 module (< 5ms)
         actuatorManager.setRGBAlert(stateMachine.getStatus().alertState); // Green if reservoir is safe
-        Serial.println("[CMD] Sluice gate CLOSED to 0% (MANUAL MODE - Holding closed)");
+        Serial.printf("[CMD] Sluice gate CLOSED to 0%% (MANUAL MODE - auto-revert in %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
     } else if (strcmp(command, "MANUAL") == 0) {
         // Explicitly lock into Manual Mode holding current gate position
-        stateMachine.requestManualGatePercent(stateMachine.getStatus().actualGatePercent, 0);
+        stateMachine.requestManualGatePercent(stateMachine.getStatus().actualGatePercent, MANUAL_WATCHDOG_TIMEOUT_SEC);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.println("[CMD] Switched to MANUAL mode (Autonomous auto-close inhibited)");
+        Serial.printf("[CMD] Switched to MANUAL mode (auto-revert to AUTO in %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
     } else if (strcmp(command, "AUTO") == 0) {
         // Return to Autonomous Mode
         stateMachine.revertToAuto();
@@ -311,7 +348,7 @@ void setup() {
 
     // 2. Initialize Sensors (Configures dual ultrasonic pins & DHT22)
     sensorManager.begin();
-    Serial.println("[INIT] Dual JSN-SR04T & DHT22 acoustic subsystem online");
+    Serial.println("[INIT] Dual HC-SR04 & DHT22 acoustic subsystem online");
 
     // 3. Initialize State Machine (Loads persistent gate state from NVS)
     stateMachine.begin();
@@ -322,6 +359,8 @@ void setup() {
     Serial.println("[INIT] SIM800L Cellular Modem initialized (16-slot priority queue)");
 
     // 5. Initialize Network & Cloud Telemetry (Spawns FreeRTOS Task on Core 0)
+    remoteCommandQueue = xQueueCreate(8, sizeof(RemoteCommand));
+    telemetryManager.setContactSink(&gsmManager);  // SMS recipients synced from Supabase
     telemetryManager.begin(onRemoteOperatorCommand);
     Serial.println("[INIT] Wi-Fi & MQTT FreeRTOS Core 0 background worker online");
 
@@ -345,6 +384,14 @@ void loop() {
     // ------------------------------------------------------------------------
     // ASYNCHRONOUS TASKS (Execute continuously on Core 1 without blocking)
     // ------------------------------------------------------------------------
+    // Execute remote (MQTT / Supabase) commands here on Core 1
+    if (remoteCommandQueue != nullptr) {
+        RemoteCommand rc;
+        while (xQueueReceive(remoteCommandQueue, &rc, 0) == pdTRUE) {
+            executeRemoteCommand(rc.command, rc.param);
+        }
+    }
+
     gsmManager.update();                              // Drives non-blocking AT command SMS dispatch
     stateMachine.checkPhysicalButtons(&actuatorManager); // Polls OPEN, CLOSE, E-STOP switches with instant response
 

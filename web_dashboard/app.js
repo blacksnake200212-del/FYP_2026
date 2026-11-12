@@ -77,8 +77,18 @@ const el = {
 };
 
 let packetCount = 0;
+// FIX: remember the last row processed. The 3s polling, the realtime channel and the
+// history fetch all deliver the same row, which previously added duplicate chart points,
+// inflated the packet counter and re-posted the same row to Google Sheets every 3 seconds.
 let lastProcessedRowKey = null;
 let lastSupabasePacketAt = 0;
+let lastDataFromMqtt = false; // true when the newest packet came from the public MQTT broker
+
+// FIX: the firmware now ignores commands on the public MQTT broker by default
+// (MQTT_ACCEPT_COMMANDS 0 in config.h), because anyone can publish to broker.emqx.io.
+// Commands go through the Supabase commands table only. Set this to true ONLY if you also set
+// MQTT_ACCEPT_COMMANDS to 1 in the firmware.
+const MQTT_COMMANDS_ENABLED = false;
 
 // Parse hardware packet into state
 function processTelemetryRow(row, options = {}) {
@@ -104,6 +114,7 @@ function processTelemetryRow(row, options = {}) {
   if (!isMqttSource && (Date.now() - state.lastPacketTime.getTime()) <= 30000) {
     lastSupabasePacketAt = Date.now();
   }
+  lastDataFromMqtt = isMqttSource;
 
   // Extract water level
   const pct = row.level_pct !== undefined && row.level_pct !== null
@@ -129,20 +140,21 @@ function processTelemetryRow(row, options = {}) {
   }
 
   // Extract environmental
-  if (row.temperature !== undefined && row.temperature !== null) {
-    state.temperatureC = parseFloat(row.temperature);
-  } else if (row.temperature_c !== undefined) {
-    state.temperatureC = parseFloat(row.temperature_c);
-  } else if (row.temp !== undefined) {
-    state.temperatureC = parseFloat(row.temp);
+  // FIX: the firmware now sends null when the DHT22 has no valid reading; parseFloat(null)
+  // is NaN, so treat null as "no reading" (0 -> shown as "--" and a DHT fault).
+  const rawTemp = row.temperature !== undefined ? row.temperature
+    : (row.temperature_c !== undefined ? row.temperature_c : row.temp);
+  if (rawTemp !== undefined) {
+    const t = rawTemp === null ? NaN : parseFloat(rawTemp);
+    state.temperatureC = Number.isFinite(t) ? t : 0.0;
   } else if (!isMqttSource) {
     state.temperatureC = 0.0;
   }
 
   if (!isMqttSource || row.humidity !== undefined || row.humidity_pct !== undefined) {
-    state.humidityPct = row.humidity !== undefined && row.humidity !== null
-      ? parseFloat(row.humidity)
-      : (row.humidity_pct !== undefined ? parseFloat(row.humidity_pct) : 0.0);
+    const rawHum = row.humidity !== undefined && row.humidity !== null ? row.humidity : row.humidity_pct;
+    const h = rawHum === undefined || rawHum === null ? NaN : parseFloat(rawHum);
+    state.humidityPct = Number.isFinite(h) ? h : 0.0;
   }
 
   state.speedOfSound = parseFloat((331.4 + 0.606 * state.temperatureC).toFixed(1));
@@ -167,16 +179,17 @@ function processTelemetryRow(row, options = {}) {
   const stateMap = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
   state.alertState = stateMap[state.alertCode] || 'NORMAL';
 
-  // Add to recent history for chart (avoid duplicate timestamp from initial history load)
+  // Add to recent history for chart (skipped when the history loader already added this point,
+  // or when the point has the same timestamp as the last one)
   const lastHist = state.recentHistory[state.recentHistory.length - 1];
-  if (!lastHist || lastHist.time.getTime() !== state.lastPacketTime.getTime()) {
+  if (!options.skipHistory && (!lastHist || lastHist.time.getTime() !== state.lastPacketTime.getTime())) {
     state.recentHistory.push({
       time: state.lastPacketTime,
       level: state.waterLevelPct
     });
-    if (state.recentHistory.length > 25) {
-      state.recentHistory.shift();
-    }
+  }
+  if (state.recentHistory.length > 25) {
+    state.recentHistory.shift();
   }
 
   // Update UI components
@@ -186,6 +199,11 @@ function processTelemetryRow(row, options = {}) {
   if (!isMqttSource) {
     triggerGoogleSheetsAutoSync(row);
   }
+}
+
+// FIX: both ultrasonic sensors timing out means the level reading is not real.
+function bothSensorsFailed() {
+  return state.sensor1Dist <= 0 && state.sensor2Dist <= 0;
 }
 
 // Update DOM elements with live telemetry
@@ -200,7 +218,10 @@ function renderUI(rawRow) {
   // 1. Sync Status Badge (Strictly checks real hardware presence)
   if (isOnline) {
     el.syncBadge.className = 'status-badge live';
-    el.syncText.textContent = `🟢 LIVE: ${timeStr}`;
+    // MQTT packets come from a public broker and are not checked, so say where the data came from.
+    el.syncText.textContent = lastDataFromMqtt
+      ? `🟢 LIVE via MQTT (unverified): ${timeStr}`
+      : `🟢 LIVE: ${timeStr}`;
   } else {
     const ageSec = Math.round(packetAgeMs / 1000);
     const ageStr = ageSec < 60 ? `${ageSec}s ago` : `${Math.round(ageSec / 60)}m ago`;
@@ -250,7 +271,18 @@ function renderUI(rawRow) {
       }
     };
 
-    const currentAlert = alertConfig[state.alertState] || alertConfig.NORMAL;
+    let currentAlert = alertConfig[state.alertState] || alertConfig.NORMAL;
+    // FIX: the node was reporting NORMAL / "All sensor nodes nominal" while both
+    // HC-SR04 sensors returned -1 (timeout). Never show a green "safe" banner
+    // when the water level is not actually being measured.
+    if (bothSensorsFailed()) {
+      currentAlert = {
+        class: 'alert-banner pre-warning',
+        icon: '🔧',
+        title: 'Water Level Unknown: Both Ultrasonic Sensors Timing Out',
+        sub: 'Distance 1 and 2 are -1 cm, so the level shown is not a real measurement. Check HC-SR04 power (5V), level-shifter wiring and Trig/Echo pins.'
+      };
+    }
     el.alertBanner.className = currentAlert.class;
     el.alertIcon.textContent = currentAlert.icon;
     el.alertTitle.textContent = currentAlert.title;
@@ -358,7 +390,8 @@ function renderUI(rawRow) {
   el.dhtHum.textContent = state.humidityPct > 0 ? `${state.humidityPct.toFixed(1)}%` : '--';
   el.dhtSpeed.textContent = `${state.speedOfSound} m/s`;
   el.dhtStatus.className = dhtOk ? 'sensor-state-pill ok' : 'sensor-state-pill fault';
-  el.dhtStatus.textContent = isOnline ? 'ONLINE' : 'OFFLINE';
+  // FIX: showed ONLINE even when the DHT22 gave no reading
+  el.dhtStatus.textContent = isOnline ? (dhtOk ? 'ONLINE' : 'NO READING') : 'OFFLINE';
 
   // 9. Node Health & Packets
   el.nodePackets.textContent = `${packetCount} Packets`;
@@ -533,7 +566,9 @@ async function fetchHistoricalPoints() {
           time: new Date(r.created_at),
           level: parseFloat(r.level_pct || r.water_level_pct || 0.0)
         }));
-        processTelemetryRow(sorted[sorted.length - 1]);
+        // FIX: the latest point is already in recentHistory, so do not push it a second time
+        processTelemetryRow(sorted[sorted.length - 1], { skipHistory: true });
+        drawChart(); // redraw even if the latest row had already been processed by the poller
       }
     }
   } catch (e) {
@@ -633,7 +668,33 @@ function updateMqttStatusPill(status, details) {
   }
 }
 
+let mqttRetryTimer = null;
+
+function scheduleMqttRetry(delayMs) {
+  // FIX: onConnectionLost/onFailure and the manual reconnect click each started their own
+  // setTimeout chain, so several reconnect loops (and clients) could run at once.
+  if (mqttRetryTimer) clearTimeout(mqttRetryTimer);
+  mqttRetryTimer = setTimeout(() => {
+    mqttRetryTimer = null;
+    initMqttWebSocket();
+  }, delayMs);
+}
+
 function initMqttWebSocket() {
+  if (mqttRetryTimer) {
+    clearTimeout(mqttRetryTimer);
+    mqttRetryTimer = null;
+  }
+  // Close any previous client before creating a new one
+  if (pahoMqttClient) {
+    try {
+      pahoMqttClient.onConnectionLost = () => {};
+      if (pahoMqttClient.isConnected()) pahoMqttClient.disconnect();
+    } catch (e) {}
+    pahoMqttClient = null;
+    isMqttConnected = false;
+  }
+
   if (typeof Paho === 'undefined' || !Paho.MQTT) {
     console.warn('[MQTT WebSocket] Paho library not loaded, using Supabase Cloud Sync.');
     updateMqttStatusPill('offline', 'Using Cloud Sync');
@@ -658,7 +719,7 @@ function initMqttWebSocket() {
       updateMqttStatusPill('offline', 'Reconnecting...');
       // Switch to alternative broker on disconnect
       activeBrokerIndex = (activeBrokerIndex + 1) % MQTT_BROKERS.length;
-      setTimeout(initMqttWebSocket, 5000);
+      scheduleMqttRetry(5000);
     };
 
     pahoMqttClient.onMessageArrived = (message) => {
@@ -700,7 +761,7 @@ function initMqttWebSocket() {
         updateMqttStatusPill('offline', 'Cloud Sync Active');
         // Try next candidate broker
         activeBrokerIndex = (activeBrokerIndex + 1) % MQTT_BROKERS.length;
-        setTimeout(initMqttWebSocket, 6000);
+        scheduleMqttRetry(6000);
       }
     });
   } catch (err) {
@@ -778,6 +839,7 @@ async function applyAuthenticatedUser(user) {
 
   updateOperatorUiState();
   closeAuthModal();
+  loadEmergencyContacts(); // reload with the operator's permissions
 }
 
 function applyLoggedOutState() {
@@ -899,7 +961,7 @@ async function handleSupabaseSignIn(email, password) {
       // Check for email confirmation requirement
       if (error.message && error.message.toLowerCase().includes('email not confirmed')) {
         if (errBox) {
-          errBox.innerHTML = `⚠️ <b>Email Confirmation Pending!</b><br>Supabase has sent a confirmation link to <code>${escapeHtml(email)}</code>.<br><small>To unlock immediately on bench test, use the <b>Master Emergency PIN (1234)</b> below.</small>`;
+          errBox.innerHTML = `⚠️ <b>Email Confirmation Pending!</b><br>Supabase has sent a confirmation link to <code>${escapeHtml(email)}</code>.<br><small>Confirm the email, or use the Master Emergency PIN below for bench testing.</small>`;
           errBox.style.display = 'block';
         }
         const pinRow = document.getElementById('pin-fallback-row');
@@ -1023,7 +1085,7 @@ function handleMasterPinUnlock(enteredPin) {
 
     updateOperatorUiState();
     closeAuthModal();
-    showCommandFeedback('⚡ Master Emergency Access Granted (PIN 1234). Actuators and broadcast enabled.', 'success');
+    showCommandFeedback('⚡ Master Emergency Access Granted (bench PIN). Actuators and broadcast enabled.', 'success');
   } else {
     alert('⚠️ Invalid Master Emergency PIN!');
   }
@@ -1059,10 +1121,11 @@ function showCommandFeedback(msg, type = 'waiting') {
 }
 
 // Command Dispatch: Dual Dispatch (MQTT WebSocket + Supabase commands table)
-async function dispatchGateCommand(cmdType, targetPct = 0) {
+// Returns { mqttSuccess, supabaseSuccess } so callers can report the real outcome.
+async function dispatchGateCommand(cmdType, targetPct = 0, extraParams = {}) {
   if (!operatorSession.isAuthorized) {
     openAuthModal();
-    return;
+    return { mqttSuccess: false, supabaseSuccess: false };
   }
 
   // Safety clamp check (hard-limit 50%)
@@ -1074,9 +1137,15 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
   let supabaseSuccess = false;
 
   // 1. Send via HiveMQ MQTT WebSocket (Instant hardware reaction on ESP32)
-  if (pahoMqttClient && isMqttConnected) {
+  if (MQTT_COMMANDS_ENABLED && pahoMqttClient && isMqttConnected) {
     try {
-      const msg = new Paho.MQTT.Message(cmdType);
+      // Test SMS: send "TEST_SMS" / "TEST_SMS:+94..." so the firmware sends a test text, not a
+      // real flood pre-warning to everyone (firmware fix in network_telemetry.cpp).
+      let mqttPayload = cmdType;
+      if (cmdType === 'PREWARN_SMS' && extraParams.test_only) {
+        mqttPayload = extraParams.target_phone ? `TEST_SMS:${extraParams.target_phone}` : 'TEST_SMS';
+      }
+      const msg = new Paho.MQTT.Message(mqttPayload);
       msg.destinationName = 'dam/puttalam/commands';
       msg.qos = 1;
       pahoMqttClient.send(msg);
@@ -1088,46 +1157,66 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
 
   // 2. Insert into Supabase commands table for cloud audit trail & mobile app sync
   try {
+    // FIX: issued_by has a foreign key to auth.users. The Master-PIN session used the fake id
+    // 00000000-...-0001, which does not exist in auth.users, so every PIN-session insert
+    // failed. Only send a real Supabase user id.
     const payload = {
       schema_version: 1,
       type: cmdType,
-      issued_by: (operatorSession.id && operatorSession.id.length === 36) ? operatorSession.id : null,
+      issued_by: operatorSession.user ? operatorSession.user.id : null,
       params: {
         operator: operatorSession.fullName,
         operator_email: operatorSession.email,
         operator_role: operatorSession.role,
         target_percent: clampedPct,
-        issued_via: 'SDAS Web Console (Supabase Authenticated)',
-        timestamp: new Date().toISOString()
+        issued_via: operatorSession.user ? 'SDAS Web Console (Supabase Authenticated)' : 'SDAS Web Console (Master PIN)',
+        timestamp: new Date().toISOString(),
+        ...extraParams
       },
       status: 'PENDING',
       expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString()
     };
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/commands`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (res.ok) {
-      supabaseSuccess = true;
+    if (supabaseClient) {
+      // FIX: insert through the Supabase client so the signed-in operator's JWT is sent
+      // (the old raw fetch always used the anon key, so RLS could never tell who issued it).
+      const { error } = await supabaseClient.from('commands').insert(payload);
+      if (error) {
+        console.warn('[Supabase Commands] Insert error:', error.message);
+      } else {
+        supabaseSuccess = true;
+      }
     } else {
-      console.warn('[Supabase Commands] HTTP Error:', res.status);
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/commands`, {
+        method: 'POST',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) supabaseSuccess = true;
+      else console.warn('[Supabase Commands] HTTP Error:', res.status, await res.text());
     }
   } catch (err) {
     console.warn('[Supabase Commands] Insert failed:', err.message);
   }
 
   // Construct status report
-  const mqttLabel = mqttSuccess ? '⚡ MQTT Sent (<100ms)' : '⚠️ Direct MQTT Offline';
-  const dbLabel = supabaseSuccess ? '☁️ Supabase Audited (Executing via Cloud Sync)' : '⚠️ DB Sync Pending';
-  showCommandFeedback(`[${timeStr}] Command '${cmdType}' (${clampedPct}%) &bull; ${dbLabel} &bull; ${mqttLabel}`, 'success');
+  // FIX: showCommandFeedback uses textContent, so '&bull;' was shown literally. Also it always
+  // reported 'success' even when both channels failed.
+  const mqttLabel = !MQTT_COMMANDS_ENABLED
+    ? 'node picks it up within ~5 s'
+    : (mqttSuccess ? '⚡ MQTT Sent' : '⚠️ Direct MQTT Offline');
+  const dbLabel = supabaseSuccess ? '☁️ Logged to Supabase' : '❌ Supabase insert FAILED (see browser console)';
+  const outcome = (mqttSuccess || supabaseSuccess) ? 'success' : 'error';
+  showCommandFeedback(`[${timeStr}] Command '${cmdType}' (${clampedPct}%) • ${dbLabel} • ${mqttLabel}`, outcome);
+
+  if (!mqttSuccess && !supabaseSuccess) {
+    return { mqttSuccess, supabaseSuccess }; // nothing was sent, do not fake a mode change
+  }
 
   // Optimistically update local control mode and lock against stale telemetry (6s lock)
   state.commandGraceUntil = Date.now() + 6000;
@@ -1162,6 +1251,8 @@ async function dispatchGateCommand(cmdType, targetPct = 0) {
       btnManualMode.classList.remove('active-mode');
     }
   }
+
+  return { mqttSuccess, supabaseSuccess };
 }
 
 // Emergency Contacts Management
@@ -1202,15 +1293,14 @@ async function loadEmergencyContacts() {
   } catch (e) {}
 
   // Fetch from Supabase contacts table
+  // FIX: use the Supabase client so a signed-in operator's JWT is sent. Required once
+  // rls_hardening.sql stops anonymous visitors from reading phone numbers.
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/contacts?select=*`, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      }
-    });
-    if (res.ok) {
-      const dbContacts = await res.json();
+    const { data: dbContacts, error } = supabaseClient
+      ? await supabaseClient.from('contacts').select('*')
+      : { data: null, error: new Error('Supabase client not loaded') };
+    if (error) console.warn('[Contacts Load]', error.message);
+    if (!error) {
       if (Array.isArray(dbContacts)) {
         dbContacts.forEach(row => {
           const rawPhone = row.phone_encrypted || row.phone_number || '';
@@ -1322,65 +1412,94 @@ async function addEmergencyContact(name, rawPhone, role) {
   const customList = contactsList.filter(c => !c.isDefault);
   localStorage.setItem('sdas_custom_contacts', JSON.stringify(customList));
 
-  // Attempt Supabase insert
+  // Supabase insert
+  // FIX: the old fetch() never checked the HTTP status, so a rejected insert still showed
+  // "Added". The node reads contacts from Supabase, so a local-only contact gets no SMS.
+  let dbOk = false;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/contacts`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    if (supabaseClient) {
+      const { error } = await supabaseClient.from('contacts').insert({
         name: name,
         phone_encrypted: phone,
-        role: role,
+        role: role || 'OPERATOR',
         recipient_group: 'OPERATOR',
         tier: 1,
         opted_in: true
-      })
-    });
+      });
+      if (error) console.warn('[Contacts Save] Supabase:', error.message);
+      else dbOk = true;
+    }
   } catch (e) {
     console.warn('[Contacts Save] Supabase sync:', e.message);
   }
 
   renderContactsTable();
-  showCommandFeedback(`✅ Added '${name}' (${phone}) to SIM800L emergency broadcast list!`, 'success');
+  showCommandFeedback(
+    dbOk
+      ? `✅ Saved '${name}' (${phone}) in Supabase. The node downloads the contact list every 10 minutes and will text this number in the next alert (needs the device key set up, see database/README.md).`
+      : `⚠️ '${name}' saved on this page only. Supabase insert failed, so the node will NOT text this number yet.`,
+    dbOk ? 'success' : 'error'
+  );
 }
 
 // Delete emergency contact
-function deleteEmergencyContact(id) {
+// FIX: previously only removed the row from the page and localStorage, so the number came
+// straight back from the Supabase contacts table on the next reload and kept receiving SMS.
+async function deleteEmergencyContact(id) {
   if (!operatorSession.isAuthorized) {
     openAuthModal();
     return;
   }
 
   const idx = contactsList.findIndex(c => c.id === id);
-  if (idx !== -1) {
-    const removed = contactsList.splice(idx, 1)[0];
-    const customList = contactsList.filter(c => !c.isDefault);
-    localStorage.setItem('sdas_custom_contacts', JSON.stringify(customList));
-    renderContactsTable();
-    showCommandFeedback(`🗑️ Removed '${removed.name}' from broadcast list.`, 'waiting');
+  if (idx === -1) return;
+  const removed = contactsList[idx];
+  if (!confirm(`Remove '${removed.name}' (${removed.phone}) from the SMS broadcast list?`)) return;
+
+  let dbOk = true;
+  if (supabaseClient) {
+    // Rows may be stored as '+94...' or the seed format 'enc_aes256_+94...'
+    const { error } = await supabaseClient
+      .from('contacts')
+      .delete()
+      .in('phone_encrypted', [removed.phone, `enc_aes256_${removed.phone}`]);
+    if (error) {
+      dbOk = false;
+      console.warn('[Contacts Delete] Supabase:', error.message);
+    }
   }
+
+  contactsList.splice(idx, 1);
+  const customList = contactsList.filter(c => !c.isDefault);
+  localStorage.setItem('sdas_custom_contacts', JSON.stringify(customList));
+  renderContactsTable();
+  showCommandFeedback(
+    dbOk
+      ? `🗑️ Removed '${removed.name}' from broadcast list (page and Supabase).`
+      : `⚠️ Removed '${removed.name}' from this page, but the Supabase delete failed. It may reappear after reload.`,
+    dbOk ? 'waiting' : 'error'
+  );
 }
 
 // Test individual contact SMS ping
-function testSingleContactSms(phone, name) {
+// FIX: this used to send PREWARN_SMS (an alert to EVERY contact) and then, after a fixed
+// 1.2 s timer, claimed the SMS had been delivered even though nothing confirmed it.
+// It now tells the firmware which single number to test and reports only what really happened.
+async function testSingleContactSms(phone, name) {
   if (!operatorSession.isAuthorized) {
     openAuthModal();
     return;
   }
 
-  showCommandFeedback(`🔔 Triggering test SMS dispatch to ${name} (${phone})...`, 'waiting');
-  dispatchGateCommand('PREWARN_SMS', 0);
-  setTimeout(() => {
-    showCommandFeedback(`✅ Diagnostic test SMS dispatched to ${name} (${phone}) via SIM800L transmitter!`, 'success');
-  }, 1200);
+  showCommandFeedback(`🔔 Queuing test SMS for ${name} (${phone})...`, 'waiting');
+  const result = await dispatchGateCommand('PREWARN_SMS', 0, { test_only: true, target_phone: phone, target_name: name });
+  if (result && (result.supabaseSuccess || result.mqttSuccess)) {
+    showCommandFeedback(`📡 Test SMS request for ${name} (${phone}) queued. Delivery is confirmed only when the node marks the command EXECUTED.`, 'success');
+  }
 }
 
 // Broadcast full emergency SMS
-function triggerFullEmergencyBroadcast() {
+async function triggerFullEmergencyBroadcast() {
   if (!operatorSession.isAuthorized) {
     openAuthModal();
     return;
@@ -1389,8 +1508,10 @@ function triggerFullEmergencyBroadcast() {
   const confirmMsg = `Are you sure you want to trigger an EMERGENCY SMS BROADCAST to all ${contactsList.length} registered contacts?`;
   if (!confirm(confirmMsg)) return;
 
-  dispatchGateCommand('PREWARN_SMS', 0);
-  showCommandFeedback(`📢 EMERGENCY FLOOD ALERT broadcast triggered to all ${contactsList.length} numbers via SIM800L cellular link!`, 'success');
+  const result = await dispatchGateCommand('PREWARN_SMS', 0, { test_only: false });
+  if (result && (result.supabaseSuccess || result.mqttSuccess)) {
+    showCommandFeedback(`📢 Emergency broadcast request for ${contactsList.length} numbers sent to the node. Delivery is confirmed only when the node marks it EXECUTED.`, 'success');
+  }
 }
 
 // ============================================================================
@@ -1425,6 +1546,32 @@ function triggerGoogleSheetsAutoSync(row) {
   sendTelemetryToGoogleSheet(payload);
 }
 
+// FIX: Batch Export sent raw database rows (level_pct, distance_1, alert_state = 3 ...) while
+// live sync sent water_level_pct, sensor_1_dist, alert_stage = 'DANGER' ... so the Apps Script
+// received two different formats. Both now use the same row shape.
+function readingToSheetRow(r) {
+  const level = parseFloat(r.level_pct ?? r.water_level_pct ?? 0) || 0;
+  const depth = (level / 100) * DAM_TOTAL_HEIGHT_M;
+  const stages = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+  const modes = ['AUTO', 'MANUAL', 'EMERGENCY_STOP'];
+  return {
+    created_at: r.created_at,
+    node_id: r.device_id || 'SDAS-NODE-01',
+    water_level_pct: level,
+    depth_m: parseFloat(depth.toFixed(2)),
+    freeboard_m: parseFloat(Math.max(0, DAM_TOTAL_HEIGHT_M - depth).toFixed(2)),
+    sensor_1_dist: r.distance_1 ?? -1,
+    sensor_2_dist: r.distance_2 ?? -1,
+    sensors_agreed: Boolean(r.sensors_agreed),
+    temperature_c: r.temperature ?? 0,
+    humidity_pct: r.humidity ?? 0,
+    gate_percent: r.gate_percent ?? 0,
+    alert_stage: stages[r.alert_state] || 'UNKNOWN',
+    control_mode: modes[r.control_mode] || 'UNKNOWN',
+    source: 'SDAS Web Batch Export'
+  };
+}
+
 async function sendTelemetryToGoogleSheet(data, isBatch = false) {
   const statusBox = document.getElementById('sheets-sync-status');
   const inputUrl = document.getElementById('input-sheets-webhook');
@@ -1454,11 +1601,13 @@ async function sendTelemetryToGoogleSheet(data, isBatch = false) {
       mode: 'no-cors'
     });
 
+    // Note: mode 'no-cors' means the browser cannot read Google's reply, so "sent" is the most
+    // this page can know. Check the Sheet itself to confirm rows arrived.
     if (statusBox) {
       statusBox.className = 'sheets-status-bar success';
       statusBox.textContent = isBatch
-        ? `✅ Successfully synced batch readings to Google Sheet at ${timeStr}!`
-        : `🟢 Telemetry row logged to Google Sheet at ${timeStr} (Level: ${state.waterLevelPct.toFixed(1)}%)`;
+        ? `📤 Sent ${Array.isArray(data) ? data.length : 1} readings to Google Sheet at ${timeStr} (check the sheet to confirm).`
+        : `🟢 Telemetry row sent to Google Sheet at ${timeStr} (Level: ${state.waterLevelPct.toFixed(1)}%)`;
     }
   } catch (err) {
     if (statusBox) {
@@ -1539,16 +1688,11 @@ window.addEventListener('DOMContentLoaded', () => {
   if (tabBtnSignin) tabBtnSignin.addEventListener('click', () => switchAuthTab('signin'));
   if (tabBtnSignup) tabBtnSignup.addEventListener('click', () => switchAuthTab('signup'));
 
-  // Quick Demo account auto-fill
+  // FIX (security): this button filled in a real operator email AND password, which were
+  // therefore public in the page source and on GitHub. Anyone could sign in and move the gate.
+  // The button is removed from index.html; change that account's password in Supabase.
   if (btnQuickFill) {
-    btnQuickFill.addEventListener('click', () => {
-      const emailInput = document.getElementById('signin-email');
-      const passInput = document.getElementById('signin-password');
-      if (emailInput && passInput) {
-        emailInput.value = 'test.operator.sdas@gmail.com';
-        passInput.value = 'sdasoperator2026';
-      }
-    });
+    btnQuickFill.remove();
   }
 
   // Toggle password visibility
@@ -1558,10 +1702,10 @@ window.addEventListener('DOMContentLoaded', () => {
       if (passInput) {
         if (passInput.type === 'password') {
           passInput.type = 'text';
-          btnTogglePass.textContent = 'Hide';
+          btnTogglePass.textContent = 'Hide Password';
         } else {
           passInput.type = 'password';
-          btnTogglePass.textContent = 'Show';
+          btnTogglePass.textContent = 'Show Password';
         }
       }
     });
@@ -1635,18 +1779,24 @@ window.addEventListener('DOMContentLoaded', () => {
   // Dual Sensors Toggle Button in Diagnostic Matrix
   const btnDualSensors = document.getElementById('btn-toggle-dual-sensors');
   if (btnDualSensors) {
-    btnDualSensors.addEventListener('click', () => {
-      dispatchGateCommand('SENSOR_2', 2);
-      showCommandFeedback('⚡ Dispatched Dual Sensor Activation (GPIO 5/19 + 18/21) to ESP32!', 'success');
+    btnDualSensors.addEventListener('click', async () => {
+      // FIX: success used to be shown immediately, overwriting a failed dispatch.
+      // SENSOR_2 is not a gate command, so the target percent is 0.
+      const r = await dispatchGateCommand('SENSOR_2', 0);
+      if (r && (r.mqttSuccess || r.supabaseSuccess)) {
+        showCommandFeedback('⚡ Dual Sensor Activation (GPIO 5/19 + 18/21) sent to ESP32.', 'success');
+      }
     });
   }
 
   // RGB LED Polarity Inversion Button
   const btnToggleRgb = document.getElementById('btn-toggle-rgb');
   if (btnToggleRgb) {
-    btnToggleRgb.addEventListener('click', () => {
-      dispatchGateCommand('RGB', 0);
-      showCommandFeedback('🎨 Dispatched RGB Polarity Inversion (Anode/Cathode) to ESP32!', 'success');
+    btnToggleRgb.addEventListener('click', async () => {
+      const r = await dispatchGateCommand('RGB', 0);
+      if (r && (r.mqttSuccess || r.supabaseSuccess)) {
+        showCommandFeedback('🎨 RGB Polarity Inversion (Anode/Cathode) sent to ESP32.', 'success');
+      }
     });
   }
 
@@ -1658,21 +1808,33 @@ window.addEventListener('DOMContentLoaded', () => {
   if (gateSlider && gateSliderVal) {
     gateSlider.addEventListener('input', () => {
       const val = parseInt(gateSlider.value, 10);
-      const angle = Math.round((val / 100.0) * 180);
-      gateSliderVal.textContent = `${val}% (${angle}°)`;
+      const preset = val === 0 ? 0 : (val <= 20 ? 20 : 50);
+      const angle = Math.round((preset / 100.0) * 180);
+      gateSliderVal.textContent = preset === val
+        ? `${val}% (${angle}°)`
+        : `${val}% → sends ${preset}% (${angle}°)`;
     });
   }
+
+  // FIX: the hardware only understands the presets CLOSE / OPEN_20 / OPEN_50 (the MQTT payload is
+  // just the command name). Choosing 30% used to send OPEN_50 while the log said "30%", so the gate
+  // opened further than the operator asked. The slider now says which preset will be sent and asks
+  // for confirmation when it differs from the chosen value.
+  const sliderToPreset = (val) => {
+    if (val === 0) return { cmd: 'CLOSE', pct: 0 };
+    if (val <= 20) return { cmd: 'OPEN_20', pct: 20 };
+    return { cmd: 'OPEN_50', pct: 50 };
+  };
 
   if (btnApplySlider && gateSlider) {
     btnApplySlider.addEventListener('click', () => {
       const val = parseInt(gateSlider.value, 10);
-      if (val === 0) {
-        dispatchGateCommand('CLOSE', 0);
-      } else if (val <= 20) {
-        dispatchGateCommand('OPEN_20', val);
-      } else {
-        dispatchGateCommand('OPEN_50', val);
+      const preset = sliderToPreset(val);
+      if (preset.pct !== val) {
+        const ok = confirm(`The gate only supports 0%, 20% and 50%. ${val}% will be sent as ${preset.cmd} (${preset.pct}%). Continue?`);
+        if (!ok) return;
       }
+      dispatchGateCommand(preset.cmd, preset.pct);
     });
   }
 
@@ -1688,7 +1850,8 @@ window.addEventListener('DOMContentLoaded', () => {
         return;
       }
       showCommandFeedback('🔔 Dispatching SIM800L transmitter ping diagnostic...', 'waiting');
-      dispatchGateCommand('PREWARN_SMS', 0);
+      // FIX: flag this as a test so the firmware can send a test message instead of a real flood alert
+      dispatchGateCommand('PREWARN_SMS', 0, { test_only: true });
     });
   }
 
@@ -1768,7 +1931,8 @@ window.addEventListener('DOMContentLoaded', () => {
         if (res.ok) {
           const readings = await res.json();
           if (Array.isArray(readings) && readings.length > 0) {
-            await sendTelemetryToGoogleSheet(readings, true);
+            // oldest first so rows land in time order
+            await sendTelemetryToGoogleSheet(readings.slice().reverse().map(readingToSheetRow), true);
           } else {
             if (statusBox) statusBox.textContent = 'ℹ️ No readings found in Supabase database.';
           }

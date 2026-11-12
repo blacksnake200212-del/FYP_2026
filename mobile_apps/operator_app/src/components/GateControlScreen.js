@@ -17,7 +17,7 @@ import {
   CheckIcon
 } from '../Icons';
 import { supabase } from '../supabaseClient';
-import { COMMAND_SCHEMA_VERSION } from '../updateService';
+import { sendGateCommand } from '../commandService';
 
 export default function GateControlScreen({ operatorUser, onBack }) {
   const [currentGatePercent, setCurrentGatePercent] = useState(0);
@@ -49,16 +49,12 @@ export default function GateControlScreen({ operatorUser, onBack }) {
     fetchStatus();
   }, []);
 
-  // Mode Toggle Handlers
+  // Mode Toggle Handlers (FIX: switches only move after the command is accepted)
   const handleToggleAuto = (val) => {
-    setIsAutoMode(val);
-    setIsManualMode(!val);
     handleExecuteCommand(val ? 'AUTO' : 'MANUAL', 0);
   };
 
   const handleToggleManual = (val) => {
-    setIsManualMode(val);
-    setIsAutoMode(!val);
     handleExecuteCommand(val ? 'MANUAL' : 'AUTO', 0);
   };
 
@@ -68,19 +64,12 @@ export default function GateControlScreen({ operatorUser, onBack }) {
     const clampedPct = Math.min(Math.max(targetPct, 0), 50);
 
     try {
-      await supabase.from('commands').insert([
-        {
-          schema_version: COMMAND_SCHEMA_VERSION,
-          type: cmdType,
-          params: {
-            target_percent: clampedPct,
-            operator: operatorUser?.email || 'operator@kantalai.gov.lk'
-          },
-          issued_by: operatorUser?.id || null,
-          status: 'PENDING',
-          expires_at: new Date(Date.now() + 10000).toISOString()
-        }
-      ]);
+      const result = await sendGateCommand(cmdType, operatorUser, clampedPct);
+      if (!result.ok) {
+        // FIX: failures used to show "Command Dispatched" too
+        Alert.alert('Command NOT Sent', `"${cmdType}" was rejected by the server: ${result.message}`);
+        return;
+      }
 
       if (cmdType === 'OPEN_20' || cmdType === 'OPEN_50') {
         setCurrentGatePercent(clampedPct);
@@ -88,15 +77,23 @@ export default function GateControlScreen({ operatorUser, onBack }) {
         setIsAutoMode(false);
       } else if (cmdType === 'CLOSE') {
         setCurrentGatePercent(0);
-      } else if (cmdType === 'ESTOP') {
-        setCurrentGatePercent(0);
+        setIsManualMode(true);   // the firmware holds CLOSE in MANUAL mode
         setIsAutoMode(false);
+      } else if (cmdType === 'ESTOP') {
+        // FIX: E-STOP freezes the gate where it is; it does not close it (was shown as 0%)
+        setIsAutoMode(false);
+        setIsManualMode(false);
+      } else if (cmdType === 'AUTO') {
+        setIsAutoMode(true);
+        setIsManualMode(false);
+      } else if (cmdType === 'MANUAL') {
         setIsManualMode(true);
+        setIsAutoMode(false);
       }
 
-      Alert.alert('Command Dispatched', `Hardware command "${cmdType}" transmitted to ESP32 gate controller.`);
+      Alert.alert('Command Queued', `"${cmdType}" saved. The ESP32 picks it up within about 5 seconds if it is online.`);
     } catch (err) {
-      Alert.alert('Command Dispatched', `Command "${cmdType}" recorded locally.`);
+      Alert.alert('Command NOT Sent', err.message || 'Network error');
     } finally {
       setIsDispatching(false);
     }

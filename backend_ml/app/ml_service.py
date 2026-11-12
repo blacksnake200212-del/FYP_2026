@@ -16,6 +16,10 @@ from .weather_service import weather_service
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "saved_models")
 
+# FIX: must match the firmware (config.h SENSOR_MOUNT_HEIGHT_CM = 50). This used 65 cm, the
+# value in the synthetic data generator, so the water depth computed here was 15 cm too high.
+SENSOR_MOUNT_HEIGHT_CM = 50.0
+
 class MLService:
     def __init__(self):
         self.forecast_bundle = self._load_model("water_level_forecaster.joblib")
@@ -42,7 +46,10 @@ class MLService:
         """
         Predicts water level percentage 1 hour ahead (t + 60 min).
         """
-        levels = np.array(req.history_levels_60m)
+        levels = np.array(req.history_levels_60m, dtype=float)
+        if len(levels) == 0:
+            # FIX: np.pad(mode="edge") crashes on an empty array -> HTTP 500
+            levels = np.array([req.current_water_level_pct], dtype=float)
         if len(levels) < 15:
             # Pad or extrapolate if insufficient history
             levels = np.pad(levels, (max(0, 60 - len(levels)), 0), mode="edge")
@@ -112,9 +119,27 @@ class MLService:
         """
         d1 = req.sensor_1_dist_cm
         d2 = req.sensor_2_dist_cm
+
+        # FIX: the firmware sends -1 for "no echo". Two dead sensors have delta 0, so they were
+        # reported as NOMINAL_HEALTHY / "safe for automated closed-loop gate regulation".
+        if d1 <= 0 or d2 <= 0:
+            both = d1 <= 0 and d2 <= 0
+            return AnomalyCheckResponse(
+                is_anomaly=True,
+                reconstruction_mse=0.0,
+                anomaly_threshold=0.0,
+                sensor_delta_cm=0.0 if both else round(abs(d1 - d2), 2),
+                anomaly_verdict="BOTH_SENSORS_NO_ECHO" if both else "SINGLE_SENSOR_NO_ECHO",
+                recommended_action=(
+                    "No valid water level. Inspect HC-SR04 power, level shifter and wiring; do not trust automatic gate control."
+                    if both else
+                    "One sensor has no echo. Run on the healthy sensor (degraded mode) and repair the failed one."
+                ),
+            )
+
         delta = abs(d1 - d2)
         prev_level = req.previous_level_cm if req.previous_level_cm else 25.0
-        cur_level = 65.0 - ((d1 + d2) / 2.0)
+        cur_level = SENSOR_MOUNT_HEIGHT_CM - ((d1 + d2) / 2.0)
         rate = abs(cur_level - prev_level)
 
         features = np.array([[d1, d2, delta, rate]])
@@ -171,8 +196,13 @@ class MLService:
             rf = self.rf_bundle["model"]
             pred_id = int(rf.predict(features)[0])
             probs = rf.predict_proba(features)[0]
-            prob_dict = {class_names[i]: round(float(probs[i]), 3) for i in range(len(class_names))}
-            confidence = float(probs[pred_id])
+            # FIX: predict_proba columns follow rf.classes_, not 0..3. If the training data lacked
+            # a class, probs[i] / probs[pred_id] raised IndexError or picked the wrong class.
+            classes = [int(c) for c in rf.classes_]
+            prob_dict = {name: 0.0 for name in class_names}
+            for col, cls in enumerate(classes):
+                prob_dict[class_names[cls]] = round(float(probs[col]), 3)
+            confidence = float(probs[classes.index(pred_id)])
         else:
             # Rule-based fallback
             if req.water_level_pct >= 85.0:
@@ -189,7 +219,7 @@ class MLService:
         recommendations = {
             "NORMAL": "Maintain baseline 5-second monitoring. Gates closed.",
             "PRE-WARNING": "Reservoir reaching 60%. Issue mobile advisory; hold gate closed to conserve water.",
-            "CLEAR AREA": "Reservoir at 80%. Automated 30% gate release active. Clear riverbanks.",
+            "CLEAR AREA": "Reservoir at 80%. Automated 20% gate release active. Clear riverbanks.",
             "DANGER": "CRITICAL 85%+: Automated 50% gate release. Audible siren active. Initiate downstream evacuation."
         }
 

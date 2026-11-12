@@ -1,10 +1,16 @@
 #include "gsm_modem.h"
 
+// Spinlock for the synced recipient list (written by the network task on Core 0,
+// read by broadcastAlert on Core 1)
+static portMUX_TYPE g_recipientsMux = portMUX_INITIALIZER_UNLOCKED;
+
 GSMManager::GSMManager()
     : simSerial(2), modemReady(false), isNetworkRegistered(false),
       signalQuality(0), lastHeartbeatMs(0), lastRegistrationCheckMs(0),
       queueHead(0), queueTail(0), queueCount(0), txState(TX_IDLE),
-      txStepTimeoutMs(0), txRetryUntilMs(0), currentJobIndex(-1), rxBuffer("") {
+      txStepTimeoutMs(0), txRetryUntilMs(0), currentJobIndex(-1), rxBuffer(""),
+      syncedCount(0) {
+    memset(syncedRecipients, 0, sizeof(syncedRecipients));
     for (int i = 0; i < SMS_QUEUE_SIZE; i++) {
         queue[i].inUse = false;
         queue[i].isPriority = false;
@@ -210,8 +216,43 @@ bool GSMManager::queueSMS(const char* recipient, const char* message, bool isPri
     return true;
 }
 
+void GSMManager::setRecipients(const char recipients[][20], int count) {
+    if (count < 0) count = 0;
+    if (count > MAX_SMS_CONTACTS) count = MAX_SMS_CONTACTS;
+    portENTER_CRITICAL(&g_recipientsMux);
+    for (int i = 0; i < count; i++) {
+        strncpy(syncedRecipients[i], recipients[i], 19);
+        syncedRecipients[i][19] = '\0';
+    }
+    syncedCount = count;
+    portEXIT_CRITICAL(&g_recipientsMux);
+}
+
+int GSMManager::getRecipientCount() {
+    portENTER_CRITICAL(&g_recipientsMux);
+    int n = syncedCount;
+    portEXIT_CRITICAL(&g_recipientsMux);
+    return n;
+}
+
 void GSMManager::broadcastAlert(const char* message, bool isPriority) {
-    // Staged delivery targeting all 4 registered user testing numbers
+    // FIX: send to the numbers downloaded from Supabase (contacts added in the dashboard / app).
+    // Falls back to the 4 config.h numbers if the list has never been downloaded.
+    char local[MAX_SMS_CONTACTS][20];
+    int n;
+    portENTER_CRITICAL(&g_recipientsMux);
+    n = syncedCount;
+    memcpy(local, syncedRecipients, sizeof(local));
+    portEXIT_CRITICAL(&g_recipientsMux);
+
+    if (n > 0) {
+        Serial.printf("[GSM] Broadcasting to %d contacts from Supabase\n", n);
+        for (int i = 0; i < n; i++) {
+            queueSMS(local[i], message, isPriority);
+        }
+        return;
+    }
+    // Fallback: the 4 registered numbers in config.h
     queueSMS(CONTACT_OPERATOR_1, message, isPriority);
     queueSMS(CONTACT_OPERATOR_2, message, isPriority);
     queueSMS(CONTACT_OPERATOR_3, message, isPriority);
@@ -270,7 +311,13 @@ void GSMManager::update() {
                 }
                 
                 // If not yet registered on cell tower, verify registration now
+                // FIX: checkNetworkRegistration() busy-waits 800 ms. It used to run on EVERY
+                // loop() pass while an SMS was waiting with no signal, freezing the servo,
+                // LEDs and the physical E-STOP button for ~0.8 s at a time. Now every 5 s.
                 if (!isNetworkRegistered) {
+                    static unsigned long lastHoldCheckMs = 0;
+                    if (now - lastHoldCheckMs < 5000) return;
+                    lastHoldCheckMs = now;
                     checkNetworkRegistration();
                     if (!isNetworkRegistered) {
                         static unsigned long lastSearchLog = 0;

@@ -14,7 +14,7 @@ You can run and test the complete audited circuit, sensors, actuators, disaster 
 | **Ultrasonic Sensor 1** | `wokwi-hc-sr04` | Trig: **GPIO5**, Echo: **GPIO19** | Simulates JSN-SR04T #1 (Water level primary transducer) |
 | **Ultrasonic Sensor 2** | `wokwi-hc-sr04` | Trig: **GPIO18**, Echo: **GPIO21** | Simulates JSN-SR04T #2 (Redundant plausibility verification) |
 | **Environmental Sensor** | `wokwi-dht22` | Data: **GPIO4** | Dynamic temperature/humidity for acoustic velocity formula |
-| **Sluice Gate Servo** | `wokwi-servo` | PWM: **GPIO25** | Simulates MG996R gate arm (0% = 0°, 20% = 36°, 50% = 90° max limit) |
+| **Sluice Gate Servo** | `wokwi-servo` | PWM: **GPIO25** | Simulates the MG90S gate arm (0% = 0°, 20% = 36°, 50% = 90° max limit) |
 | **4-Tier Alert RGB LED** | `wokwi-rgb-led` (Common Anode) | R: **GPIO32**, G: **GPIO33**, B: **GPIO13** | Visual alert indicator (Green, Yellow, Orange, Red, Magenta) |
 | **Audio Alarm / Siren** | `wokwi-buzzer` | Signal: **GPIO27** | Audible alarm with 4 distinct cadences driven via BC547 driver |
 | **Manual OPEN Button** | `wokwi-pushbutton` (Green) | Signal: **GPIO14** $\rightarrow$ GND | Steps gate open: 0% $\rightarrow$ 20% $\rightarrow$ 50% (MAX) [Key: O] |
@@ -59,16 +59,16 @@ You can run and test the complete audited circuit, sensors, actuators, disaster 
 While the simulation is running, you can click on any component to adjust its values and watch the system respond in real time:
 
 ### Scenario 1: Normal Reservoir Baseline (< 60%)
-- **How to test:** Click on **Sensor 1** and **Sensor 2** and set distance to **45 cm**.
+- **How to test:** Click on **Sensor 1** and **Sensor 2** and set distance to **40 cm**.
 - **Expected Behavior:**
-  - Water Level $\approx 50.0\%$
+  - Water Level $\approx 25.0\%$
   - Alert State: **NORMAL**
   - Gate Servo: **0% (0° - Closed)**
   - RGB LED: **Green**
   - Buzzer: **Silent**
 
 ### Scenario 2: Pre-Warning Advisory (60.0% – 79.9%)
-- **How to test:** Set both ultrasonic sensors to **37 cm**.
+- **How to test:** Set both ultrasonic sensors to **22 cm**.
 - **Expected Behavior:**
   - Water Level $\approx 70.0\%$
   - Alert State: **PRE-WARNING**
@@ -78,7 +78,7 @@ While the simulation is running, you can click on any component to adjust its va
   - Serial Console: Prints staged pre-warning SMS alert.
 
 ### Scenario 3: Automated Clear Area Gate Release (80.0% – 84.9%)
-- **How to test:** Set both ultrasonic sensors to **32 cm**.
+- **How to test:** Set both ultrasonic sensors to **17 cm**.
 - **Expected Behavior:**
   - Water Level $\approx 82.5\%$
   - Alert State: **CLEAR AREA**
@@ -87,7 +87,7 @@ While the simulation is running, you can click on any component to adjust its va
   - Buzzer: **Pulsed warning (400ms ON / 400ms OFF)**
 
 ### Scenario 4: Critical Danger Flood Emergency ( $\ge$ 85%)
-- **How to test:** Set both ultrasonic sensors to **28 cm**.
+- **How to test:** Set both ultrasonic sensors to **13 cm**.
 - **Expected Behavior:**
   - Water Level $\approx 92.5\%$
   - Alert State: **DANGER**
@@ -97,17 +97,26 @@ While the simulation is running, you can click on any component to adjust its va
   - Serial Console: Simulated SIM800L dispatches emergency SMS to **Chief Irrigation Engineer**, **DMC**, and **Divisional Secretariat**.
 
 ### Scenario 5: Verifying 3% Hysteresis (Anti-Chatter)
-- **How to test:** After entering **DANGER** ($\ge 85\%$), slide the distance back to **31.5 cm** (Level $\approx 83.7\%$).
+- **How to test:** After entering **DANGER** ($\ge 85\%$), slide the distance back to **16.5 cm** (Level $\approx 83.8\%$).
 - **Expected Behavior:**
   - The system **remains in DANGER** with the gate at 50% because the level has not dropped below the exit threshold ($85\% - 3\% = 82\%$).
-  - Once distance is increased to **33 cm** (Level $< 82\%$), it safely transitions back to CLEAR AREA.
+  - Once distance is increased to **17.5 cm** (Level $\approx 81.3\% < 82\%$), it safely transitions back to CLEAR AREA.
 
 ### Scenario 6: Sensor Divergence / Fault Detection (Plausibility Engine)
-- **How to test:** Set **Sensor 1 to 25 cm** and **Sensor 2 to 45 cm** ($\Delta = 20\text{ cm} > 5\text{ cm}$).
+- **How to test:** Set **Sensor 1 to 20 cm** and **Sensor 2 to 40 cm** ($\Delta = 20\text{ cm} > 5\text{ cm}$).
 - **Expected Behavior:**
   - Plausibility engine detects acoustic mismatch: `[WARNING] Sensor Divergence! (Delta=20.0cm > 5cm)`.
   - Enters **DEGRADED MODE**: selects the conservative fail-safe reading.
   - RGB LED: **Magenta / Purple** warning.
+
+### Scenario 6b: Dead / Unplugged Sensors (No Echo)
+- **How to test:** In `diagram.json`, disconnect the ECHO wires of both HC-SR04 sensors (or remove them), then restart.
+- **Expected Behavior:**
+  - Serial Console: `[FAULT] No echo from BOTH ultrasonic sensors - water level unknown!`
+  - Alert State: **SENSOR FAULT** (it no longer pretends the tank is empty / NORMAL).
+  - RGB LED: **Magenta / Purple**.
+
+> **Level formula used in this sketch (same as the real firmware):** sensor mounted **50 cm** above the tank floor, 40 cm usable depth, so `Level % = (50 − distance) / 40 × 100`. A sensor left at a distance beyond 50 cm is treated as "not in use", so you can drive the level with just one sensor.
 
 ### Scenario 7: Manual Override & Safety Watchdog
 - **How to test:**

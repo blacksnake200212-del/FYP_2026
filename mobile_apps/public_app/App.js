@@ -80,9 +80,9 @@ export default function PublicApp() {
     condition: dhtData.condition,
     tempC: dhtData.temperature,
     feelsLikeC: dhtData.temperature > 0 ? Math.round(dhtData.temperature + 2) : 0,
-    windSpeedKmh: 12,
+    windSpeedKmh: null,   // FIX: was a fixed 12 km/h shown as real weather
     humidityPct: dhtData.humidity,
-    rainChancePct: 20,
+    rainChancePct: null,  // FIX: was a fixed 20% shown as real weather
     sunrise: '5:52 AM',
     sunset: '6:12 PM'
   };
@@ -206,7 +206,40 @@ export default function PublicApp() {
   const remainingM = Math.max(0, totalHeightM - parseFloat(currentLevelM)).toFixed(2);
 
   // Status Badge Configuration
+  // FIX (public safety): the old badge had only Danger / Pre-Warning / Normal.
+  //  - CLEAR AREA (80-85%, "evacuate riverbanks") was shown as "Pre-Warning".
+  //  - A sensor fault (MAINTENANCE) or stale/offline data showed green "No danger at the moment".
   const getStatusBadge = () => {
+    if (lastSyncTime === 'Connecting...') {
+      return {
+        label: 'Connecting...',
+        sub: 'Loading the latest dam status.',
+        bg: '#F1F5F9',
+        border: '#E2E8F0',
+        text: '#475569',
+        icon: <InfoCircleIcon size={18} color="#475569" />
+      };
+    }
+    if (!hasRealTelemetry) {
+      return {
+        label: 'Status Not Live',
+        sub: `No update from the dam since ${lastSyncTime || 'unknown'}. Conditions may have changed - follow local authorities (DMC 117).`,
+        bg: '#FEF3C7',
+        border: '#FDE68A',
+        text: '#B45309',
+        icon: <AlertTriangleIcon size={18} color="#B45309" />
+      };
+    }
+    if (alertKey === 'MAINTENANCE') {
+      return {
+        label: 'Sensor Check in Progress',
+        sub: 'Water level reading is unavailable. Follow local authorities (DMC 117).',
+        bg: '#FEF3C7',
+        border: '#FDE68A',
+        text: '#B45309',
+        icon: <AlertTriangleIcon size={18} color="#B45309" />
+      };
+    }
     if (waterLevel >= 85 || alertKey === 'DANGER') {
       return {
         label: 'CRITICAL DANGER',
@@ -215,6 +248,16 @@ export default function PublicApp() {
         border: '#FECACA',
         text: '#DC2626',
         icon: <AlertTriangleIcon size={18} color="#DC2626" />
+      };
+    }
+    if (waterLevel >= 80 || alertKey === 'CLEAR_AREA') {
+      return {
+        label: 'Clear Area',
+        sub: 'Gate opening 20%. Move away from riverbanks and spillway areas now.',
+        bg: '#FFEDD5',
+        border: '#FED7AA',
+        text: '#C2410C',
+        icon: <AlertTriangleIcon size={18} color="#C2410C" />
       };
     }
     if (waterLevel >= 60 || alertKey === 'PRE_WARNING') {
@@ -303,6 +346,8 @@ export default function PublicApp() {
     return (
       <ReportFloodScreen
         t={t}
+        userLocation={null /* no GPS permission in this app yet: citizen types the place */}
+        onReportSubmitted={() => setCurrentScreen('HOME')}
         onBack={() => setCurrentScreen('HOME')}
       />
     );

@@ -3,7 +3,8 @@
 
 SensorManager::SensorManager() 
     : activeSensorCount(ACTIVE_ULTRASONIC_COUNT),
-      previousWaterLevelCm(0.0f), previousSampleTimeMs(0) {
+      previousWaterLevelCm(0.0f), previousSampleTimeMs(0),
+      consecutiveFailCycles(0), lastDhtOkMs(0) {
     memset(&currentData, 0, sizeof(SensorData));
 }
 
@@ -33,9 +34,12 @@ void SensorManager::begin() {
         activeSensorCount,
         activeSensorCount == 1 ? "Single Sensor Mode - Primary HC-SR04 on GPIO5/19" : "Dual Sensor Voting Mode - S1(GPIO5/19) + S2(GPIO18/21)");
     
-    // Default initial readings
-    currentData.temperature_c = 28.0f; // Typical Puttalam ambient baseline
+    // Default values used ONLY for speed-of-sound compensation until the DHT22 answers.
+    // FIX: these used to be uploaded as if they were real readings (every row in the
+    // Google Sheet export showed exactly 28 C / 75 %). dht_valid now tells the truth.
+    currentData.temperature_c = 28.0f;
     currentData.humidity_pct = 75.0f;
+    currentData.dht_valid = false;
     currentData.speed_of_sound_mps = calculateSpeedOfSound(28.0f);
 }
 
@@ -57,6 +61,10 @@ float SensorManager::calculateSpeedOfSound(float tempC) {
 
 // Low-overhead DHT22 bit-banging driver for field resilience
 void SensorManager::readDHTSensors() {
+    // FIX: mark the DHT22 invalid if there has been no good reading for DHT_STALE_MS
+    if (millis() - lastDhtOkMs > DHT_STALE_MS) {
+        currentData.dht_valid = false;
+    }
     uint8_t data[5] = {0, 0, 0, 0, 0};
     
     // Wakeup sequence: Pull line LOW for >= 1 ms, then HIGH for 30 us
@@ -117,6 +125,8 @@ void SensorManager::readDHTSensors() {
             currentData.temperature_c = finalTemp;
             currentData.humidity_pct = rawHumidity;
             currentData.speed_of_sound_mps = calculateSpeedOfSound(finalTemp);
+            currentData.dht_valid = true;
+            lastDhtOkMs = millis();
         }
     }
 }
@@ -188,17 +198,22 @@ void SensorManager::testRawPing() {
 float SensorManager::measureFilteredUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound) {
     float samples[3];
     int validCount = 0;
+    int blindCount = 0;
     
     for (int i = 0; i < 3; i++) {
         float d = measureSingleUltrasonic(trigPin, echoPin, speedOfSound);
         if (d >= 3.0f && d <= SENSOR_MAX_VALID_DIST_CM) {
             samples[validCount++] = d;
+        } else if (d > 0.0f && d < 3.0f) {
+            blindCount++; // echo inside the HC-SR04 blind zone: water is AT the sensor
         }
         delay(12);
     }
     
     if (validCount == 0) {
-        return -1.0f; // Open space / no obstacle within 5m
+        // FIX: water inside the blind zone means a FULL tank, not "no reading".
+        if (blindCount >= 2) return SENSOR_MIN_VALID_DIST_CM;
+        return -1.0f; // No echo at all = sensor fault (wiring, power, or out of range)
     }
     
     // Simple sort for median
@@ -234,23 +249,16 @@ SensorData SensorManager::sampleAndVerify() {
     currentData.raw_dist_2_cm = d2;
     currentData.timestamp_ms = now;
     
-    // --- Step 2: Physical Range & Open-Air Plausibility ---
-    // If no echo returned (-1.0f), the acoustic path is completely open to the room (> 5 meters).
-    // In reservoir geometry, distance >= 50cm represents an EMPTY reservoir (0% water level).
-    if (d1 < 0.0f) {
-        d1 = SENSOR_MOUNT_HEIGHT_CM; // 50 cm -> 0% capacity (Normal Green, Silent!)
-        currentData.sensor_1_valid = true;
-    } else {
-        currentData.sensor_1_valid = (d1 >= 3.0f && d1 <= SENSOR_MAX_VALID_DIST_CM);
-    }
+    // --- Step 2: Physical Range Plausibility ---
+    // FIX (safety-critical): a timeout (-1) used to be replaced by 50 cm and marked VALID,
+    // i.e. "tank empty, 0%". A disconnected sensor, a dead 5V rail, or water covering the
+    // sensor therefore reported a safe EMPTY tank, and AUTO mode CLOSED the gate.
+    // The sensor tank floor is only 50 cm away, so a real HC-SR04 always gets an echo:
+    // no echo is now treated as a sensor fault.
+    currentData.sensor_1_valid = (d1 >= SENSOR_MIN_VALID_DIST_CM && d1 <= SENSOR_MAX_VALID_DIST_CM);
     
     if (activeSensorCount >= 2) {
-        if (d2 < 0.0f) {
-            d2 = SENSOR_MOUNT_HEIGHT_CM;
-            currentData.sensor_2_valid = true;
-        } else {
-            currentData.sensor_2_valid = (d2 >= 3.0f && d2 <= SENSOR_MAX_VALID_DIST_CM);
-        }
+        currentData.sensor_2_valid = (d2 >= SENSOR_MIN_VALID_DIST_CM && d2 <= SENSOR_MAX_VALID_DIST_CM);
     } else {
         currentData.sensor_2_valid = false;
     }
@@ -291,13 +299,20 @@ SensorData SensorManager::sampleAndVerify() {
         currentData.degraded_mode = true;
         currentData.critical_sensor_fault = false;
     } else {
-        // Genuine Critical Failure: Both sensors offline/disconnected
-        currentData.critical_sensor_fault = true;
-        currentData.degraded_mode = true;
+        // Both sensors gave no usable reading this cycle.
+        // FIX: one bad cycle (splash, cross-talk) no longer raises a fault + SMS; only
+        // SENSOR_FAULT_CONFIRM_CYCLES failures in a row do. The last level is kept meanwhile.
         currentData.sensors_in_agreement = false;
-        // Retain last known safe water level
+        currentData.degraded_mode = true;
+        if (consecutiveFailCycles < 255) consecutiveFailCycles++;
+        // previousSampleTimeMs == 0 means there has never been a good reading since boot, so there
+        // is no "last level" to keep: report the fault at once instead of a default 0% (which
+        // would make AUTO mode close a gate that was open before the reboot).
+        currentData.critical_sensor_fault = (consecutiveFailCycles >= SENSOR_FAULT_CONFIRM_CYCLES) ||
+                                            (previousSampleTimeMs == 0);
         return currentData;
     }
+    consecutiveFailCycles = 0;
     
     // --- Step 4: Water Level Calculation ---
     // Water Depth = Total Height from Tank Floor to Sensor - Measured Distance

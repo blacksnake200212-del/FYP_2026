@@ -1,6 +1,36 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
+
+def find_hardware_docs(start):
+    """Walk up from this script until a folder containing hardware_docs/ is found.
+    The scripts live in tools/diagram_generators/ but the images belong in hardware_docs/."""
+    here = start
+    while True:
+        if os.path.isdir(os.path.join(here, 'hardware_docs')):
+            return os.path.join(here, 'hardware_docs')
+        parent = os.path.dirname(here)
+        if parent == here:
+            return start  # not found: fall back to the script's own folder
+        here = parent
+
+def wrap_text(draw, text, font, max_width):
+    """FIX: wrap by measured pixel width. The old code split text into only 2 lines by
+    character count, so long steps overflowed into the right-hand column, and a short word
+    could jump back onto line 1 after line 2 had started (words printed out of order)."""
+    lines, current = [], ""
+    for word in text.split():
+        trial = (current + " " + word).strip()
+        if draw.textlength(trial, font=font) <= max_width or not current:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines
+
+
 def generate_xl4015_guide():
     W, H = 2600, 1920
     img = Image.new('RGB', (W, H), (248, 250, 252))
@@ -22,17 +52,26 @@ def generate_xl4015_guide():
     W_GND       = (30, 41, 59)     # Dark Charcoal (GND)
 
     # Fonts
+    # FIX: Windows-only font paths made every other OS fall back to PIL's tiny bitmap font.
     font_paths = [
         "C:\\Windows\\Fonts\\segoeui.ttf",
-        "C:\\Windows\\Fonts\\arial.ttf"
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "/Library/Fonts/Arial.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     bold_paths = [
         "C:\\Windows\\Fonts\\segoeuib.ttf",
-        "C:\\Windows\\Fonts\\arialbd.ttf"
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "/Library/Fonts/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     ]
     mono_paths = [
         "C:\\Windows\\Fonts\\consola.ttf",
-        "C:\\Windows\\Fonts\\cour.ttf"
+        "C:\\Windows\\Fonts\\cour.ttf",
+        "/System/Library/Fonts/Menlo.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
     ]
 
     f_hero = ImageFont.load_default()
@@ -79,7 +118,7 @@ def generate_xl4015_guide():
     draw.text((in_x + 35, in_y + 124), "• Battery: 11.1V (Low 3S) - 12.6V (Full 3S BMS)", fill=TEXT_MUTED, font=f_small)
 
     stages = [
-        ("FUSE 5A", "Fast-acting inline fuse protects from dead shorts"),
+        ("FUSE 3A", "Fast-acting inline fuse; 3 A so it blows before the 3 A 1N5408 diode"),
         ("1N5408 DIODE", "Series reverse-polarity blocking diode (3A rating)"),
         ("SMBJ15A TVS", "Transient Voltage Suppressor clamps spikes >15V"),
         ("SPST SWITCH", "Master DC power cutoff switch"),
@@ -88,7 +127,7 @@ def generate_xl4015_guide():
     cur_sy = in_y + 185
     for st_title, st_desc in stages:
         draw.rounded_rectangle([in_x + 20, cur_sy, in_x + in_w - 20, cur_sy + 48], radius=6, fill=(248, 250, 252), outline=(226, 232, 240), width=1)
-        draw.text((in_x + 35, cur_sy + 8), "✔ " + st_title, fill=TEXT_MAIN, font=f_small_bold)
+        draw.text((in_x + 35, cur_sy + 8), "• " + st_title, fill=TEXT_MAIN, font=f_small_bold)
         draw.text((in_x + 35, cur_sy + 26), st_desc, fill=TEXT_MUTED, font=f_small)
         cur_sy += 58
 
@@ -320,17 +359,8 @@ def generate_xl4015_guide():
     for st_title, st_body in calib_steps:
         draw.text((bot_x + 50, c_sy), st_title, fill=TEXT_MAIN, font=f_small_bold)
         c_sy += 24
-        words = st_body.split(' ')
-        l1, l2 = "", ""
-        for w in words:
-            if len(l1 + w) < 95:
-                l1 += w + " "
-            else:
-                l2 += w + " "
-        draw.text((bot_x + 50, c_sy), l1, fill=TEXT_MUTED, font=f_small)
-        c_sy += 20
-        if l2:
-            draw.text((bot_x + 50, c_sy), l2, fill=TEXT_MUTED, font=f_small)
+        for line in wrap_text(draw, st_body, f_small, 1130):
+            draw.text((bot_x + 50, c_sy), line, fill=TEXT_MUTED, font=f_small)
             c_sy += 20
         c_sy += 14
 
@@ -353,16 +383,9 @@ def generate_xl4015_guide():
         draw.rounded_rectangle([r_col_x + 20, br_y, bot_x + bot_w - 50, br_y + 88], radius=6, fill=BG_CARD, outline=(226, 232, 240), width=1)
         draw.ellipse([r_col_x + 35, br_y + 18, r_col_x + 55, br_y + 38], fill=r_col)
         draw.text((r_col_x + 70, br_y + 14), r_title, fill=TEXT_MAIN, font=f_small_bold)
-        words = r_desc.split(' ')
-        l1, l2 = "", ""
-        for w in words:
-            if len(l1 + w) < 70:
-                l1 += w + " "
-            else:
-                l2 += w + " "
-        draw.text((r_col_x + 70, br_y + 38), l1, fill=TEXT_MUTED, font=f_small)
-        if l2:
-            draw.text((r_col_x + 70, br_y + 58), l2, fill=TEXT_MUTED, font=f_small)
+        desc_lines = wrap_text(draw, r_desc, f_small, (bot_x + bot_w - 60) - (r_col_x + 70))
+        for li, line in enumerate(desc_lines[:2]):  # card has room for 2 lines
+            draw.text((r_col_x + 70, br_y + 38 + li * 20), line, fill=TEXT_MUTED, font=f_small)
         br_y += 100
 
     # Verification Badge
@@ -371,22 +394,28 @@ def generate_xl4015_guide():
     draw.text((r_col_x + 40, bot_y + bot_h - 68), "Authors: Dias Adrian, AAA Aadhil, JMRA Dilshan • Faculty of Computing & Information Technology", fill=(6, 95, 70), font=f_small)
 
     # 6. Save Outputs
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # FIX: save into hardware_docs/ (where the repo keeps these images), not next to the script
+    base_dir = find_hardware_docs(os.path.dirname(os.path.abspath(__file__)))
     os.makedirs(base_dir, exist_ok=True)
     out_png = os.path.normpath(os.path.join(base_dir, 'xl4015_power_routing_guide.png'))
     out_jpg = os.path.normpath(os.path.join(base_dir, 'xl4015_power_routing_guide.jpg'))
 
-    artifact_dir = os.path.normpath(r'C:\Users\adria\.gemini\antigravity\brain\0c14942f-4bad-47bf-874a-33bdb3daeaf3')
-    os.makedirs(artifact_dir, exist_ok=True)
-    art_png = os.path.normpath(os.path.join(artifact_dir, 'xl4015_power_routing_guide.png'))
-    art_jpg = os.path.normpath(os.path.join(artifact_dir, 'xl4015_power_routing_guide.jpg'))
-
     img.save(out_png, 'PNG', optimize=True)
     img.save(out_jpg, 'JPEG', quality=95)
-    img.save(art_png, 'PNG', optimize=True)
-    img.save(art_jpg, 'JPEG', quality=95)
+    saved = [out_png, out_jpg]
 
-    print(f"XL4015 Routing Guide successfully generated:\n  {out_png}\n  {out_jpg}\n  {art_png}\n  {art_jpg}")
+    # FIX: a second copy was always written to one person's AI-assistant folder
+    # (C:\Users\adria\.gemini\...). On other PCs that created a stray folder or crashed.
+    # Set SDAS_EXTRA_OUTPUT_DIR if you want an extra copy somewhere.
+    extra_dir = os.environ.get('SDAS_EXTRA_OUTPUT_DIR')
+    if extra_dir:
+        os.makedirs(extra_dir, exist_ok=True)
+        for src in (out_png, out_jpg):
+            dst = os.path.join(extra_dir, os.path.basename(src))
+            img.save(dst, 'PNG' if dst.endswith('.png') else 'JPEG', quality=95)
+            saved.append(dst)
+
+    print("XL4015 Routing Guide successfully generated:\n  " + "\n  ".join(saved))
 
 if __name__ == '__main__':
     generate_xl4015_guide()

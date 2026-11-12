@@ -79,8 +79,11 @@ def generate_sdas_dataset(num_hours: int = 168, output_path: str = "backend_ml/d
     water_level_pct = (water_level_cm / 40.0) * 100.0
 
     # 4. Sensor Measurement Synthesis with Speed-of-Sound Compensation
-    # Distance from sensor (mounted at 65 cm) = 65 - water_level_cm
-    true_distance_cm = 65.0 - water_level_cm
+    # Distance from sensor = mount height - water_level_cm
+    # FIX: was 65 cm; the real tank and firmware (config.h) use 50 cm. Re-run all 4 training
+    # scripts after changing this so the saved models match the hardware.
+    SENSOR_MOUNT_HEIGHT_CM = 50.0
+    true_distance_cm = SENSOR_MOUNT_HEIGHT_CM - water_level_cm
     
     # Speed of sound v = 331.4 + 0.606 * T
     speed_of_sound = 331.4 + (0.606 * temp_ambient)

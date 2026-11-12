@@ -55,8 +55,12 @@ void SDASStateMachine::begin() {
     int savedMode = preferences.getInt("ctrl_mode", (int)MODE_AUTO);
     if (savedMode == (int)MODE_MANUAL) {
         currentStatus.controlMode = MODE_MANUAL;
-        currentStatus.manualModeExpiryMs = 0; // 0 = Indefinite Manual Lock (Operator holds full control)
-        Serial.printf("[FSM] Restored persistent MANUAL mode from NVS (Gate: %d%%)\n", savedGate);
+        // FIX: after a reboot nobody may be watching, so a restored MANUAL mode also reverts to
+        // AUTO after MANUAL_WATCHDOG_TIMEOUT_SEC (it used to hold forever).
+        currentStatus.manualModeExpiryMs = (MANUAL_WATCHDOG_TIMEOUT_SEC > 0)
+            ? millis() + (MANUAL_WATCHDOG_TIMEOUT_SEC * 1000UL) : 0;
+        Serial.printf("[FSM] Restored MANUAL mode from NVS (Gate: %d%%). Auto-revert in %d s.\n",
+            savedGate, MANUAL_WATCHDOG_TIMEOUT_SEC);
     } else {
         currentStatus.controlMode = MODE_AUTO;
         currentStatus.manualModeExpiryMs = 0;
@@ -282,10 +286,21 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
         if (!previousFaultState) {
             previousFaultState = true;
             actuators.setBuzzerPattern(BUZZER_SHORT_BEEP);
-            currentStatus.smsDispatchRequired = true;
-            currentStatus.smsIsPriority = true;
             currentStatus.lastAlertMessage = "[SDAS CRITICAL FAULT] Water level sensors offline. Automated gate holds position. Urgent inspection required.";
+            // FIX: a loose wire that flickers between OK and fault used to send a new SMS to
+            // all 4 numbers on every flicker. Limit fault SMS to one per FAULT_SMS_MIN_INTERVAL_MS.
+            static unsigned long lastFaultSmsMs = 0;
+            static bool faultSmsSent = false;
+            if (!faultSmsSent || (now - lastFaultSmsMs) >= FAULT_SMS_MIN_INTERVAL_MS) {
+                faultSmsSent = true;
+                lastFaultSmsMs = now;
+                currentStatus.smsDispatchRequired = true;
+                currentStatus.smsIsPriority = true;
+            }
         }
+        // Keep the servo moving to any target set before the fault (gate holds that target)
+        actuators.updateServoMotion();
+        currentStatus.actualGatePercent = actuators.getCurrentGatePercent();
         return;
     } else {
         previousFaultState = false;
@@ -338,15 +353,26 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
             break;
             
         case STATE_SENSOR_FAULT:
-            if (!sensorData.critical_sensor_fault) {
+            // FIX: on recovery the old code always went to NORMAL first and only reached the real
+            // stage 2 s later. Evaluate the real level immediately using the entry thresholds.
+            if (level >= THRESH_DANGER_PCT) {
+                nextAlert = STATE_DANGER;
+            } else if (level >= THRESH_CLEARAREA_PCT) {
+                nextAlert = STATE_CLEAR_AREA;
+            } else if (level >= THRESH_PREWARN_PCT) {
+                nextAlert = STATE_PRE_WARNING;
+            } else {
                 nextAlert = STATE_NORMAL;
             }
             break;
     }
     
-    // Check if alert state stepped UP (escalation only) to trigger automatic SMS
+    // Check if alert state stepped UP (escalation only) to trigger automatic SMS.
+    // FIX: STATE_SENSOR_FAULT has the value 4, so DANGER (3) after a fault never counted as an
+    // escalation and no DANGER SMS was sent. Compare a recovering fault against NORMAL instead.
+    AlertState escalationBase = (previousAlert == STATE_SENSOR_FAULT) ? STATE_NORMAL : previousAlert;
     if (nextAlert != previousAlert) {
-        if (nextAlert > previousAlert) {
+        if (nextAlert > escalationBase) {
             // Escalation: Send SMS broadcast
             if (nextAlert == STATE_PRE_WARNING) {
                 currentStatus.smsDispatchRequired = true;

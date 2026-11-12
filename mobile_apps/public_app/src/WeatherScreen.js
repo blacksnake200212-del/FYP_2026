@@ -23,9 +23,9 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
     condition: 'Live Telemetry',
     tempC: 0.0,
     feelsLikeC: 0.0,
-    windSpeedKmh: 12,
+    windSpeedKmh: null,
     humidityPct: 0.0,
-    rainChancePct: 20,
+    rainChancePct: null,
     sunrise: '5:52 AM',
     sunset: '6:12 PM'
   };
@@ -107,7 +107,7 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
               </View>
               <Text style={styles.metricLabel}>Wind Speed</Text>
             </View>
-            <Text style={styles.metricValue}>{weather.windSpeedKmh} km/h</Text>
+            <Text style={styles.metricValue}>{weather.windSpeedKmh ?? '--'} km/h</Text>
           </View>
           <View style={styles.divider} />
 
@@ -131,7 +131,7 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
               </View>
               <Text style={styles.metricLabel}>Rain Chance</Text>
             </View>
-            <Text style={styles.metricValue}>{weather.rainChancePct}%</Text>
+            <Text style={styles.metricValue}>{weather.rainChancePct ?? '--'}%</Text>
           </View>
           <View style={styles.divider} />
 

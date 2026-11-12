@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import HoldButton from './HoldButton';
 import { supabase } from '../supabaseClient';
+import { sendGateCommand } from '../commandService';
 
 export default function AlertsSMSScreen({ operatorUser }) {
   const [selectedGroup, setSelectedGroup] = useState('ALL_RECIPIENTS');
@@ -84,19 +85,24 @@ export default function AlertsSMSScreen({ operatorUser }) {
           }
         ])
         .select();
+      if (jobErr) throw new Error(jobErr.message);
 
-      // 2. Insert into alerts table for public & audit tracking
+      // 2. Ask the node to send its pre-warning SMS to the contact list (the ESP32 reads the
+      // commands table every ~5 s; it does NOT read sms_jobs, which is only a log).
+      const cmd = await sendGateCommand('PREWARN_SMS', operatorUser, 0);
+
+      // 3. Insert into alerts table for public & audit tracking
       await supabase.from('alerts').insert([
         {
           stage: selectedStage,
           source: 'MANUAL',
           message: finalMessage,
-          water_level_pct: 81.5,
-          gate_percent: 20
+          water_level_pct: null,   // FIX: was a made-up 81.5% / 20% gate
+          gate_percent: null
         }
       ]);
 
-      // 3. Log to audit_log
+      // 4. Log to audit_log
       await supabase.from('audit_log').insert([
         {
           action: 'DISPATCH_SMS_BROADCAST',
@@ -104,14 +110,14 @@ export default function AlertsSMSScreen({ operatorUser }) {
             stage: selectedStage,
             group: selectedGroup,
             message: finalMessage,
-            operator: operatorUser?.email || 'operator@tabbowa.gov.lk'
+            operator: operatorUser?.email || null
           }
         }
       ]);
 
       // Add to local state queue
       const newJob = {
-        id: `job-${Date.now()}`,
+        id: jobData?.[0]?.id || `job-${Date.now()}`,
         group: selectedGroup,
         stage: selectedStage,
         message: finalMessage,
@@ -122,24 +128,15 @@ export default function AlertsSMSScreen({ operatorUser }) {
 
       setSmsQueue((prev) => [newJob, ...prev]);
 
-      // Simulate SIM800L GSM delivery progression
-      setTimeout(() => {
-        setSmsQueue((prev) =>
-          prev.map((j) => (j.id === newJob.id ? { ...j, status: 'SENDING' } : j))
-        );
-        setTimeout(() => {
-          setSmsQueue((prev) =>
-            prev.map((j) =>
-              j.id === newJob.id ? { ...j, status: 'COMPLETED', deliveredCount: 6 } : j
-            )
-          );
-          setIsSending(false);
-          Alert.alert(
-            'CELLULAR BROADCAST DELIVERED',
-            `SMS broadcast sent via SIM800L module to registered ${selectedGroup} contact list.`
-          );
-        }, 1200);
-      }, 800);
+      // FIX: this used to fake "SENDING" -> "COMPLETED (6 delivered)" with timers. There is no
+      // delivery report from the SIM800L, so the job stays QUEUED and the operator is told the truth.
+      setIsSending(false);
+      Alert.alert(
+        cmd.ok ? 'Broadcast Requested' : 'Logged, but NOT sent to the node',
+        cmd.ok
+          ? 'The ESP32 will pick this up within about 5 seconds and text the contact list using its pre-warning message. Check the node or a test phone to confirm delivery.'
+          : `The job was logged, but the command to the ESP32 failed: ${cmd.message}`
+      );
     } catch (err) {
       console.warn('[SMS Dispatch Error]:', err.message);
       setIsSending(false);

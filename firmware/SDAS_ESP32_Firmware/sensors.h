@@ -14,6 +14,7 @@ struct SensorData {
     
     float temperature_c;
     float humidity_pct;
+    bool  dht_valid;           // FIX: false when the DHT22 has not given a good reading recently
     float speed_of_sound_mps;
     
     float water_level_cm;
@@ -43,6 +44,8 @@ private:
     SensorData currentData;
     float previousWaterLevelCm;
     unsigned long previousSampleTimeMs;
+    uint8_t consecutiveFailCycles;   // FIX: both-sensor failures in a row (fault debounce)
+    unsigned long lastDhtOkMs;        // FIX: time of last checksum-valid DHT22 reading
 
     float measureSingleUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound);
     float measureFilteredUltrasonic(uint8_t trigPin, uint8_t echoPin, float speedOfSound);

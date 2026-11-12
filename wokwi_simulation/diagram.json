@@ -30,7 +30,7 @@
       "id": "servo",
       "top": 30,
       "left": 230,
-      "attrs": { "label": "MG996R Sluice Gate" }
+      "attrs": { "label": "MG90S Sluice Gate" }
     },
     {
       "type": "wokwi-rgb-led",

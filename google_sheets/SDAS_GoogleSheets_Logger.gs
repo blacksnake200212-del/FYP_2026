@@ -21,9 +21,29 @@
  * 9. Paste this Web App URL into the SDAS Web Dashboard or run tools/sync_readings_to_sheets.js!
  */
 
+var ALERT_STAGES = ["NORMAL", "PRE_WARNING", "CLEAR_AREA", "DANGER", "MAINTENANCE"];
+var CONTROL_MODES = ["AUTO", "MANUAL", "EMERGENCY_STOP"];
+
+// FIX: raw database rows send numbers (alert_state 3, control_mode 1). The old code wrote the
+// number itself, and because 0 counts as "missing" in JavaScript, alert 0 / mode 0 were guessed.
+function labelFrom(value, labels) {
+  if (value === undefined || value === null || value === "") return "UNKNOWN";
+  if (typeof value === "number" || /^\d+$/.test(String(value))) {
+    return labels[Number(value)] || "UNKNOWN";
+  }
+  return String(value);
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(10000); // Wait up to 10 seconds to handle concurrent writes safely
+  // FIX: the result of tryLock was ignored, so two requests could still write at the same time
+  // and overwrite each other's rows. Now we give up cleanly and the caller can retry.
+  if (!lock.tryLock(10000)) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "busy",
+      message: "Sheet is busy, try again"
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -90,7 +110,15 @@ function doPost(e) {
       
       var s1 = r.sensor_1_dist !== undefined ? Number(r.sensor_1_dist) : (r.distance_1 !== undefined ? Number(r.distance_1) : -1);
       var s2 = r.sensor_2_dist !== undefined ? Number(r.sensor_2_dist) : (r.distance_2 !== undefined ? Number(r.distance_2) : -1);
-      var agreement = r.sensors_agreed !== undefined ? (r.sensors_agreed ? "YES" : "NO") : (s1 > 0 && s2 > 0 && Math.abs(s1 - s2) <= 5.0 ? "YES" : "NO");
+      // FIX: two failed sensors (-1 cm) were written as agreement "YES"
+      var agreement;
+      if (s1 <= 0 && s2 <= 0) {
+        agreement = "NO (BOTH SENSORS FAILED)";
+      } else if (r.sensors_agreed !== undefined) {
+        agreement = r.sensors_agreed ? "YES" : "NO";
+      } else {
+        agreement = (s1 > 0 && s2 > 0 && Math.abs(s1 - s2) <= 5.0) ? "YES" : "NO";
+      }
       
       var tempC = r.temperature_c !== undefined ? Number(r.temperature_c) : (r.temperature !== undefined ? Number(r.temperature) : 0);
       var humPct = r.humidity_pct !== undefined ? Number(r.humidity_pct) : (r.humidity !== undefined ? Number(r.humidity) : 0);
@@ -99,8 +127,8 @@ function doPost(e) {
       var gatePct = r.gate_percent !== undefined ? Number(r.gate_percent) : 0;
       var gateAngle = Math.round((gatePct / 100.0) * 180);
       
-      var alertStage = r.alert_stage || r.alert_state || "NORMAL";
-      var controlMode = r.control_mode || "AUTO";
+      var alertStage = labelFrom(r.alert_stage !== undefined ? r.alert_stage : r.alert_state, ALERT_STAGES);
+      var controlMode = labelFrom(r.control_mode, CONTROL_MODES);
       var source = r.source || "SDAS Hardware Node";
       
       rowsToAppend.push([
@@ -153,6 +181,8 @@ function doPost(e) {
     lock.releaseLock();
   }
 }
+// NOTE: deployed with access "Anyone", so anyone who learns the /exec URL can add rows.
+// Do not treat this sheet as the official record; Supabase is the source of truth.
 
 function doGet(e) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();

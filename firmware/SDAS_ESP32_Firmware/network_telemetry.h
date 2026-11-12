@@ -5,6 +5,8 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
 #include <PubSubClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -12,6 +14,7 @@
 #include "config.h"
 #include "sensors.h"
 #include "state_machine.h"
+#include "gsm_modem.h"
 
 typedef void (*CommandCallback)(const char* command, int param);
 
@@ -28,10 +31,14 @@ public:
     
     // Immediate emergency publish
     void publishEmergencyAlert(const char* message);
+    
+    // Where downloaded SMS recipients are stored (set once in setup())
+    void setContactSink(GSMManager* gsm) { contactSink = gsm; }
 
 private:
     WiFiClient espClient;
     PubSubClient mqttClient;
+    WebServer webServer;
     CommandCallback commandHandler;
     
     // FreeRTOS Task and Mutex for Core 0 execution
@@ -48,13 +55,24 @@ private:
     unsigned long lastWiFiCheckMs;
     uint8_t wifiFailCount;
     bool wasWifiConnected;
+    bool webServerStarted;
+    int lastSupabaseHttpCode;
+    unsigned long lastSupabaseSuccessMs;
     
     static void networkTaskStatic(void* pvParameters);
     void runNetworkLoop();
     
     void maintainWiFi();
     void maintainMQTT();
+    void startLocalWebServer();
+    void handleWebRoot();
+    void handleWebStatusJson();
     void buildRestEndpoint(const char* tablePath, char* outBuf, size_t outSize) const;
+    bool patchCommandStatus(const char* id, const char* newStatus);
+    void syncSmsRecipients();
+    GSMManager* contactSink = nullptr;
+    unsigned long lastContactSyncMs = 0;
+    bool contactSyncDone = false;
     void sendSupabaseTelemetry(const SensorData& sensors, const SystemStatus& status);
     void publishMqttTelemetry(const SensorData& sensors, const SystemStatus& status);
     void pollSupabaseCommands();
