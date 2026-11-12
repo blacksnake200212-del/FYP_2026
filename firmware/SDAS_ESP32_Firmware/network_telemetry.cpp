@@ -5,7 +5,8 @@ static CommandCallback g_commandHandler = nullptr;
 TelemetryManager::TelemetryManager()
     : mqttClient(espClient), commandHandler(nullptr),
       netTaskHandle(nullptr), dataMutex(nullptr), hasFreshData(false),
-      lastTelemetryPostMs(0), lastMqttReconnectAttemptMs(0) {
+      lastTelemetryPostMs(0), lastMqttReconnectAttemptMs(0),
+      lastWiFiCheckMs(0), wifiFailCount(0), wasWifiConnected(false) {
     memset(&snapshotSensors, 0, sizeof(SensorData));
     memset(&snapshotStatus, 0, sizeof(SystemStatus));
     dataMutex = xSemaphoreCreateMutex();
@@ -15,20 +16,23 @@ void TelemetryManager::begin(CommandCallback cmdCb) {
     commandHandler = cmdCb;
     g_commandHandler = cmdCb;
     
-    // Connect to Wi-Fi in Station mode
+    // Connect to Wi-Fi in Station mode with modem-sleep disabled so mobile hotspots do not drop the node
     WiFi.mode(WIFI_STA);
+    WiFi.persistent(false);
+    WiFi.setAutoReconnect(true);
+    WiFi.setSleep(false);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.printf("[WiFi] Connecting to SSID '%s'...\n", WIFI_SSID);
     
     // Configure MQTT client
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setCallback(mqttCallback);
     
-    // Spawn dedicated FreeRTOS networking task pinned to Core 0
-    // This completely decouples HTTP and MQTT network latency from the Core 1 real-time control loop!
+    // Spawn dedicated FreeRTOS networking task pinned to Core 0 (16 KB stack for safe mbedTLS handshakes)
     xTaskCreatePinnedToCore(
         networkTaskStatic,
         "SDAS_NetTask",
-        8192,
+        16384,
         this,
         1,
         &netTaskHandle,
@@ -64,8 +68,9 @@ void TelemetryManager::runNetworkLoop() {
             }
             
             if (shouldSend) {
-                sendSupabaseTelemetry(localSensors, localStatus);
+                // Publish low-latency MQTT first so broker stays live even if HTTPS times out
                 publishMqttTelemetry(localSensors, localStatus);
+                sendSupabaseTelemetry(localSensors, localStatus);
                 pollSupabaseCommands();
             }
         }
@@ -76,11 +81,38 @@ void TelemetryManager::runNetworkLoop() {
 }
 
 void TelemetryManager::maintainWiFi() {
-    if (WiFi.status() != WL_CONNECTED) {
-        static unsigned long lastWiFiCheck = 0;
-        if (millis() - lastWiFiCheck > 10000) {
-            lastWiFiCheck = millis();
+    wl_status_t status = WiFi.status();
+    if (status == WL_CONNECTED) {
+        if (!wasWifiConnected) {
+            wasWifiConnected = true;
+            wifiFailCount = 0;
+            Serial.printf("[WiFi] Connected to '%s' | IP: %s | RSSI: %d dBm | Heap: %u B\n",
+                WIFI_SSID, WiFi.localIP().toString().c_str(), WiFi.RSSI(), (unsigned)ESP.getFreeHeap());
+        }
+        return;
+    }
+
+    if (wasWifiConnected) {
+        wasWifiConnected = false;
+        Serial.printf("[WiFi] Connection lost (status=%d). Recovering...\n", (int)status);
+    }
+
+    unsigned long now = millis();
+    if (now - lastWiFiCheckMs >= 10000) {
+        lastWiFiCheckMs = now;
+        wifiFailCount++;
+        if (wifiFailCount <= 2) {
+            Serial.printf("[WiFi] Reconnecting to '%s' (attempt %u, status=%d)...\n",
+                WIFI_SSID, wifiFailCount, (int)status);
             WiFi.reconnect();
+        } else {
+            // Full STA re-association clears stale iPhone hotspot / DHCP sessions
+            Serial.printf("[WiFi] Resetting Wi-Fi STA for '%s'...\n", WIFI_SSID);
+            WiFi.disconnect(false);
+            vTaskDelay(pdMS_TO_TICKS(200));
+            WiFi.setSleep(false);
+            WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            wifiFailCount = 0;
         }
     }
 }
@@ -103,6 +135,8 @@ void TelemetryManager::maintainMQTT() {
             if (connected) {
                 mqttClient.subscribe(MQTT_TOPIC_COMMANDS);
                 Serial.println("[MQTT] Connected and subscribed to commands topic.");
+            } else {
+                Serial.printf("[MQTT] Connect failed (rc=%d). Retrying in 5s...\n", mqttClient.state());
             }
         }
     } else {
@@ -157,28 +191,53 @@ void TelemetryManager::mqttCallback(char* topic, byte* payload, unsigned int len
     }
 }
 
+void TelemetryManager::buildRestEndpoint(const char* tablePath, char* outBuf, size_t outSize) const {
+    const char* base = SUPABASE_URL;
+    size_t len = strlen(base);
+    while (len > 0 && base[len - 1] == '/') {
+        len--;
+    }
+
+    const char* restSuffix = "/rest/v1";
+    size_t suffixLen = strlen(restSuffix);
+    bool hasRestSuffix = (len >= suffixLen && strncmp(base + (len - suffixLen), restSuffix, suffixLen) == 0);
+
+    if (hasRestSuffix) {
+        snprintf(outBuf, outSize, "%.*s/%s", (int)len, base, tablePath);
+    } else {
+        snprintf(outBuf, outSize, "%.*s/rest/v1/%s", (int)len, base, tablePath);
+    }
+}
+
 void TelemetryManager::sendSupabaseTelemetry(const SensorData& sensors, const SystemStatus& status) {
     if (WiFi.status() != WL_CONNECTED) return;
-    
+    if (ESP.getFreeHeap() < 38000) {
+        Serial.printf("[SUPABASE] Low heap (%u B), skipping telemetry POST to preserve stability.\n",
+            (unsigned)ESP.getFreeHeap());
+        return;
+    }
+
     WiFiClientSecure secClient;
     secClient.setInsecure(); // Explicitly bypass cert verification for field IoT reliability
     
     HTTPClient http;
-    String base = String(SUPABASE_URL);
-    if (!base.endsWith("/rest/v1")) {
-        if (base.endsWith("/")) {
-            base += "rest/v1";
-        } else {
-            base += "/rest/v1";
-        }
+    char endpoint[256];
+    buildRestEndpoint("sensor_telemetry", endpoint, sizeof(endpoint));
+
+    http.setReuse(false);
+    if (!http.begin(secClient, endpoint)) {
+        Serial.println("[SUPABASE] http.begin() failed for telemetry POST.");
+        secClient.stop();
+        return;
     }
-    String endpoint = base + "/sensor_telemetry";
-    http.begin(secClient, endpoint);
     http.setTimeout(4000); // 4-second timeout
     
+    char authHeader[384];
+    snprintf(authHeader, sizeof(authHeader), "Bearer %s", SUPABASE_ANON_KEY);
+
     http.addHeader("Content-Type", "application/json");
     http.addHeader("apikey", SUPABASE_ANON_KEY);
-    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    http.addHeader("Authorization", authHeader);
     http.addHeader("Prefer", "return=minimal");
     
     // Construct JSON payload
@@ -199,8 +258,13 @@ void TelemetryManager::sendSupabaseTelemetry(const SensorData& sensors, const Sy
         sensors.degraded_mode ? "true" : "false"
     );
     
-    http.POST(jsonBuffer);
+    int httpCode = http.POST((uint8_t*)jsonBuffer, strlen(jsonBuffer));
+    if (httpCode <= 0 || httpCode >= 400) {
+        Serial.printf("[SUPABASE] Telemetry POST error: %d (Heap: %u B)\n",
+            httpCode, (unsigned)ESP.getFreeHeap());
+    }
     http.end();
+    secClient.stop();
 }
 
 void TelemetryManager::publishMqttTelemetry(const SensorData& sensors, const SystemStatus& status) {
@@ -239,21 +303,27 @@ void TelemetryManager::update(unsigned long millisNow, const SensorData& sensors
 // Poll Supabase commands table for pending operator commands (Cloud Sync Redundancy)
 void TelemetryManager::pollSupabaseCommands() {
     if (WiFi.status() != WL_CONNECTED || g_commandHandler == nullptr) return;
+    if (ESP.getFreeHeap() < 38000) return;
     
     WiFiClientSecure secClient;
     secClient.setInsecure();
     
     HTTPClient http;
-    String base = String(SUPABASE_URL);
-    if (!base.endsWith("/rest/v1")) {
-        base += base.endsWith("/") ? "rest/v1" : "/rest/v1";
+    char endpoint[256];
+    buildRestEndpoint("commands?status=eq.PENDING&order=created_at.desc&limit=1", endpoint, sizeof(endpoint));
+
+    http.setReuse(false);
+    if (!http.begin(secClient, endpoint)) {
+        secClient.stop();
+        return;
     }
-    String endpoint = base + "/commands?status=eq.PENDING&order=created_at.desc&limit=1";
-    http.begin(secClient, endpoint);
     http.setTimeout(3000);
     
+    char authHeader[384];
+    snprintf(authHeader, sizeof(authHeader), "Bearer %s", SUPABASE_ANON_KEY);
+
     http.addHeader("apikey", SUPABASE_ANON_KEY);
-    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
+    http.addHeader("Authorization", authHeader);
     
     int httpCode = http.GET();
     if (httpCode == 200) {
@@ -294,18 +364,39 @@ void TelemetryManager::pollSupabaseCommands() {
                 
                 // Extract command UUID to mark EXECUTED
                 int idIdx = payload.indexOf("\"id\":\"");
-                if (idIdx >= 0) {
-                    String cmdId = payload.substring(idIdx + 6, idIdx + 42);
+                if (idIdx >= 0 && (idIdx + 42) <= (int)payload.length()) {
+                    char cmdId[40] = {0};
+                    strncpy(cmdId, payload.c_str() + idIdx + 6, 36);
+                    cmdId[36] = '\0';
+
                     http.end();
-                    String patchEndpoint = base + "/commands?id=eq." + cmdId;
-                    http.begin(secClient, patchEndpoint);
-                    http.addHeader("Content-Type", "application/json");
-                    http.addHeader("apikey", SUPABASE_ANON_KEY);
-                    http.addHeader("Authorization", String("Bearer ") + SUPABASE_ANON_KEY);
-                    http.PATCH("{\"status\":\"EXECUTED\"}");
+                    secClient.stop();
+
+                    char patchPath[96];
+                    snprintf(patchPath, sizeof(patchPath), "commands?id=eq.%s", cmdId);
+                    char patchEndpoint[256];
+                    buildRestEndpoint(patchPath, patchEndpoint, sizeof(patchEndpoint));
+
+                    WiFiClientSecure patchSecClient;
+                    patchSecClient.setInsecure();
+                    HTTPClient patchHttp;
+                    patchHttp.setReuse(false);
+                    if (patchHttp.begin(patchSecClient, patchEndpoint)) {
+                        patchHttp.setTimeout(3000);
+                        patchHttp.addHeader("Content-Type", "application/json");
+                        patchHttp.addHeader("apikey", SUPABASE_ANON_KEY);
+                        patchHttp.addHeader("Authorization", authHeader);
+                        patchHttp.PATCH("{\"status\":\"EXECUTED\"}");
+                        patchHttp.end();
+                    }
+                    patchSecClient.stop();
+                    return;
                 }
             }
         }
+    } else if (httpCode <= 0 || httpCode >= 400) {
+        Serial.printf("[SUPABASE] Command poll error: %d\n", httpCode);
     }
     http.end();
+    secClient.stop();
 }

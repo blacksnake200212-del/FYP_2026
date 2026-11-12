@@ -45,12 +45,16 @@ private:
     
     unsigned long lastTelemetryPostMs;
     unsigned long lastMqttReconnectAttemptMs;
+    unsigned long lastWiFiCheckMs;
+    uint8_t wifiFailCount;
+    bool wasWifiConnected;
     
     static void networkTaskStatic(void* pvParameters);
     void runNetworkLoop();
     
     void maintainWiFi();
     void maintainMQTT();
+    void buildRestEndpoint(const char* tablePath, char* outBuf, size_t outSize) const;
     void sendSupabaseTelemetry(const SensorData& sensors, const SystemStatus& status);
     void publishMqttTelemetry(const SensorData& sensors, const SystemStatus& status);
     void pollSupabaseCommands();

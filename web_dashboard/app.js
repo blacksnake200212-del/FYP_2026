@@ -77,14 +77,33 @@ const el = {
 };
 
 let packetCount = 0;
+let lastProcessedRowKey = null;
+let lastSupabasePacketAt = 0;
 
 // Parse hardware packet into state
-function processTelemetryRow(row) {
+function processTelemetryRow(row, options = {}) {
   if (!row) return;
+
+  const isMqttSource = Boolean(options.fromMqtt);
+  const rowKey = !isMqttSource
+    ? (row.id !== undefined && row.id !== null
+        ? `id:${row.id}`
+        : (row.created_at ? `ts:${row.created_at}` : null))
+    : null;
+
+  if (rowKey && rowKey === lastProcessedRowKey) {
+    return; // Ignore identical cached DB rows from the 3s polling fallback
+  }
+  if (rowKey) {
+    lastProcessedRowKey = rowKey;
+  }
 
   packetCount++;
   state.hasRealData = true;
   state.lastPacketTime = new Date(row.created_at || Date.now());
+  if (!isMqttSource && (Date.now() - state.lastPacketTime.getTime()) <= 30000) {
+    lastSupabasePacketAt = Date.now();
+  }
 
   // Extract water level
   const pct = row.level_pct !== undefined && row.level_pct !== null
@@ -94,35 +113,48 @@ function processTelemetryRow(row) {
   state.depthM = parseFloat(((state.waterLevelPct / 100.0) * DAM_TOTAL_HEIGHT_M).toFixed(2));
   state.freeboardM = parseFloat(Math.max(0, DAM_TOTAL_HEIGHT_M - state.depthM).toFixed(2));
 
-  // Extract distances
-  state.sensor1Dist = row.distance_1 !== undefined && row.distance_1 !== null
-    ? parseFloat(row.distance_1)
-    : (row.sensor_1_dist !== undefined ? parseFloat(row.sensor_1_dist) : -1.0);
+  // Extract distances (preserve prior DB values when compact MQTT payload omits them)
+  if (!isMqttSource || row.distance_1 !== undefined || row.sensor_1_dist !== undefined) {
+    state.sensor1Dist = row.distance_1 !== undefined && row.distance_1 !== null
+      ? parseFloat(row.distance_1)
+      : (row.sensor_1_dist !== undefined ? parseFloat(row.sensor_1_dist) : -1.0);
 
-  state.sensor2Dist = row.distance_2 !== undefined && row.distance_2 !== null
-    ? parseFloat(row.distance_2)
-    : (row.sensor_2_dist !== undefined ? parseFloat(row.sensor_2_dist) : -1.0);
+    state.sensor2Dist = row.distance_2 !== undefined && row.distance_2 !== null
+      ? parseFloat(row.distance_2)
+      : (row.sensor_2_dist !== undefined ? parseFloat(row.sensor_2_dist) : -1.0);
 
-  state.sensorsAgreed = row.sensors_agreed !== undefined
-    ? Boolean(row.sensors_agreed)
-    : (state.sensor1Dist > 0 && state.sensor2Dist > 0 ? Math.abs(state.sensor1Dist - state.sensor2Dist) <= 5.0 : false);
+    state.sensorsAgreed = row.sensors_agreed !== undefined
+      ? Boolean(row.sensors_agreed)
+      : (state.sensor1Dist > 0 && state.sensor2Dist > 0 ? Math.abs(state.sensor1Dist - state.sensor2Dist) <= 5.0 : false);
+  }
 
   // Extract environmental
-  state.temperatureC = row.temperature !== undefined && row.temperature !== null
-    ? parseFloat(row.temperature)
-    : (row.temperature_c !== undefined ? parseFloat(row.temperature_c) : 0.0);
+  if (row.temperature !== undefined && row.temperature !== null) {
+    state.temperatureC = parseFloat(row.temperature);
+  } else if (row.temperature_c !== undefined) {
+    state.temperatureC = parseFloat(row.temperature_c);
+  } else if (row.temp !== undefined) {
+    state.temperatureC = parseFloat(row.temp);
+  } else if (!isMqttSource) {
+    state.temperatureC = 0.0;
+  }
 
-  state.humidityPct = row.humidity !== undefined && row.humidity !== null
-    ? parseFloat(row.humidity)
-    : (row.humidity_pct !== undefined ? parseFloat(row.humidity_pct) : 0.0);
+  if (!isMqttSource || row.humidity !== undefined || row.humidity_pct !== undefined) {
+    state.humidityPct = row.humidity !== undefined && row.humidity !== null
+      ? parseFloat(row.humidity)
+      : (row.humidity_pct !== undefined ? parseFloat(row.humidity_pct) : 0.0);
+  }
 
   state.speedOfSound = parseFloat((331.4 + 0.606 * state.temperatureC).toFixed(1));
 
   // Extract actuator and alert state
-  state.gatePercent = row.gate_percent !== undefined ? parseInt(row.gate_percent, 10) : 0;
+  state.gatePercent = row.gate_percent !== undefined
+    ? parseInt(row.gate_percent, 10)
+    : (row.gate_pct !== undefined ? parseInt(row.gate_pct, 10) : 0);
   
   const modeMap = ['AUTO', 'MANUAL', 'EMERGENCY_STOP'];
-  const incomingMode = row.control_mode !== undefined ? (modeMap[row.control_mode] || 'AUTO') : 'AUTO';
+  const rawMode = row.control_mode !== undefined ? row.control_mode : row.mode;
+  const incomingMode = rawMode !== undefined ? (modeMap[rawMode] || 'AUTO') : 'AUTO';
   const now = Date.now();
   // Protect against telemetry race conditions overriding manual commands (5s lock)
   if (!state.commandGraceUntil || now > state.commandGraceUntil || incomingMode === state.controlMode) {
@@ -130,24 +162,30 @@ function processTelemetryRow(row) {
     state.commandGraceUntil = 0;
   }
 
-  state.alertCode = row.alert_state !== undefined ? parseInt(row.alert_state, 10) : 0;
+  const rawAlert = row.alert_state !== undefined ? row.alert_state : row.state;
+  state.alertCode = rawAlert !== undefined ? parseInt(rawAlert, 10) : 0;
   const stateMap = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
   state.alertState = stateMap[state.alertCode] || 'NORMAL';
 
-  // Add to recent history for chart
-  state.recentHistory.push({
-    time: state.lastPacketTime,
-    level: state.waterLevelPct
-  });
-  if (state.recentHistory.length > 25) {
-    state.recentHistory.shift();
+  // Add to recent history for chart (avoid duplicate timestamp from initial history load)
+  const lastHist = state.recentHistory[state.recentHistory.length - 1];
+  if (!lastHist || lastHist.time.getTime() !== state.lastPacketTime.getTime()) {
+    state.recentHistory.push({
+      time: state.lastPacketTime,
+      level: state.waterLevelPct
+    });
+    if (state.recentHistory.length > 25) {
+      state.recentHistory.shift();
+    }
   }
 
   // Update UI components
   renderUI(row);
 
-  // Real-time Google Sheets stream forwarder
-  triggerGoogleSheetsAutoSync(row);
+  // Real-time Google Sheets stream forwarder (only for full Supabase DB packets)
+  if (!isMqttSource) {
+    triggerGoogleSheetsAutoSync(row);
+  }
 }
 
 // Update DOM elements with live telemetry
@@ -625,6 +663,21 @@ function initMqttWebSocket() {
 
     pahoMqttClient.onMessageArrived = (message) => {
       console.log(`[MQTT] Incoming on ${message.destinationName}:`, message.payloadString);
+      if (message.destinationName === 'dam/puttalam/telemetry') {
+        try {
+          const data = JSON.parse(message.payloadString);
+          // Use MQTT telemetry whenever Supabase DB hasn't delivered a fresher row in the last 6.5s
+          if (Date.now() - lastSupabasePacketAt > 6500) {
+            processTelemetryRow({
+              ...data,
+              created_at: new Date().toISOString(),
+              source: 'MQTT_LIVE'
+            }, { fromMqtt: true });
+          }
+        } catch (err) {
+          console.warn('[MQTT Telemetry Parse Error]:', err.message);
+        }
+      }
     };
 
     pahoMqttClient.connect({
@@ -638,6 +691,7 @@ function initMqttWebSocket() {
         updateMqttStatusPill('online', broker.name);
         try {
           pahoMqttClient.subscribe('dam/puttalam/commands');
+          pahoMqttClient.subscribe('dam/puttalam/telemetry');
         } catch (e) {}
       },
       onFailure: (err) => {
