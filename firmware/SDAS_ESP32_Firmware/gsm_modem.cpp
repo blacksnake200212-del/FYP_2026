@@ -137,7 +137,18 @@ bool GSMManager::sendATCommand(const char* cmd, const char* expectedReply, uint3
 }
 
 bool GSMManager::checkNetworkRegistration() {
-    if (!modemReady) return false;
+    // Auto-recover if SIM800L finished booting after setup()
+    if (!modemReady) {
+        if (sendATCommand("AT", "OK", 600)) {
+            modemReady = true;
+            sendATCommand("ATE0", "OK", 600);
+            sendATCommand("AT+CMGF=1", "OK", 600);
+            sendATCommand("AT+CSCS=\"GSM\"", "OK", 600);
+            Serial.println("[GSM] ✓ SIM800L recovered online (AT OK).");
+        } else {
+            return false;
+        }
+    }
     
     // Clear RX buffer
     while (simSerial.available()) simSerial.read();
@@ -152,16 +163,11 @@ bool GSMManager::checkNetworkRegistration() {
         delay(10);
     }
     
-    // Expected: +CREG: 0,1 (Home) or +CREG: 0,5 (Roaming)
-    if (resp.indexOf("+CREG: 0,1") != -1 || resp.indexOf("+CREG: 1,1") != -1) {
+    // Expected: +CREG: 0,1 / 1,1 / 2,1 (Home) or 0,5 / 1,5 / 2,5 (Roaming)
+    if (resp.indexOf("+CREG: 0,1") != -1 || resp.indexOf("+CREG: 1,1") != -1 || resp.indexOf("+CREG: 2,1") != -1 ||
+        resp.indexOf("+CREG: 0,5") != -1 || resp.indexOf("+CREG: 1,5") != -1 || resp.indexOf("+CREG: 2,5") != -1) {
         isNetworkRegistered = true;
         return true;
-    } else if (resp.indexOf("+CREG: 0,5") != -1 || resp.indexOf("+CREG: 1,5") != -1) {
-        isNetworkRegistered = true;
-        return true;
-    } else if (resp.indexOf("+CREG: 0,2") != -1 || resp.indexOf("+CREG: 1,2") != -1) {
-        isNetworkRegistered = false; // Searching for cell tower
-        return false;
     } else {
         isNetworkRegistered = false;
         return false;
@@ -398,7 +404,13 @@ void GSMManager::update() {
                     queueCount--;
                     currentJobIndex = -1;
                     rxBuffer = "";
-                    txState = TX_IDLE;
+                    if (queueCount > 0) {
+                        // Brief non-blocking cooldown so SIM800L settles before next AT+CMGS
+                        txRetryUntilMs = now + 1200;
+                        txState = TX_RETRY_DELAY;
+                    } else {
+                        txState = TX_IDLE;
+                    }
                     return;
                 }
                 

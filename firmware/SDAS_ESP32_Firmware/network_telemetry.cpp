@@ -1,5 +1,6 @@
 #include "network_telemetry.h"
 #include <time.h>
+#include <esp_wifi.h>
 
 static CommandCallback g_commandHandler = nullptr;
 
@@ -176,15 +177,25 @@ TelemetryManager::TelemetryManager()
     dataMutex = xSemaphoreCreateMutex();
 }
 
+static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
+    if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
+        Serial.printf("[WiFi] Hotspot disconnected (reason=%d). Auto-recovering...\n",
+            (int)info.wifi_sta_disconnected.reason);
+    }
+}
+
 void TelemetryManager::begin(CommandCallback cmdCb) {
     commandHandler = cmdCb;
     g_commandHandler = cmdCb;
     
-    // Connect to Wi-Fi in Station mode with modem-sleep disabled so mobile hotspots do not drop the node
+    // Connect to Wi-Fi in Station mode with all power-saving disabled so mobile hotspots stay active
+    WiFi.onEvent(onWiFiEvent);
     WiFi.mode(WIFI_STA);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
     WiFi.setSleep(false);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    WiFi.setTxPower(WIFI_POWER_17dBm); // Prevents RF peak current brownouts while staying strong on hotspot
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     Serial.printf("[WiFi] Connecting to SSID '%s'...\n", WIFI_SSID);
     
@@ -241,11 +252,13 @@ void TelemetryManager::runNetworkLoop() {
                 // Publish low-latency MQTT first so broker stays live even if HTTPS times out
                 publishMqttTelemetry(localSensors, localStatus);
                 sendSupabaseTelemetry(localSensors, localStatus);
+                vTaskDelay(pdMS_TO_TICKS(30)); // Let Wi-Fi/TCP service hotspot keep-alives between TLS bursts
                 pollSupabaseCommands();
             }
             
             // Refresh SMS recipients from Supabase: at first connection, then every 10 minutes
             if (!contactSyncDone || (now - lastContactSyncMs >= CONTACT_SYNC_INTERVAL_MS)) {
+                vTaskDelay(pdMS_TO_TICKS(30));
                 syncSmsRecipients();
             }
         }
@@ -274,19 +287,22 @@ void TelemetryManager::maintainWiFi() {
     }
 
     unsigned long now = millis();
-    if (now - lastWiFiCheckMs >= 10000) {
+    if (now - lastWiFiCheckMs >= 3000) {
         lastWiFiCheckMs = now;
         wifiFailCount++;
-        if (wifiFailCount <= 2) {
-            Serial.printf("[WiFi] Reconnecting to '%s' (attempt %u, status=%d)...\n",
-                WIFI_SSID, wifiFailCount, (int)status);
+        if (wifiFailCount == 1) {
+            Serial.printf("[WiFi] Reconnecting to '%s' (status=%d)...\n",
+                WIFI_SSID, (int)status);
             WiFi.reconnect();
         } else {
-            // Full STA re-association clears stale iPhone hotspot / DHCP sessions
+            // Fast full STA re-association clears stale iPhone hotspot / DHCP sessions
             Serial.printf("[WiFi] Resetting Wi-Fi STA for '%s'...\n", WIFI_SSID);
-            WiFi.disconnect(false);
-            vTaskDelay(pdMS_TO_TICKS(200));
+            WiFi.disconnect(true);
+            vTaskDelay(pdMS_TO_TICKS(150));
+            WiFi.mode(WIFI_STA);
             WiFi.setSleep(false);
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            WiFi.setTxPower(WIFI_POWER_17dBm);
             WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
             wifiFailCount = 0;
         }
@@ -476,6 +492,7 @@ void TelemetryManager::sendSupabaseTelemetry(const SensorData& sensors, const Sy
 }
 
 void TelemetryManager::startLocalWebServer() {
+    MDNS.end();
     if (MDNS.begin("sdas")) {
         MDNS.addService("http", "tcp", 80);
     }
@@ -779,8 +796,10 @@ void TelemetryManager::syncSmsRecipients() {
     contactSyncDone = true;
 
     if (code != 200) {
-        Serial.printf("[CONTACTS] Sync failed (HTTP %d). Keeping current list (%d numbers, 0 = config.h).\n",
+        Serial.printf("[CONTACTS] Sync failed (HTTP %d). Retrying in 30s (current list: %d).\n",
             code, contactSink->getRecipientCount());
+        // Retry in 30s on failure instead of waiting a full 10 minutes
+        lastContactSyncMs = millis() - CONTACT_SYNC_INTERVAL_MS + 30000UL;
         return;
     }
 

@@ -6,6 +6,7 @@
 // ============================================================================
 
 #include <Arduino.h>
+#include <esp_system.h>
 #include "config.h"
 #include "sensors.h"
 #include "actuators.h"
@@ -340,6 +341,13 @@ void setup() {
     Serial.println("\n=======================================================");
     Serial.println("  SMART DAM ALERT SYSTEM (SDAS) - FIRMWARE BOOTING");
     Serial.println("  Hardware: ESP32 DevKit V1 | Audited Blueprint V2.0");
+    esp_reset_reason_t rstReason = esp_reset_reason();
+    Serial.printf("  Reset Reason: %d (%s)\n", (int)rstReason,
+        rstReason == ESP_RST_POWERON ? "POWERON" :
+        rstReason == ESP_RST_BROWNOUT ? "BROWNOUT - Check 5V/3.3V power!" :
+        rstReason == ESP_RST_PANIC ? "PANIC" :
+        rstReason == ESP_RST_TASK_WDT || rstReason == ESP_RST_WDT || rstReason == ESP_RST_INT_WDT ? "WATCHDOG" :
+        rstReason == ESP_RST_SW ? "SOFTWARE" : "OTHER");
     Serial.println("=======================================================");
 
     // 1. Initialize Actuators (Sets servo to safe position & boots RGB)
