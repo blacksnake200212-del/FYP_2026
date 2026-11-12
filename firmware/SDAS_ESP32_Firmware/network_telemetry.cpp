@@ -1,6 +1,9 @@
 #include "network_telemetry.h"
 #include <time.h>
 #include <esp_wifi.h>
+#if __has_include(<esp_arduino_version.h>)
+  #include <esp_arduino_version.h>
+#endif
 
 static CommandCallback g_commandHandler = nullptr;
 
@@ -177,26 +180,38 @@ TelemetryManager::TelemetryManager()
     dataMutex = xSemaphoreCreateMutex();
 }
 
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 2)
 static void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     if (event == ARDUINO_EVENT_WIFI_STA_DISCONNECTED) {
-        Serial.printf("[WiFi] Hotspot disconnected (reason=%d). Auto-recovering...\n",
-            (int)info.wifi_sta_disconnected.reason);
+        int r = (int)info.wifi_sta_disconnected.reason;
+        const char* hint = "";
+        if (r == 201) hint = " (SSID NOT FOUND on 2.4GHz - enable iPhone Maximize Compatibility / check WIFI_SSID)";
+        else if (r == 15 || r == 202 || r == 203 || r == 204) hint = " (AUTH/PASSWORD failed - check WIFI_PASSWORD or WPA2)";
+        else if (r == 2 || r == 8 || r == 200) hint = " (Timeout/Out of range - bring hotspot closer)";
+        Serial.printf("[WiFi] Disconnected (reason=%d)%s\n", r, hint);
+    } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
+        Serial.printf("[WiFi] DHCP IP acquired: %s\n", WiFi.localIP().toString().c_str());
     }
 }
+#endif
 
 void TelemetryManager::begin(CommandCallback cmdCb) {
     commandHandler = cmdCb;
     g_commandHandler = cmdCb;
     
     // Connect to Wi-Fi in Station mode with all power-saving disabled so mobile hotspots stay active
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 2)
     WiFi.onEvent(onWiFiEvent);
+#endif
     WiFi.mode(WIFI_STA);
     WiFi.persistent(false);
     WiFi.setAutoReconnect(true);
     WiFi.setSleep(false);
     esp_wifi_set_ps(WIFI_PS_NONE);
-    WiFi.setTxPower(WIFI_POWER_17dBm); // Prevents RF peak current brownouts while staying strong on hotspot
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    // Give initial association + DHCP a full 12s window before maintainWiFi() retries
+    lastWiFiCheckMs = millis();
     Serial.printf("[WiFi] Connecting to SSID '%s'...\n", WIFI_SSID);
     
     // FIX: get real time over NTP so expired Supabase commands can be ignored
@@ -283,27 +298,55 @@ void TelemetryManager::maintainWiFi() {
 
     if (wasWifiConnected) {
         wasWifiConnected = false;
+        lastWiFiCheckMs = millis();
         Serial.printf("[WiFi] Connection lost (status=%d). Recovering...\n", (int)status);
     }
 
+    // Wait at least 12 seconds between recovery attempts so slow hotspot DHCP/WPA2 can finish
     unsigned long now = millis();
-    if (now - lastWiFiCheckMs >= 3000) {
+    if (now - lastWiFiCheckMs >= 12000) {
         lastWiFiCheckMs = now;
         wifiFailCount++;
         if (wifiFailCount == 1) {
-            Serial.printf("[WiFi] Reconnecting to '%s' (status=%d)...\n",
+            Serial.printf("[WiFi] Still connecting to '%s' (status=%d), retrying...\n",
                 WIFI_SSID, (int)status);
             WiFi.reconnect();
         } else {
-            // Fast full STA re-association clears stale iPhone hotspot / DHCP sessions
-            Serial.printf("[WiFi] Resetting Wi-Fi STA for '%s'...\n", WIFI_SSID);
-            WiFi.disconnect(true);
-            vTaskDelay(pdMS_TO_TICKS(150));
+            // Stop stale auto-reconnect first so 2.4 GHz scan succeeds cleanly
+            WiFi.disconnect(false);
+            vTaskDelay(pdMS_TO_TICKS(100));
+
+            int n = WiFi.scanNetworks();
+            if (n >= 0) {
+                bool foundTarget = false;
+                int targetRssi = 0;
+                int targetChan = 0;
+                for (int i = 0; i < n; i++) {
+                    if (WiFi.SSID(i) == WIFI_SSID) {
+                        foundTarget = true;
+                        targetRssi = WiFi.RSSI(i);
+                        targetChan = WiFi.channel(i);
+                        break;
+                    }
+                }
+                if (foundTarget) {
+                    Serial.printf("[WiFi] Scan found '%s' (RSSI: %d dBm, Ch: %d). Re-associating...\n",
+                        WIFI_SSID, targetRssi, targetChan);
+                } else {
+                    Serial.printf("[WiFi] '%s' NOT found in %d visible 2.4GHz networks! Check hotspot / Maximize Compatibility / secrets.h\n",
+                        WIFI_SSID, n);
+                }
+            } else {
+                Serial.printf("[WiFi] Scan error (%d). Re-associating to '%s'...\n", n, WIFI_SSID);
+            }
+            WiFi.scanDelete();
+
             WiFi.mode(WIFI_STA);
             WiFi.setSleep(false);
             esp_wifi_set_ps(WIFI_PS_NONE);
-            WiFi.setTxPower(WIFI_POWER_17dBm);
+            WiFi.setTxPower(WIFI_POWER_19_5dBm);
             WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+            lastWiFiCheckMs = millis();
             wifiFailCount = 0;
         }
     }
