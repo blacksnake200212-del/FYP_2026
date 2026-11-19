@@ -35,8 +35,8 @@ export default function DashboardScreen({ operatorUser }) {
     distance1: -1.0,
     distance2: -1.0,
     sensorAgreed: true,
-    temperature: 0.0,
-    humidity: 0.0,
+    temperature: null,
+    humidity: null,
     updatedAt: null,
     hasRealData: false
   });
@@ -57,7 +57,7 @@ export default function DashboardScreen({ operatorUser }) {
 
       if (data && data.length > 0) {
         const r = data[0];
-        const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+        const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'SENSOR_FAULT'];
         const modeLabels = ['AUTO', 'MANUAL', 'EMERGENCY'];
 
         const dist1 = r.distance_1 !== undefined && r.distance_1 !== null ? parseFloat(r.distance_1) : -1.0;
@@ -68,19 +68,22 @@ export default function DashboardScreen({ operatorUser }) {
         const currentM = (pct / 100.0) * 3.00;
         const currentCm = Math.round(currentM * 100);
 
+        const tempVal = (r.temperature !== undefined && r.temperature !== null) ? parseFloat(r.temperature) : null;
+        const humVal = (r.humidity !== undefined && r.humidity !== null) ? parseFloat(r.humidity) : null;
+
         setTelemetry((prev) => ({
           ...prev,
           levelPct: pct,
           depthCm: currentCm,
           depthM: parseFloat(currentM.toFixed(2)),
           gatePercent: parseInt(r.gate_percent, 10) || 0,
-          alertState: stateLabels[r.alert_state] || 'NORMAL',
+          alertState: stateLabels[r.alert_state] || (r.alert_state === 4 ? 'SENSOR_FAULT' : 'NORMAL'),
           controlMode: modeLabels[r.control_mode] || 'AUTO',
           distance1: dist1,
           distance2: dist2,
           sensorAgreed: agreed,
-          temperature: r.temperature !== undefined && r.temperature !== null ? parseFloat(r.temperature) : 0.0,
-          humidity: r.humidity !== undefined && r.humidity !== null ? parseFloat(r.humidity) : 0.0,
+          temperature: tempVal,
+          humidity: humVal,
           updatedAt: r.created_at || new Date().toISOString(),
           hasRealData: true
         }));
@@ -101,7 +104,7 @@ export default function DashboardScreen({ operatorUser }) {
         (payload) => {
           const r = payload.new;
           if (r) {
-            const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+            const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'SENSOR_FAULT'];
             const modeLabels = ['AUTO', 'MANUAL', 'EMERGENCY'];
 
             const dist1 = r.distance_1 !== undefined && r.distance_1 !== null ? parseFloat(r.distance_1) : -1.0;
@@ -111,19 +114,22 @@ export default function DashboardScreen({ operatorUser }) {
             const currentM = (pct / 100.0) * 3.00;
             const currentCm = Math.round(currentM * 100);
 
+            const tempVal = (r.temperature !== undefined && r.temperature !== null) ? parseFloat(r.temperature) : null;
+            const humVal = (r.humidity !== undefined && r.humidity !== null) ? parseFloat(r.humidity) : null;
+
             setTelemetry((prev) => ({
               ...prev,
               levelPct: pct,
               depthCm: currentCm,
               depthM: parseFloat(currentM.toFixed(2)),
               gatePercent: parseInt(r.gate_percent, 10) || 0,
-              alertState: stateLabels[r.alert_state] || 'NORMAL',
+              alertState: stateLabels[r.alert_state] || (r.alert_state === 4 ? 'SENSOR_FAULT' : 'NORMAL'),
               controlMode: modeLabels[r.control_mode] || 'AUTO',
               distance1: dist1,
               distance2: dist2,
               sensorAgreed: agreed,
-              temperature: r.temperature !== undefined && r.temperature !== null ? parseFloat(r.temperature) : 0.0,
-              humidity: r.humidity !== undefined && r.humidity !== null ? parseFloat(r.humidity) : 0.0,
+              temperature: tempVal,
+              humidity: humVal,
               updatedAt: r.created_at || new Date().toISOString(),
               hasRealData: true
             }));
@@ -180,6 +186,8 @@ export default function DashboardScreen({ operatorUser }) {
     ? new Date(telemetry.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : 'Waiting';
 
+  const isSensorFault = telemetry.alertState === 'SENSOR_FAULT' || telemetry.alertState === 'MAINTENANCE' || telemetry.sensorAgreed === false;
+
   const getBadgeConfig = () => {
     if (!isHardwareLive) {
       return { label: 'Node Offline', icon: '🔌', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.15)', border: '#64748B' };
@@ -191,8 +199,9 @@ export default function DashboardScreen({ operatorUser }) {
         return { label: 'Clear Area', icon: '⚠️', color: '#F97316', bg: 'rgba(249, 115, 22, 0.15)', border: '#F97316' };
       case 'DANGER':
         return { label: 'Danger', icon: '🚨', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.2)', border: '#EF4444' };
+      case 'SENSOR_FAULT':
       case 'MAINTENANCE':
-        return { label: 'Fault Mode', icon: '🔧', color: '#A855F7', bg: 'rgba(168, 85, 247, 0.2)', border: '#A855F7' };
+        return { label: 'Sensor Fault', icon: '🔧', color: '#3B82F6', bg: 'rgba(59, 130, 246, 0.2)', border: '#3B82F6' };
       default:
         return { label: 'Normal', icon: '✓', color: '#10B981', bg: 'rgba(16, 185, 129, 0.15)', border: '#10B981' };
     }
@@ -223,12 +232,25 @@ export default function DashboardScreen({ operatorUser }) {
         </View>
       </View>
 
+      {/* Sensor Fault / Both Sensors Failed Warning Banner */}
+      {isSensorFault && (
+        <View style={styles.faultBannerCard}>
+          <Text style={styles.faultBannerIcon}>⚠️</Text>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.faultBannerTitle}>CRITICAL SENSOR FAULT DETECTED</Text>
+            <Text style={styles.faultBannerBody}>
+              Dual ultrasonic sensors out of agreement or echo lost. Operating in safety degraded mode. Inspect transducer cables & 5V power rails.
+            </Text>
+          </View>
+        </View>
+      )}
+
       {/* Location Card */}
       <View style={styles.damSelectorCard}>
         <View style={styles.damSelectorLeft}>
           <MapPinIcon size={20} color="#00F0FF" />
           <View style={{ marginLeft: 10 }}>
-            <Text style={styles.damName}>Kantalai Dam</Text>
+            <Text style={styles.damName}>Tabbowa Dam (Puttalam)</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
               <View
                 style={{
@@ -326,7 +348,7 @@ export default function DashboardScreen({ operatorUser }) {
         </View>
       </View>
 
-      {/* DHT22 Microclimate & Acoustic Compensation Telemetry Card */}
+      {/* DHT22 Microclimate & Acoustic Compensation Telemetry Card (Zero fake values) */}
       <View style={styles.dhtCard}>
         <View style={styles.dhtHeaderRow}>
           <View style={styles.dhtTitleGroup}>
@@ -334,8 +356,10 @@ export default function DashboardScreen({ operatorUser }) {
             <Text style={styles.dhtCardTitle}>DHT22 Climate & Acoustic Compensation</Text>
           </View>
           <View style={styles.dhtLiveBadge}>
-            <View style={styles.dhtLiveDot} />
-            <Text style={styles.dhtLiveText}>GPIO 4 LIVE</Text>
+            <View style={[styles.dhtLiveDot, telemetry.temperature === null && { backgroundColor: '#94A3B8' }]} />
+            <Text style={[styles.dhtLiveText, telemetry.temperature === null && { color: '#94A3B8' }]}>
+              {telemetry.temperature !== null ? 'GPIO 4 LIVE' : 'NO SENSOR READING'}
+            </Text>
           </View>
         </View>
 
@@ -344,7 +368,7 @@ export default function DashboardScreen({ operatorUser }) {
           <View style={styles.dhtMetricCol}>
             <Text style={styles.dhtMetricLabel}>Ambient Temp</Text>
             <Text style={[styles.dhtMetricVal, { color: '#F59E0B' }]}>
-              {telemetry.temperature ? telemetry.temperature.toFixed(1) : '28.4'}°C
+              {telemetry.temperature !== null ? `${telemetry.temperature.toFixed(1)}°C` : '--'}
             </Text>
             <Text style={styles.dhtMetricSub}>Dam Site Sensor</Text>
           </View>
@@ -355,7 +379,7 @@ export default function DashboardScreen({ operatorUser }) {
           <View style={styles.dhtMetricCol}>
             <Text style={styles.dhtMetricLabel}>Rel. Humidity</Text>
             <Text style={[styles.dhtMetricVal, { color: '#00F0FF' }]}>
-              {telemetry.humidity ? telemetry.humidity.toFixed(1) : '74.0'}%
+              {telemetry.humidity !== null ? `${telemetry.humidity.toFixed(1)}%` : '--'}
             </Text>
             <Text style={styles.dhtMetricSub}>Moisture Index</Text>
           </View>
@@ -366,7 +390,7 @@ export default function DashboardScreen({ operatorUser }) {
           <View style={styles.dhtMetricCol}>
             <Text style={styles.dhtMetricLabel}>Sound Velocity</Text>
             <Text style={[styles.dhtMetricVal, { color: '#10B981' }]}>
-              {(331.4 + 0.606 * (telemetry.temperature || 28.4)).toFixed(1)} m/s
+              {telemetry.temperature !== null ? `${(331.4 + 0.606 * telemetry.temperature).toFixed(1)} m/s` : '--'}
             </Text>
             <Text style={styles.dhtMetricSub}>Compensated</Text>
           </View>
@@ -478,6 +502,30 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: '#0B132B'
+  },
+  faultBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#3B82F6',
+    padding: 12,
+    marginBottom: 16
+  },
+  faultBannerIcon: {
+    fontSize: 22
+  },
+  faultBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#60A5FA',
+    marginBottom: 2
+  },
+  faultBannerBody: {
+    fontSize: 11,
+    color: '#BFDBFE',
+    lineHeight: 15
   },
   damSelectorCard: {
     flexDirection: 'row',

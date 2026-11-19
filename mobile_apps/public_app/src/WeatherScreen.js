@@ -21,15 +21,15 @@ import {
 export default function WeatherScreen({ onBack, weatherData, dhtData }) {
   const weather = weatherData || {
     condition: 'Live Telemetry',
-    tempC: 0.0,
-    feelsLikeC: 0.0,
+    tempC: null,
+    feelsLikeC: null,
     windSpeedKmh: null,
-    humidityPct: 0.0,
+    humidityPct: null,
     rainChancePct: null,
     sunrise: '5:52 AM',
     sunset: '6:12 PM'
   };
-  const dht = dhtData || { temperature: weather.tempC, humidity: weather.humidityPct, speedOfSound: 331.4 };
+  const dht = dhtData || { temperature: weather.tempC, humidity: weather.humidityPct, speedOfSound: null };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -49,8 +49,10 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
             <WeatherCloudSunIcon size={84} color="#F59E0B" />
           </View>
           <Text style={styles.heroCondition}>{weather.condition}</Text>
-          <Text style={styles.heroTemp}>{weather.tempC}°C</Text>
-          <Text style={styles.heroFeelsLike}>Feels like {weather.feelsLikeC}°C</Text>
+          <Text style={styles.heroTemp}>{weather.tempC !== null && weather.tempC !== undefined ? `${weather.tempC}°C` : '--'}</Text>
+          <Text style={styles.heroFeelsLike}>
+            {weather.feelsLikeC !== null && weather.feelsLikeC !== undefined ? `Feels like ${weather.feelsLikeC}°C` : 'Awaiting live sensor'}
+          </Text>
         </View>
 
         {/* On-Site DHT22 Microclimate Hardware Sensor */}
@@ -61,13 +63,15 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
               <Text style={styles.dhtTitle}>DHT22 On-Site Microclimate Telemetry</Text>
             </View>
             <View style={styles.dhtLiveBadge}>
-              <View style={styles.dhtDot} />
-              <Text style={styles.dhtLiveText}>SENSOR LIVE</Text>
+              <View style={[styles.dhtDot, dht?.temperature === null && { backgroundColor: '#94A3B8' }]} />
+              <Text style={[styles.dhtLiveText, dht?.temperature === null && { color: '#94A3B8' }]}>
+                {dht?.temperature !== null ? 'SENSOR LIVE' : 'NO SENSOR READING'}
+              </Text>
             </View>
           </View>
 
           <Text style={styles.dhtDesc}>
-            Real-time thermal and humidity data captured directly at Kantalai Reservoir. Powers dynamic speed-of-sound acoustic compensation for ultrasonic distance sensors.
+            Real-time thermal and humidity data captured directly at Tabbowa Dam (Puttalam). Powers dynamic speed-of-sound acoustic compensation for ultrasonic distance sensors.
           </Text>
 
           <View style={styles.dhtGrid}>

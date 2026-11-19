@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,13 +17,33 @@ import {
   CheckIcon
 } from '../Icons';
 import { supabase } from '../supabaseClient';
-import { sendGateCommand } from '../commandService';
+import { sendGateCommand, watchCommandStatus } from '../commandService';
 
 export default function GateControlScreen({ operatorUser, onBack }) {
   const [currentGatePercent, setCurrentGatePercent] = useState(0);
   const [isAutoMode, setIsAutoMode] = useState(true);
   const [isManualMode, setIsManualMode] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+
+  // Command lifecycle watch state (Sent -> EXECUTED / REJECTED / Node Offline after 30s)
+  const [commandWatch, setCommandWatch] = useState({
+    type: null,
+    status: null,    // 'PENDING' | 'EXECUTED' | 'REJECTED' | 'TIMEOUT'
+    message: null,
+    isPending: false
+  });
+
+  const stopWatcherRef = useRef(null);
+
+  // Clean up any active watcher on unmount
+  useEffect(() => {
+    return () => {
+      if (stopWatcherRef.current) {
+        stopWatcherRef.current();
+        stopWatcherRef.current = null;
+      }
+    };
+  }, []);
 
   // Fetch initial gate status from readings
   useEffect(() => {
@@ -47,9 +67,32 @@ export default function GateControlScreen({ operatorUser, onBack }) {
       }
     };
     fetchStatus();
+
+    // Subscribe to live readings updates
+    const channel = supabase
+      .channel('gate-control-readings-live')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'readings' },
+        (payload) => {
+          if (payload?.new) {
+            const r = payload.new;
+            const pct = parseInt(r.gate_percent, 10) || 0;
+            setCurrentGatePercent(pct);
+            const auto = r.control_mode === 0 || r.control_mode === 'AUTO';
+            setIsAutoMode(auto);
+            setIsManualMode(!auto);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  // Mode Toggle Handlers (FIX: switches only move after the command is accepted)
+  // Mode Toggle Handlers
   const handleToggleAuto = (val) => {
     handleExecuteCommand(val ? 'AUTO' : 'MANUAL', 0);
   };
@@ -58,29 +101,47 @@ export default function GateControlScreen({ operatorUser, onBack }) {
     handleExecuteCommand(val ? 'MANUAL' : 'AUTO', 0);
   };
 
-  // Command Dispatch Engine (strictly clamped to 50% max limit)
+  // Command Dispatch & Status Watching Engine (strictly clamped to 50% max limit)
   const handleExecuteCommand = async (cmdType, targetPct) => {
+    if (stopWatcherRef.current) {
+      stopWatcherRef.current();
+      stopWatcherRef.current = null;
+    }
+
     setIsDispatching(true);
     const clampedPct = Math.min(Math.max(targetPct, 0), 50);
+
+    setCommandWatch({
+      type: cmdType,
+      status: 'PENDING',
+      message: `Dispatching '${cmdType}' to Supabase...`,
+      isPending: true
+    });
 
     try {
       const result = await sendGateCommand(cmdType, operatorUser, clampedPct);
       if (!result.ok) {
-        // FIX: failures used to show "Command Dispatched" too
+        setCommandWatch({
+          type: cmdType,
+          status: 'REJECTED',
+          message: `Server rejected command: ${result.message}`,
+          isPending: false
+        });
         Alert.alert('Command NOT Sent', `"${cmdType}" was rejected by the server: ${result.message}`);
+        setIsDispatching(false);
         return;
       }
 
+      // Optimistically update local UI mode while command is in flight
       if (cmdType === 'OPEN_20' || cmdType === 'OPEN_50') {
         setCurrentGatePercent(clampedPct);
         setIsManualMode(true);
         setIsAutoMode(false);
       } else if (cmdType === 'CLOSE') {
         setCurrentGatePercent(0);
-        setIsManualMode(true);   // the firmware holds CLOSE in MANUAL mode
+        setIsManualMode(true); // Firmware holds CLOSE in MANUAL mode
         setIsAutoMode(false);
       } else if (cmdType === 'ESTOP') {
-        // FIX: E-STOP freezes the gate where it is; it does not close it (was shown as 0%)
         setIsAutoMode(false);
         setIsManualMode(false);
       } else if (cmdType === 'AUTO') {
@@ -91,11 +152,42 @@ export default function GateControlScreen({ operatorUser, onBack }) {
         setIsAutoMode(false);
       }
 
-      Alert.alert('Command Queued', `"${cmdType}" saved. The ESP32 picks it up within about 5 seconds if it is online.`);
+      // Watch command row for hardware execution (EXECUTED / REJECTED / TIMEOUT)
+      stopWatcherRef.current = watchCommandStatus(
+        result.id,
+        ({ status, message, done }) => {
+          setCommandWatch({
+            type: cmdType,
+            status,
+            message,
+            isPending: !done
+          });
+
+          if (done) {
+            setIsDispatching(false);
+            if (status === 'EXECUTED') {
+              Alert.alert('✓ Command Executed', `ESP32 confirmed: "${cmdType}" was successfully executed!`);
+            } else if (status === 'REJECTED') {
+              Alert.alert('❌ Command Rejected', `ESP32 rejected "${cmdType}".`);
+            } else if (status === 'TIMEOUT') {
+              Alert.alert(
+                '⚠️ Node Offline',
+                `ESP32 did not pick up "${cmdType}" within 30 seconds. Verify node Wi-Fi and power supply.`
+              );
+            }
+          }
+        },
+        30000
+      );
     } catch (err) {
-      Alert.alert('Command NOT Sent', err.message || 'Network error');
-    } finally {
+      setCommandWatch({
+        type: cmdType,
+        status: 'REJECTED',
+        message: err.message || 'Network error',
+        isPending: false
+      });
       setIsDispatching(false);
+      Alert.alert('Command Error', err.message || 'Network error occurred');
     }
   };
 
@@ -119,7 +211,7 @@ export default function GateControlScreen({ operatorUser, onBack }) {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {/* Current Gate Status Card with Dam Photo */}
         <View style={styles.statusCard}>
-          <Text style={styles.cardHeaderTitle}>Current Gate Status</Text>
+          <Text style={styles.cardHeaderTitle}>Current Gate Status • Tabbowa Dam (Puttalam)</Text>
 
           <View style={styles.statusHeaderRow}>
             <View style={styles.statusHeaderLeft}>
@@ -127,7 +219,7 @@ export default function GateControlScreen({ operatorUser, onBack }) {
                 <SluiceGateIcon size={26} color={isGateOpen ? '#F59E0B' : '#EF4444'} />
               </View>
               <Text style={styles.statusText}>
-                {isGateOpen ? `Open (${currentGatePercent}%)` : 'Closed'}
+                {isGateOpen ? `Open (${currentGatePercent}%)` : 'Closed (0%)'}
               </Text>
             </View>
 
@@ -144,23 +236,73 @@ export default function GateControlScreen({ operatorUser, onBack }) {
           </View>
         </View>
 
+        {/* Live Command Execution Watcher Banner */}
+        {commandWatch.status && (
+          <View
+            style={[
+              styles.watchCard,
+              commandWatch.status === 'EXECUTED' && styles.watchCardExecuted,
+              commandWatch.status === 'REJECTED' && styles.watchCardRejected,
+              commandWatch.status === 'TIMEOUT' && styles.watchCardTimeout
+            ]}
+          >
+            <View style={styles.watchHeaderRow}>
+              {commandWatch.isPending ? (
+                <ActivityIndicator size="small" color="#38BDF8" style={{ marginRight: 8 }} />
+              ) : (
+                <Text style={styles.watchIcon}>
+                  {commandWatch.status === 'EXECUTED' ? '✓' : commandWatch.status === 'TIMEOUT' ? '⚠️' : '❌'}
+                </Text>
+              )}
+              <Text
+                style={[
+                  styles.watchStatusText,
+                  commandWatch.status === 'EXECUTED' && { color: '#10B981' },
+                  commandWatch.status === 'REJECTED' && { color: '#EF4444' },
+                  commandWatch.status === 'TIMEOUT' && { color: '#F59E0B' }
+                ]}
+              >
+                {commandWatch.status === 'PENDING'
+                  ? `Command "${commandWatch.type}" Dispatched`
+                  : commandWatch.status === 'EXECUTED'
+                  ? `Command "${commandWatch.type}" EXECUTED`
+                  : commandWatch.status === 'TIMEOUT'
+                  ? 'ESP32 Node Offline'
+                  : `Command "${commandWatch.type}" REJECTED`}
+              </Text>
+            </View>
+            <Text style={styles.watchMessageText}>{commandWatch.message}</Text>
+          </View>
+        )}
+
+        {/* Manual Mode Auto-Revert Safety Notice */}
+        <View style={styles.safetyNoticeCard}>
+          <Text style={styles.safetyNoticeIcon}>ℹ️</Text>
+          <View style={{ flex: 1, marginLeft: 8 }}>
+            <Text style={styles.safetyNoticeTitle}>Manual Mode 5-Minute Safety Watchdog</Text>
+            <Text style={styles.safetyNoticeBody}>
+              For reservoir safety, manual gate commands automatically return to autonomous AUTO mode after 5 minutes of operator inactivity.
+            </Text>
+          </View>
+        </View>
+
         {/* Control Options */}
         <View style={styles.controlSection}>
-          <Text style={styles.sectionTitle}>Control Options</Text>
+          <Text style={styles.sectionTitle}>Control Options (Hard Clamped to 50% Max)</Text>
 
           {/* Large Action Buttons */}
           <View style={styles.actionButtonsRow}>
             {/* Open Gate */}
             <TouchableOpacity
-              style={[styles.bigBtn, { backgroundColor: '#10B981' }]}
+              style={[styles.bigBtn, { backgroundColor: '#10B981' }, isDispatching && { opacity: 0.6 }]}
               onPress={() => {
                 Alert.alert(
                   'Confirm Gate Discharge',
                   'Select target sluice gate opening percent (Max 50% safety limit):',
                   [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open 20% (Low)', onPress: () => handleExecuteCommand('OPEN_20', 20) },
-                    { text: 'Open 50% (Max)', onPress: () => handleExecuteCommand('OPEN_50', 50) }
+                    { text: 'Open 20% (Low / Advisory)', onPress: () => handleExecuteCommand('OPEN_20', 20) },
+                    { text: 'Open 50% (Max / Flood Relief)', onPress: () => handleExecuteCommand('OPEN_50', 50) }
                   ]
                 );
               }}
@@ -173,7 +315,7 @@ export default function GateControlScreen({ operatorUser, onBack }) {
 
             {/* Close Gate */}
             <TouchableOpacity
-              style={[styles.bigBtn, { backgroundColor: '#EF4444' }]}
+              style={[styles.bigBtn, { backgroundColor: '#EF4444' }, isDispatching && { opacity: 0.6 }]}
               onPress={() => handleExecuteCommand('CLOSE', 0)}
               disabled={isDispatching}
               activeOpacity={0.85}
@@ -196,6 +338,7 @@ export default function GateControlScreen({ operatorUser, onBack }) {
               <Switch
                 value={isManualMode}
                 onValueChange={handleToggleManual}
+                disabled={isDispatching}
                 trackColor={{ false: '#334155', true: '#0284C7' }}
                 thumbColor={isManualMode ? '#FFFFFF' : '#94A3B8'}
               />
@@ -214,6 +357,7 @@ export default function GateControlScreen({ operatorUser, onBack }) {
               <Switch
                 value={isAutoMode}
                 onValueChange={handleToggleAuto}
+                disabled={isDispatching}
                 trackColor={{ false: '#334155', true: '#0284C7' }}
                 thumbColor={isAutoMode ? '#FFFFFF' : '#94A3B8'}
               />
@@ -222,11 +366,11 @@ export default function GateControlScreen({ operatorUser, onBack }) {
 
           {/* Cancel / Stop Button (E-STOP) */}
           <TouchableOpacity
-            style={styles.cancelStopButton}
+            style={[styles.cancelStopButton, isDispatching && { opacity: 0.6 }]}
             onPress={() => {
               Alert.alert(
                 'EMERGENCY STOP (E-STOP)',
-                'Halt servo motor actuator movement immediately?',
+                'Halt servo motor actuator movement and sound emergency alarm immediately?',
                 [
                   { text: 'Resume', style: 'cancel' },
                   { text: 'HALT NOW', style: 'destructive', onPress: () => handleExecuteCommand('ESTOP', 0) }
@@ -236,7 +380,7 @@ export default function GateControlScreen({ operatorUser, onBack }) {
             disabled={isDispatching}
             activeOpacity={0.8}
           >
-            <Text style={styles.cancelStopText}>Cancel / Stop</Text>
+            <Text style={styles.cancelStopText}>Cancel / Stop (E-STOP)</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -285,7 +429,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: '#334155',
-    marginBottom: 20
+    marginBottom: 16
   },
   cardHeaderTitle: {
     fontSize: 13,
@@ -322,7 +466,7 @@ const styles = StyleSheet.create({
     borderRadius: 6
   },
   photoContainer: {
-    height: 150,
+    height: 140,
     borderRadius: 14,
     overflow: 'hidden',
     backgroundColor: '#0F172A'
@@ -330,6 +474,70 @@ const styles = StyleSheet.create({
   damPhoto: {
     width: '100%',
     height: '100%'
+  },
+  watchCard: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: '#38BDF8',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16
+  },
+  watchCardExecuted: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: '#10B981'
+  },
+  watchCardRejected: {
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    borderColor: '#EF4444'
+  },
+  watchCardTimeout: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: '#F59E0B'
+  },
+  watchHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4
+  },
+  watchIcon: {
+    fontSize: 16,
+    marginRight: 8
+  },
+  watchStatusText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#38BDF8'
+  },
+  watchMessageText: {
+    fontSize: 12,
+    color: '#CBD5E1',
+    lineHeight: 16
+  },
+  safetyNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(30, 41, 59, 0.8)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    marginBottom: 18
+  },
+  safetyNoticeIcon: {
+    fontSize: 16,
+    marginTop: 1
+  },
+  safetyNoticeTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#38BDF8',
+    marginBottom: 2
+  },
+  safetyNoticeBody: {
+    fontSize: 11,
+    color: '#94A3B8',
+    lineHeight: 15
   },
   controlSection: {
     width: '100%'

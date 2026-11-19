@@ -27,6 +27,7 @@ import {
   CheckIcon
 } from '../Icons';
 import { supabase } from '../supabaseClient';
+import { sendGateCommand, watchCommandStatus } from '../commandService';
 
 const STORAGE_KEY = 'sdas_operator_contacts_v3';
 
@@ -309,7 +310,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
     });
   };
 
-  // 6. Direct SMS to Specific Contact
+  // 6. Direct SMS to Specific Contact (via on-site SIM800L cellular modem or phone app)
   const handleDirectSms = (contact) => {
     const cleanPhone = contact.phone.replace(/[^0-9+]/g, '');
     const defaultText = `[SDAS ADVISORY] Notice for ${contact.name}: ${alertMessage}`;
@@ -317,9 +318,62 @@ export default function ContactsScreen({ onBack, operatorUser }) {
       ? `sms:${cleanPhone}&body=${encodeURIComponent(defaultText)}`
       : `sms:${cleanPhone}?body=${encodeURIComponent(defaultText)}`;
 
-    Linking.openURL(smsUrl).catch(() => {
-      Alert.alert('SMS Error', `Unable to open SMS app for ${contact.phone}`);
-    });
+    Alert.alert(
+      `SMS to ${contact.name}`,
+      `Select SMS transmission method for ${contact.name} (${cleanPhone}):`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: '📡 SIM800L Test SMS',
+          onPress: () => handleSendSim800lTestSms(contact, cleanPhone)
+        },
+        {
+          text: '📱 Phone SMS App',
+          onPress: () => {
+            Linking.openURL(smsUrl).catch(() => {
+              Alert.alert('SMS Error', `Unable to open SMS app for ${contact.phone}`);
+            });
+          }
+        }
+      ]
+    );
+  };
+
+  // Test SMS through ESP32 SIM800L hardware modem (TEST_SMS with test_only & target_phone)
+  const handleSendSim800lTestSms = async (contact, cleanPhone) => {
+    try {
+      Alert.alert('Dispatching...', `Sending TEST_SMS command to ESP32 node for ${contact.name}...`);
+      const result = await sendGateCommand('PREWARN_SMS', operatorUser, 0, {
+        test_only: true,
+        target_phone: cleanPhone,
+        target_name: contact.name
+      });
+
+      if (!result.ok) {
+        Alert.alert('Command Failed', `Server rejected TEST_SMS command: ${result.message}`);
+        return;
+      }
+
+      watchCommandStatus(result.id, ({ status, done }) => {
+        if (done) {
+          if (status === 'EXECUTED') {
+            Alert.alert(
+              '✓ SIM800L SMS Sent',
+              `ESP32 picked up command and queued cellular test SMS via SIM800L to ${contact.name} (${cleanPhone})!`
+            );
+          } else if (status === 'TIMEOUT') {
+            Alert.alert(
+              '⚠️ Node Offline',
+              `ESP32 did not pick up the command within 30s. Verify Wi-Fi and power on the dam node.`
+            );
+          } else {
+            Alert.alert('❌ Command Rejected', `ESP32 node rejected the test SMS command.`);
+          }
+        }
+      });
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to dispatch test SMS command.');
+    }
   };
 
   // 7. Dispatch Alert & Cellular SMS to All Group Contacts
@@ -336,94 +390,110 @@ export default function ContactsScreen({ onBack, operatorUser }) {
       return;
     }
 
-    setIsSendingAlert(true);
-    let jobQueued = false;
-
-    try {
-      // 1. Insert into public.sms_jobs in Supabase
-      const { data: smsData, error: smsErr } = await supabase
-        .from('sms_jobs')
-        .insert([
-          {
-            message: msg,
-            recipient_group: activeTab === 'EMERGENCY' ? 'TIER_1_ENGINEERS' : activeTab === 'PUBLIC' ? 'PUBLIC_BROADCAST' : 'ALL_RECIPIENTS',
-            status: 'QUEUED',
-            delivered_count: 0
-          }
-        ])
-        .select();
-
-      if (!smsErr) jobQueued = true;
-
-      // 2. Insert into public.alerts
-      // FIX: every operator message was published on the PUBLIC app's alert timeline as
-      // "CRITICAL DANGER" at a made-up 68% level. Use the real latest stage and level instead.
-      const { data: latest } = await supabase
-        .from('readings')
-        .select('alert_state, level_pct, gate_percent')
-        .order('created_at', { ascending: false })
-        .limit(1);
-      const stageNames = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
-      const realStage = latest && latest.length > 0 ? stageNames[latest[0].alert_state] : null;
-      await supabase.from('alerts').insert([
+    Alert.alert(
+      'Broadcast Cellular Alert',
+      `Transmit cellular emergency broadcast through on-site SIM800L modem to all ${targetContacts.length} contacts?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
         {
-          // An operator broadcast is at least a pre-warning; never lower than the real stage
-          stage: realStage && realStage !== 'NORMAL' && realStage !== 'MAINTENANCE' ? realStage : 'PRE_WARNING',
-          source: 'MANUAL',
-          message: msg,
-          water_level_pct: latest && latest.length > 0 ? latest[0].level_pct : null,
-          gate_percent: latest && latest.length > 0 ? latest[0].gate_percent : null
-        }
-      ]);
+          text: '📡 Broadcast via SIM800L',
+          onPress: async () => {
+            setIsSendingAlert(true);
+            try {
+              // 1. Insert into public.sms_jobs in Supabase
+              await supabase
+                .from('sms_jobs')
+                .insert([
+                  {
+                    message: msg,
+                    recipient_group: activeTab === 'EMERGENCY' ? 'TIER_1_ENGINEERS' : activeTab === 'PUBLIC' ? 'PUBLIC_BROADCAST' : 'ALL_RECIPIENTS',
+                    status: 'QUEUED',
+                    delivered_count: 0
+                  }
+                ]);
 
-      // 3. Insert into public.community_messages
-      await supabase.from('community_messages').insert([
-        {
-          dam_id: 'KANTALAI-01',
-          sender_name: operatorUser?.fullName || 'Dam Control Operator',
-          sender_role: 'OPERATOR',
-          message: msg,
-          is_system: true
-        }
-      ]);
+              // 2. Insert into public.alerts
+              const { data: latest } = await supabase
+                .from('readings')
+                .select('alert_state, level_pct, gate_percent')
+                .order('created_at', { ascending: false })
+                .limit(1);
+              const stageNames = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+              const realStage = latest && latest.length > 0 ? stageNames[latest[0].alert_state] : null;
+              await supabase.from('alerts').insert([
+                {
+                  stage: realStage && realStage !== 'NORMAL' && realStage !== 'MAINTENANCE' ? realStage : 'PRE_WARNING',
+                  source: 'MANUAL',
+                  message: msg,
+                  water_level_pct: latest && latest.length > 0 ? latest[0].level_pct : null,
+                  gate_percent: latest && latest.length > 0 ? latest[0].gate_percent : null
+                }
+              ]);
 
-      // 4. Log to audit_log
-      await supabase.from('audit_log').insert([
-        {
-          action: 'DISPATCH_SMS_TO_CONTACTS',
-          payload: {
-            recipient_count: targetContacts.length,
-            group: activeTab,
-            message: msg,
-            operator: operatorUser?.email || 'operator@kantalai.gov.lk'
+              // 3. Insert into public.community_messages
+              await supabase.from('community_messages').insert([
+                {
+                  dam_id: 'TABBOWA-01',
+                  sender_name: operatorUser?.fullName || 'Dam Control Operator',
+                  sender_role: 'OPERATOR',
+                  message: msg,
+                  is_system: true
+                }
+              ]);
+
+              // 4. Log to audit_log
+              await supabase.from('audit_log').insert([
+                {
+                  action: 'DISPATCH_SMS_TO_CONTACTS',
+                  payload: {
+                    recipient_count: targetContacts.length,
+                    group: activeTab,
+                    message: msg,
+                    operator: operatorUser?.email || 'operator@tabbowa.gov.lk'
+                  }
+                }
+              ]);
+
+              // 5. Send PREWARN_SMS command to ESP32 node via Supabase commands table
+              const cmdResult = await sendGateCommand('PREWARN_SMS', operatorUser, 0, {
+                test_only: false,
+                message: msg
+              });
+
+              if (!cmdResult.ok) {
+                Alert.alert(
+                  'Command Error',
+                  `Broadcast logged to database, but command to ESP32 was rejected: ${cmdResult.message}.\n\nYou can use "Native SMS" as a fallback.`
+                );
+                setIsSendingAlert(false);
+                return;
+              }
+
+              // Watch for ESP32 execution
+              watchCommandStatus(cmdResult.id, ({ status, done }) => {
+                if (done) {
+                  setIsSendingAlert(false);
+                  if (status === 'EXECUTED') {
+                    Alert.alert(
+                      '✓ Broadcast Executed',
+                      `The ESP32 confirmed the command and is broadcasting emergency SMS to ${targetContacts.length} contacts via the SIM800L cellular modem!`
+                    );
+                  } else if (status === 'TIMEOUT') {
+                    Alert.alert(
+                      '⚠️ Node Offline',
+                      `ESP32 did not pick up the broadcast within 30s. Tap "📱 Native SMS" below to text contacts directly from this phone.`
+                    );
+                  }
+                }
+              });
+            } catch (err) {
+              setIsSendingAlert(false);
+              Alert.alert('Broadcast Error', err.message || 'Failed to dispatch broadcast.');
+            }
           }
         }
-      ]);
-
-      // FIX: nothing reads sms_jobs, so no SIM800L SMS is sent from here. Say so honestly and
-      // point the operator to the native SMS composer, which really sends the message.
-      Alert.alert(
-        'Alert Logged - Not Yet Sent',
-        `Your message was ${jobQueued ? 'logged in the database' : 'NOT logged (database error)'} and posted to the alert timeline.\n\n` +
-          'The ESP32 does not send custom messages. Tap "Open Native SMS" to send it from this phone.\n\n' +
-          `• Target Recipients: ${targetContacts.map((c) => c.name).join(', ')}\n` +
-          `• Phone Numbers: ${targetContacts.map((c) => c.phone).join(', ')}`,
-        [
-          { text: 'Done', style: 'cancel' },
-          {
-            text: '📱 Open Native SMS',
-            onPress: () => handleOpenNativeSmsAll(targetContacts, msg)
-          }
-        ]
-      );
-    } catch (err) {
-      Alert.alert(
-        'Alert NOT Sent',
-        `Network or database error: ${err.message || 'unknown'}. Use "Open Native SMS" or call the contacts directly.`
-      );
-    } finally {
-      setIsSendingAlert(false);
-    }
+      ]
+    );
   };
 
   // Launch Native Phone SMS App prefilled with all numbers
@@ -664,7 +734,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
               style={[styles.templateChip, { borderColor: '#F59E0B' }]}
               onPress={() =>
                 setAlertMessage(
-                  '[SDAS PRE-WARNING] Kantalai Reservoir approaching 80%. Sluice gates in standby. Duty officers monitor telemetry.'
+                  '[SDAS PRE-WARNING] Tabbowa Dam reservoir approaching 80%. Sluice gates in standby. Duty officers monitor telemetry.'
                 )
               }
             >

@@ -68,9 +68,9 @@ export default function PublicApp() {
 
   // DHT22 On-Site Environmental Sensor Telemetry
   const [dhtData, setDhtData] = useState({
-    temperature: 0.0,
-    humidity: 0.0,
-    speedOfSound: 331.4,
+    temperature: null,
+    humidity: null,
+    speedOfSound: null,
     isLiveSensor: false,
     condition: 'Awaiting Hardware'
   });
@@ -79,7 +79,7 @@ export default function PublicApp() {
   const weatherData = {
     condition: dhtData.condition,
     tempC: dhtData.temperature,
-    feelsLikeC: dhtData.temperature > 0 ? Math.round(dhtData.temperature + 2) : 0,
+    feelsLikeC: dhtData.temperature !== null ? Math.round(dhtData.temperature + 2) : null,
     windSpeedKmh: null,   // FIX: was a fixed 12 km/h shown as real weather
     humidityPct: dhtData.humidity,
     rainChancePct: null,  // FIX: was a fixed 20% shown as real weather
@@ -108,22 +108,22 @@ export default function PublicApp() {
         setWaterLevel(pct);
         setGatePercent(parseInt(live.gate_percent, 10) || 0);
 
-        const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+        const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'SENSOR_FAULT'];
         if (live.alert_state !== undefined) {
-          setAlertKey(stateLabels[live.alert_state] || 'NORMAL');
+          setAlertKey(stateLabels[live.alert_state] || (live.alert_state === 4 ? 'SENSOR_FAULT' : 'NORMAL'));
         }
 
-        // Extract live DHT22 temperature and humidity
-        const temp = live.temperature !== undefined && live.temperature !== null ? parseFloat(live.temperature) : 0.0;
-        const hum = live.humidity !== undefined && live.humidity !== null ? parseFloat(live.humidity) : 0.0;
-        const speed = parseFloat((331.4 + 0.606 * temp).toFixed(1));
+        // Extract live DHT22 temperature and humidity (null if sensor fault)
+        const temp = (live.temperature !== undefined && live.temperature !== null) ? parseFloat(live.temperature) : null;
+        const hum = (live.humidity !== undefined && live.humidity !== null) ? parseFloat(live.humidity) : null;
+        const speed = temp !== null ? parseFloat((331.4 + 0.606 * temp).toFixed(1)) : null;
 
         setDhtData({
           temperature: temp,
           humidity: hum,
           speedOfSound: speed,
-          isLiveSensor: true,
-          condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : temp > 0 ? 'Overcast' : 'Live Sync'
+          isLiveSensor: temp !== null,
+          condition: temp !== null ? (temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : temp > 0 ? 'Overcast' : 'Live Sync') : 'Awaiting Sensor'
         });
 
         // Strict Hardware Presence Check: only marked LIVE if packet created within last 30s
@@ -153,22 +153,20 @@ export default function PublicApp() {
           setWaterLevel(pct);
           setGatePercent(parseInt(r.gate_percent, 10) || 0);
 
-          const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'MAINTENANCE'];
+          const stateLabels = ['NORMAL', 'PRE_WARNING', 'CLEAR_AREA', 'DANGER', 'SENSOR_FAULT'];
           if (r.alert_state !== undefined) {
-            setAlertKey(stateLabels[r.alert_state] || 'NORMAL');
+            setAlertKey(stateLabels[r.alert_state] || (r.alert_state === 4 ? 'SENSOR_FAULT' : 'NORMAL'));
           }
 
-          if (r.temperature !== undefined && r.temperature !== null) {
-            const temp = parseFloat(r.temperature);
-            const hum = r.humidity !== undefined && r.humidity !== null ? parseFloat(r.humidity) : 0.0;
-            setDhtData({
-              temperature: temp,
-              humidity: hum,
-              speedOfSound: parseFloat((331.4 + 0.606 * temp).toFixed(1)),
-              isLiveSensor: true,
-              condition: temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : 'Overcast'
-            });
-          }
+          const temp = (r.temperature !== undefined && r.temperature !== null) ? parseFloat(r.temperature) : null;
+          const hum = (r.humidity !== undefined && r.humidity !== null) ? parseFloat(r.humidity) : null;
+          setDhtData({
+            temperature: temp,
+            humidity: hum,
+            speedOfSound: temp !== null ? parseFloat((331.4 + 0.606 * temp).toFixed(1)) : null,
+            isLiveSensor: temp !== null,
+            condition: temp !== null ? (temp > 30 ? 'Hot & Clear' : temp > 25 ? 'Partly Cloudy' : 'Overcast') : 'Awaiting Sensor'
+          });
 
           const packetTime = r.created_at ? new Date(r.created_at) : new Date();
           setHasRealTelemetry(true);
@@ -200,7 +198,7 @@ export default function PublicApp() {
     }
   };
 
-  // Scaled height calculations for Kantalai Reservoir (3.00 m full supply level)
+  // Scaled height calculations for Tabbowa Reservoir (Puttalam) (3.00 m full supply level)
   const totalHeightM = 3.00;
   const currentLevelM = ((waterLevel / 100.0) * totalHeightM).toFixed(2);
   const remainingM = Math.max(0, totalHeightM - parseFloat(currentLevelM)).toFixed(2);
@@ -230,14 +228,14 @@ export default function PublicApp() {
         icon: <AlertTriangleIcon size={18} color="#B45309" />
       };
     }
-    if (alertKey === 'MAINTENANCE') {
+    if (alertKey === 'MAINTENANCE' || alertKey === 'SENSOR_FAULT') {
       return {
-        label: 'Sensor Check in Progress',
-        sub: 'Water level reading is unavailable. Follow local authorities (DMC 117).',
-        bg: '#FEF3C7',
-        border: '#FDE68A',
-        text: '#B45309',
-        icon: <AlertTriangleIcon size={18} color="#B45309" />
+        label: 'Sensor Fault (Degraded Mode)',
+        sub: 'Dual ultrasonic acoustic sensors out of agreement or echo lost. Maintenance alerted.',
+        bg: '#EFF6FF',
+        border: '#93C5FD',
+        text: '#1D4ED8', // Blue badge for sensor fault as specified in PDF
+        icon: <AlertTriangleIcon size={18} color="#1D4ED8" />
       };
     }
     if (waterLevel >= 85 || alertKey === 'DANGER') {
@@ -414,7 +412,7 @@ export default function PublicApp() {
             activeOpacity={0.8}
           >
             <MapPinIcon size={16} color="#0284C7" />
-            <Text style={styles.locationText}>Kantalai Dam</Text>
+            <Text style={styles.locationText}>Tabbowa Dam (Puttalam)</Text>
             <Text style={styles.dropdownArrow}>▾</Text>
           </TouchableOpacity>
 
@@ -427,6 +425,19 @@ export default function PublicApp() {
             </Text>
           </View>
         </View>
+
+        {/* Sensor Fault Critical Alert Banner */}
+        {(alertKey === 'SENSOR_FAULT' || alertKey === 'MAINTENANCE') && (
+          <View style={styles.sensorFaultCard}>
+            <Text style={{ fontSize: 22 }}>⚠️</Text>
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              <Text style={styles.sensorFaultTitle}>CRITICAL SENSOR FAULT DETECTED</Text>
+              <Text style={styles.sensorFaultSub}>
+                Acoustic distance sensors mismatch or echo timeout. System in safety degraded mode. Maintenance staff notified.
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Status Alert Banner Card */}
         <View style={[styles.statusCard, { backgroundColor: statusBadge.bg, borderColor: statusBadge.border }]}>
@@ -491,15 +502,17 @@ export default function PublicApp() {
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Text style={styles.weatherTitle}>Dam Microclimate & Weather</Text>
                 <View style={styles.dhtPillBadge}>
-                  <View style={styles.dhtPillDot} />
-                  <Text style={styles.dhtPillText}>DHT22 SENSOR</Text>
+                  <View style={[styles.dhtPillDot, dhtData.temperature === null && { backgroundColor: '#94A3B8' }]} />
+                  <Text style={[styles.dhtPillText, dhtData.temperature === null && { color: '#94A3B8' }]}>
+                    {dhtData.temperature !== null ? 'DHT22 SENSOR' : 'NO SENSOR'}
+                  </Text>
                 </View>
               </View>
               <Text style={styles.weatherSub}>
-                Dam Site Ambient: <Text style={styles.weatherTemp}>{dhtData.temperature}°C</Text>
+                Dam Site Ambient: <Text style={styles.weatherTemp}>{dhtData.temperature !== null ? `${dhtData.temperature}°C` : '--'}</Text>
               </Text>
               <Text style={styles.weatherMetrics}>
-                Humidity: {dhtData.humidity}%  •  Sound Speed: {dhtData.speedOfSound} m/s
+                Humidity: {dhtData.humidity !== null ? `${dhtData.humidity}%` : '--'}  •  Sound Speed: {dhtData.speedOfSound !== null ? `${dhtData.speedOfSound} m/s` : '--'}
               </Text>
             </View>
           </View>
@@ -801,6 +814,27 @@ const styles = StyleSheet.create({
   dropdownArrow: {
     fontSize: 12,
     color: '#64748B'
+  },
+  sensorFaultCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#3B82F6'
+  },
+  sensorFaultTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1D4ED8',
+    marginBottom: 2
+  },
+  sensorFaultSub: {
+    fontSize: 11,
+    color: '#1E40AF',
+    lineHeight: 15
   },
   statusCard: {
     borderRadius: 18,
