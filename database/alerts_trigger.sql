@@ -60,7 +60,8 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_reading_alert_transition ON public.readings;
 CREATE TRIGGER trg_reading_alert_transition

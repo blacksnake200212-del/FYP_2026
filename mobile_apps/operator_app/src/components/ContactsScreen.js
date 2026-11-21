@@ -476,13 +476,15 @@ export default function ContactsScreen({ onBack, operatorUser }) {
                   if (status === 'EXECUTED') {
                     Alert.alert(
                       '✓ Broadcast Executed',
-                      `The ESP32 confirmed the command and is broadcasting emergency SMS to ${targetContacts.length} contacts via the SIM800L cellular modem!`
+                      `The ESP32 confirmed the command. It sends its standard pre-warning SMS (not the text typed here) to the contacts it last synced from Supabase (up to 10) via the SIM800L.`
                     );
                   } else if (status === 'TIMEOUT') {
                     Alert.alert(
                       '⚠️ Node Offline',
                       `ESP32 did not pick up the broadcast within 30s. Tap "📱 Native SMS" below to text contacts directly from this phone.`
                     );
+                  } else {
+                    Alert.alert('❌ Broadcast Rejected', 'The ESP32 rejected the broadcast command.');
                   }
                 }
               });

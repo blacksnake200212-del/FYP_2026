@@ -114,8 +114,10 @@ export default function PublicApp() {
         }
 
         // Extract live DHT22 temperature and humidity (null if sensor fault)
-        const temp = (live.temperature !== undefined && live.temperature !== null) ? parseFloat(live.temperature) : null;
-        const hum = (live.humidity !== undefined && live.humidity !== null) ? parseFloat(live.humidity) : null;
+        // The database stores 0 / 0 when the DHT22 has no reading -> treat as missing
+        const dhtMissing = !(parseFloat(live.temperature) || parseFloat(live.humidity));
+        const temp = dhtMissing ? null : parseFloat(live.temperature);
+        const hum = dhtMissing ? null : parseFloat(live.humidity);
         const speed = temp !== null ? parseFloat((331.4 + 0.606 * temp).toFixed(1)) : null;
 
         setDhtData({
@@ -158,8 +160,9 @@ export default function PublicApp() {
             setAlertKey(stateLabels[r.alert_state] || (r.alert_state === 4 ? 'SENSOR_FAULT' : 'NORMAL'));
           }
 
-          const temp = (r.temperature !== undefined && r.temperature !== null) ? parseFloat(r.temperature) : null;
-          const hum = (r.humidity !== undefined && r.humidity !== null) ? parseFloat(r.humidity) : null;
+          const dhtMissing = !(parseFloat(r.temperature) || parseFloat(r.humidity));
+          const temp = dhtMissing ? null : parseFloat(r.temperature);
+          const hum = dhtMissing ? null : parseFloat(r.humidity);
           setDhtData({
             temperature: temp,
             humidity: hum,

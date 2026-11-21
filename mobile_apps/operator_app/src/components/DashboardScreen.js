@@ -68,8 +68,11 @@ export default function DashboardScreen({ operatorUser }) {
         const currentM = (pct / 100.0) * 3.00;
         const currentCm = Math.round(currentM * 100);
 
-        const tempVal = (r.temperature !== undefined && r.temperature !== null) ? parseFloat(r.temperature) : null;
-        const humVal = (r.humidity !== undefined && r.humidity !== null) ? parseFloat(r.humidity) : null;
+        // The database stores 0 / 0 when the DHT22 has no reading (firmware sends null) -> show '--'
+        const dhtMissing = (r.temperature === undefined || r.temperature === null || parseFloat(r.temperature) === 0) &&
+          (r.humidity === undefined || r.humidity === null || parseFloat(r.humidity) === 0);
+        const tempVal = dhtMissing ? null : parseFloat(r.temperature);
+        const humVal = dhtMissing ? null : parseFloat(r.humidity);
 
         setTelemetry((prev) => ({
           ...prev,
@@ -114,8 +117,11 @@ export default function DashboardScreen({ operatorUser }) {
             const currentM = (pct / 100.0) * 3.00;
             const currentCm = Math.round(currentM * 100);
 
-            const tempVal = (r.temperature !== undefined && r.temperature !== null) ? parseFloat(r.temperature) : null;
-            const humVal = (r.humidity !== undefined && r.humidity !== null) ? parseFloat(r.humidity) : null;
+            // The database stores 0 / 0 when the DHT22 has no reading (firmware sends null) -> show '--'
+            const dhtMissing = (r.temperature === undefined || r.temperature === null || parseFloat(r.temperature) === 0) &&
+              (r.humidity === undefined || r.humidity === null || parseFloat(r.humidity) === 0);
+            const tempVal = dhtMissing ? null : parseFloat(r.temperature);
+            const humVal = dhtMissing ? null : parseFloat(r.humidity);
 
             setTelemetry((prev) => ({
               ...prev,
@@ -237,7 +243,9 @@ export default function DashboardScreen({ operatorUser }) {
         <View style={styles.faultBannerCard}>
           <Text style={styles.faultBannerIcon}>⚠️</Text>
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={styles.faultBannerTitle}>CRITICAL SENSOR FAULT DETECTED</Text>
+            <Text style={styles.faultBannerTitle}>
+              {telemetry.alertState === 'SENSOR_FAULT' ? 'CRITICAL SENSOR FAULT DETECTED' : 'SENSORS DISAGREE (DEGRADED MODE)'}
+            </Text>
             <Text style={styles.faultBannerBody}>
               Dual ultrasonic sensors out of agreement or echo lost. Operating in safety degraded mode. Inspect transducer cables & 5V power rails.
             </Text>

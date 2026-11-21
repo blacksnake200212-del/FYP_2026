@@ -366,7 +366,8 @@ export default function GateControlScreen({ operatorUser, onBack }) {
 
           {/* Cancel / Stop Button (E-STOP) */}
           <TouchableOpacity
-            style={[styles.cancelStopButton, isDispatching && { opacity: 0.6 }]}
+            // SAFETY: E-STOP is never disabled, even while another command is waiting for the ESP32
+            style={styles.cancelStopButton}
             onPress={() => {
               Alert.alert(
                 'EMERGENCY STOP (E-STOP)',
@@ -377,7 +378,6 @@ export default function GateControlScreen({ operatorUser, onBack }) {
                 ]
               );
             }}
-            disabled={isDispatching}
             activeOpacity={0.8}
           >
             <Text style={styles.cancelStopText}>Cancel / Stop (E-STOP)</Text>

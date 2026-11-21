@@ -644,6 +644,12 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.sms_jobs;
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
+DO $$
+BEGIN
+    -- Lets the operator app see EXECUTED / REJECTED at once (it also polls every 2.5 s)
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.commands;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
 -- ============================================================================
 -- 20. INITIAL SEED: EMERGENCY CONTACT DIRECTORY (4 Demo Test Numbers)
@@ -691,6 +697,8 @@ CREATE TABLE IF NOT EXISTS private.device_keys (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 REVOKE ALL ON private.device_keys FROM PUBLIC;
+-- RLS on with no policies = no app access at all (the function below runs as owner, so it still works)
+ALTER TABLE private.device_keys ENABLE ROW LEVEL SECURITY;
 
 CREATE OR REPLACE FUNCTION public.get_sms_recipients(p_key TEXT)
 RETURNS TABLE (phone TEXT)
@@ -787,7 +795,8 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_reading_alert_transition ON public.readings;
 CREATE TRIGGER trg_reading_alert_transition
