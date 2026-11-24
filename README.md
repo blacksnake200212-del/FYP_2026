@@ -44,23 +44,17 @@ FYP_2026/
 │   ├── app.js                       # Real-time WebSocket, MQTT & Supabase data sync
 │   ├── styles.css                   # Responsive dark-theme industrial SCADA CSS
 │   └── server.js                    # Node.js production web server
-├── backend_ml/                      # Machine Learning Inference Server (FastAPI)
+├── backend_ml/                      # Rule-Based Decision Support Server (FastAPI, advisory only)
 │   ├── app/
-│   │   ├── main.py                  # FastAPI REST endpoints (/forecast, /anomaly-check)
-│   │   ├── ml_service.py            # Neural forecaster, autoencoder & RF inference
+│   │   ├── main.py                  # FastAPI REST endpoints (/forecast, /anomaly-check, /classify-risk)
+│   │   ├── rule_engine.py           # Trend forecast, sensor rules, threshold advice
 │   │   ├── models.py                # Pydantic schemas
 │   │   └── weather_service.py       # Open-Meteo live precipitation client
-│   ├── data/
-│   │   └── dataset_tank_simulation.csv # 7-day hydrological simulation dataset
-│   ├── train/
-│   │   ├── generate_synthetic_data.py # Hydrological tank simulation generator
-│   │   ├── train_lstm.py            # 1-hour ahead neural sequence forecaster
-│   │   ├── train_autoencoder.py     # Deep autoencoder sensor anomaly detector
-│   │   └── train_random_forest.py   # Multi-class hazard tier classifier
-│   ├── saved_models/                # Persisted joblib model artifacts
 │   ├── tests/
-│   │   └── test_api.py              # Full automated test suite (5 passing tests)
+│   │   ├── test_rule_engine.py      # 8 rule tests (no packages needed)
+│   │   └── test_api.py              # 6 API tests
 │   └── requirements.txt
+├── bench_test/                      # Printable bench test sheet (PDF + HTML source)
 ├── database/                        # Supabase PostgreSQL Database Architecture
 │   ├── schema.sql                   # Tables, RLS security policies, views, triggers
 │   ├── seed_data.sql                # Calibrated baseline telemetry and contact seeds

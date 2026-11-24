@@ -35,8 +35,8 @@ python backend_ml/tests/test_rule_engine.py     # rules only, no packages needed
 python -m pytest backend_ml/tests -q            # rules + API (needs fastapi, httpx)
 ```
 
-No training step is needed. The old `train/`, `saved_models/` and `data/` folders are no
-longer used and can be deleted.
+No training step is needed. The old ML code (`ml_service.py`, `train/`, `saved_models/`,
+`data/`) was removed on 24 Nov 2026; it is still in the git history if needed for the report.
 
 ---
 

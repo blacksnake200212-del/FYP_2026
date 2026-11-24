@@ -207,5 +207,4 @@ gauge; dark + gear = operator, blue + bell = public). The old icons had cut-off 
 - Run `schema.sql` again in Supabase (adds the Tabbowa dam row and defaults).
 - Optional: deploy the push Edge Function (`database/README.md`, section 5).
 - Rebuild both APKs, then take real screenshots from the phones.
-- `backend_ml/app/ml_service.py`, `backend_ml/train/`, `backend_ml/saved_models/` and `backend_ml/data/` are no longer used and can be deleted.
-- Delete the empty `app.json` in the main project folder (created by running a build command there).
+- ~~Delete the unused ML files and the empty root `app.json`~~: done (24 Nov 2026). The old ML code is still in git history (commit `c273fdd` and earlier).
