@@ -129,13 +129,12 @@
 #define GATE_DEG_DANGER          90    // 50% of 180 degrees
 #define GATE_DEG_MAX_LIMIT       90    // 50% of 180 degrees
 
-// Manual Mode Safety Watchdog Timeout (Seconds)
-// FIX: this value existed but was never used, so a REMOTE manual command (app / dashboard)
-// held the gate forever and AUTO flood control stayed off if the operator walked away.
-// Remote MANUAL / OPEN / CLOSE commands and a MANUAL mode restored after a reboot now revert
-// to AUTO after this time. Physical buttons and Serial commands (someone is on site) stay
-// indefinite. Set to 0 to restore the old "hold forever" behaviour.
-#define MANUAL_WATCHDOG_TIMEOUT_SEC 300
+// Manual Mode Timeout (Seconds)
+// As in the project proposal: MANUAL mode holds until the operator returns to AUTO (0 = no
+// timeout). DANGER alarms (red light + siren) and stage SMS alerts still continue in MANUAL.
+// Set a value > 0 (e.g. 300) to make remote MANUAL / OPEN / CLOSE commands and a MANUAL mode
+// restored after a reboot return to AUTO by themselves after that many seconds.
+#define MANUAL_WATCHDOG_TIMEOUT_SEC 0
 
 // ============================================================================
 // NETWORK & CLOUD CREDENTIALS

@@ -5,6 +5,11 @@
     "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B132B"
+    },
     "userInterfaceStyle": "dark",
     "assetBundlePatterns": [
       "**/*"

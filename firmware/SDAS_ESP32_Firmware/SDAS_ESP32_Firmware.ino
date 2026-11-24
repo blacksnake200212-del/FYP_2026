@@ -235,7 +235,7 @@ void handleSerialCommand(String cmd) {
             status.alertState == STATE_NORMAL ? "NORMAL (Green)" :
             status.alertState == STATE_PRE_WARNING ? "PRE-WARNING (Yellow)" :
             status.alertState == STATE_CLEAR_AREA ? "CLEAR AREA (Orange)" :
-            status.alertState == STATE_DANGER ? "DANGER (Red)" : "SENSOR FAULT (Purple)");
+            status.alertState == STATE_DANGER ? "DANGER (Red)" : "SENSOR FAULT (Blue)"); // FIX: the fault LED is blue (purple = E-STOP)
         Serial.printf("Control Mode:      %s\n", status.controlMode == MODE_AUTO ? "AUTO" :
             status.controlMode == MODE_MANUAL ? "MANUAL" : "EMERGENCY");
         Serial.printf("RGB LED Polarity:  %s\n", actuatorManager.isPolarityCommonAnode() ? "Common Anode (Active LOW)" : "Common Cathode (Active HIGH)");
@@ -281,7 +281,7 @@ void executeRemoteCommand(const char* command, int param) {
     
     if (strcmp(command, "OPEN") == 0) {
         int clampedParam = constrain(param, 0, GATE_PCT_MAX_LIMIT);
-        // Remote manual hold: reverts to AUTO after MANUAL_WATCHDOG_TIMEOUT_SEC (0 = forever)
+        // Remote manual hold: until AUTO (MANUAL_WATCHDOG_TIMEOUT_SEC = 0) or for that many seconds
         stateMachine.requestManualGatePercent(clampedParam, MANUAL_WATCHDOG_TIMEOUT_SEC);
         actuatorManager.setTargetGatePercent(clampedParam);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
@@ -293,7 +293,7 @@ void executeRemoteCommand(const char* command, int param) {
         } else {
             actuatorManager.setRGBAlert(STATE_PRE_WARNING);
         }
-        Serial.printf("[CMD] Sluice gate set to %d%% (MANUAL MODE - auto-revert in %d s)\n", clampedParam, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        Serial.printf("[CMD] Sluice gate set to %d%% (MANUAL MODE - %s)\n", clampedParam, MANUAL_WATCHDOG_TIMEOUT_SEC > 0 ? "timed" : "holds until AUTO");
     } else if (strcmp(command, "CLOSE") == 0) {
         // Manual Close: Closes gate to 0% and STAYS in MANUAL mode!
         stateMachine.requestManualGatePercent(0, MANUAL_WATCHDOG_TIMEOUT_SEC);
@@ -301,12 +301,12 @@ void executeRemoteCommand(const char* command, int param) {
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
         // Instant visual LED feedback on HW-478 module (< 5ms)
         actuatorManager.setRGBAlert(stateMachine.getStatus().alertState); // Green if reservoir is safe
-        Serial.printf("[CMD] Sluice gate CLOSED to 0%% (MANUAL MODE - auto-revert in %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
+        Serial.printf("[CMD] Sluice gate CLOSED to 0%% (MANUAL MODE - %s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC > 0 ? "timed" : "holds until AUTO");
     } else if (strcmp(command, "MANUAL") == 0) {
         // Explicitly lock into Manual Mode holding current gate position
         stateMachine.requestManualGatePercent(stateMachine.getStatus().actualGatePercent, MANUAL_WATCHDOG_TIMEOUT_SEC);
         actuatorManager.setBuzzerPattern(BUZZER_SHORT_BEEP);
-        Serial.printf("[CMD] Switched to MANUAL mode (auto-revert to AUTO in %d s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC);
+        Serial.printf("[CMD] Switched to MANUAL mode (%s)\n", MANUAL_WATCHDOG_TIMEOUT_SEC > 0 ? "timed" : "holds until AUTO");
     } else if (strcmp(command, "AUTO") == 0) {
         // Return to Autonomous Mode
         stateMachine.revertToAuto();

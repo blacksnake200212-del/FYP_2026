@@ -26,8 +26,9 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
     windSpeedKmh: null,
     humidityPct: null,
     rainChancePct: null,
-    sunrise: '5:52 AM',
-    sunset: '6:12 PM'
+    sunrise: '--',
+    sunset: '--',
+    daily: []
   };
   const dht = dhtData || { temperature: weather.tempC, humidity: weather.humidityPct, speedOfSound: null };
 
@@ -111,7 +112,7 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
               </View>
               <Text style={styles.metricLabel}>Wind Speed</Text>
             </View>
-            <Text style={styles.metricValue}>{weather.windSpeedKmh ?? '--'} km/h</Text>
+            <Text style={styles.metricValue}>{weather.windSpeedKmh !== null && weather.windSpeedKmh !== undefined ? `${weather.windSpeedKmh} km/h` : '--'}</Text>
           </View>
           <View style={styles.divider} />
 
@@ -123,7 +124,7 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
               </View>
               <Text style={styles.metricLabel}>Humidity</Text>
             </View>
-            <Text style={styles.metricValue}>{weather.humidityPct}%</Text>
+            <Text style={styles.metricValue}>{weather.humidityPct !== null && weather.humidityPct !== undefined ? `${weather.humidityPct}%` : '--'}</Text>
           </View>
           <View style={styles.divider} />
 
@@ -135,7 +136,7 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
               </View>
               <Text style={styles.metricLabel}>Rain Chance</Text>
             </View>
-            <Text style={styles.metricValue}>{weather.rainChancePct ?? '--'}%</Text>
+            <Text style={styles.metricValue}>{weather.rainChancePct !== null && weather.rainChancePct !== undefined ? `${weather.rainChancePct}%` : '--'}</Text>
           </View>
           <View style={styles.divider} />
 
@@ -163,11 +164,27 @@ export default function WeatherScreen({ onBack, weatherData, dhtData }) {
           </View>
         </View>
 
-        {/* Hyperlocal Radar / Station Info */}
+        {/* 5-day outlook (Open-Meteo) + data source. FIX: the old card claimed a
+            "Kantalai Hydro-Meteorological Station" with Doppler radar feeds, which does not exist. */}
         <View style={styles.stationCard}>
-          <Text style={styles.stationTitle}>Kantalai Hydro-Meteorological Station</Text>
-          <Text style={styles.stationDesc}>
-            Real-time telemetry updated continuously via automatic field sensors and Doppler radar feeds.
+          <Text style={styles.stationTitle}>5-Day Outlook · Puttalam</Text>
+          {weather.daily && weather.daily.length > 0 ? (
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
+              {weather.daily.map((d, k) => (
+                <View key={k} style={{ alignItems: 'center', flex: 1 }}>
+                  <Text style={styles.stationDesc}>{d.day}</Text>
+                  <Text style={{ fontSize: 20, marginVertical: 4 }}>{d.icon}</Text>
+                  <Text style={[styles.stationDesc, { fontWeight: '700' }]}>{d.tMax !== null ? `${Math.round(d.tMax)}°` : '--'}</Text>
+                  <Text style={styles.stationDesc}>{d.rainMm !== null ? `${d.rainMm} mm` : '--'}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.stationDesc}>Forecast unavailable (no internet).</Text>
+          )}
+          <Text style={[styles.stationDesc, { marginTop: 10 }]}>
+            Dam-site temperature and humidity: DHT22 sensor on the SDAS node. Forecast, wind, rain chance, sunrise and sunset: Open-Meteo.
+            {weather.rainNext3hMm !== null && weather.rainNext3hMm !== undefined ? ` Rain expected in the next 3 h: ${weather.rainNext3hMm} mm.` : ''}
           </Text>
         </View>
       </ScrollView>

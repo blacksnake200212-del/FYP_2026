@@ -127,6 +127,9 @@ export default function FloodReportsScreen({ operatorUser }) {
     }
 
     // 3b. Push update to Supabase
+    // FIX: the app always said "Alert Dispatched ... advisory sent to citizens within X km", even when
+    // the save failed, and no advisory is sent from here. It now reports what really happened.
+    let saveError = null;
     try {
       const { error } = await supabase
         .from('flood_reports')
@@ -136,17 +139,16 @@ export default function FloodReportsScreen({ operatorUser }) {
           verified_at: nowIso
         })
         .eq('id', report.id);
-
-      if (error) {
-        console.warn('Supabase remote verify failed, saved locally:', error.message);
-      }
+      if (error) saveError = error.message;
     } catch (err) {
-      console.warn('Verify remote network error:', err.message);
+      saveError = err.message || 'network error';
     } finally {
       setIsProcessing(false);
       Alert.alert(
-        '✓ Report Verified & Alert Dispatched',
-        `Community flood advisory sent to citizens within ${report.distance_km || 5.0} km radius of ${report.location_name}.`
+        saveError ? 'Verified on this phone only' : '✓ Report Verified',
+        saveError
+          ? `The database update failed (${saveError}). Try again when online.`
+          : `The report from ${report.location_name} is now VERIFIED and shows as verified in the public app's community updates.`
       );
     }
   };
@@ -161,8 +163,9 @@ export default function FloodReportsScreen({ operatorUser }) {
     await saveReportsLocally(updatedReports);
     setSelectedReport(null);
 
+    let saveError = null;
     try {
-      await supabase
+      const { error } = await supabase
         .from('flood_reports')
         .update({
           status: 'REJECTED',
@@ -170,11 +173,15 @@ export default function FloodReportsScreen({ operatorUser }) {
           verified_at: new Date().toISOString()
         })
         .eq('id', report.id);
+      if (error) saveError = error.message;
     } catch (e) {
-      // Local rejection saved
+      saveError = e.message || 'network error';
     } finally {
       setIsProcessing(false);
-      Alert.alert('Report Rejected', 'This report has been dismissed as a false alarm.');
+      Alert.alert(
+        saveError ? 'Rejected on this phone only' : 'Report Rejected',
+        saveError ? `The database update failed (${saveError}). Try again when online.` : 'This report has been dismissed as a false alarm.'
+      );
     }
   };
 

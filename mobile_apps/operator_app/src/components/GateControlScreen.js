@@ -275,13 +275,13 @@ export default function GateControlScreen({ operatorUser, onBack }) {
           </View>
         )}
 
-        {/* Manual Mode Auto-Revert Safety Notice */}
+        {/* Manual Mode Notice */}
         <View style={styles.safetyNoticeCard}>
           <Text style={styles.safetyNoticeIcon}>ℹ️</Text>
           <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text style={styles.safetyNoticeTitle}>Manual Mode 5-Minute Safety Watchdog</Text>
+            <Text style={styles.safetyNoticeTitle}>Manual Mode Holds Until AUTO</Text>
             <Text style={styles.safetyNoticeBody}>
-              For reservoir safety, manual gate commands automatically return to autonomous AUTO mode after 5 minutes of operator inactivity.
+              A manual gate position stays until you switch back to Automatic Mode. Danger alarms (red light, siren) and stage SMS alerts still continue in Manual Mode.
             </Text>
           </View>
         </View>

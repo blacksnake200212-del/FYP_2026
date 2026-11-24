@@ -89,7 +89,7 @@ If `NOW() - updated_at > 120 seconds`:
    - Commands: `OPEN`, `CLOSE`, `EMERGENCY STOP (ESTOP)`, `REVERT TO AUTO`.
    - Gate Presets: `0% (Closed)`, `20% (Advisory Discharge)`, `50% (High Emergency Discharge)`.
    - **Hold-to-Confirm:** Requires a 2-second continuous hold to eliminate accidental touches.
-   - **Watchdog Countdown:** Shows remaining active manual duration (e.g., 300s) before automated failsafe reversion to `AUTO`.
+   - **Manual Hold:** Manual mode holds until the operator switches back to `AUTO`; Danger alarms and SMS continue.
    - Command state indicator: `PENDING` ➔ `ACKNOWLEDGED` ➔ `EXECUTED` (or `REJECTED`).
 4. **Alerts & Manual SMS:**
    - Manual staged Pre-Warning SMS broadcast dispatcher via SIM800L.

@@ -108,7 +108,7 @@ export default function CommunityChatScreen({ t, onBack }) {
     try {
       await supabase.from('community_messages').insert([
         {
-          dam_id: 'KANTALAI-01',
+          dam_id: 'TABBOWA-01',
           sender_name: 'Community Member',
           sender_role: 'CITIZEN',
           message: text,
@@ -141,7 +141,7 @@ export default function CommunityChatScreen({ t, onBack }) {
           )}
           <View>
             <Text style={styles.channelTitle}>{t.communityChat || 'Community Discussion'}</Text>
-            <Text style={styles.channelSub}>Kantalai Reservoir Community Channel</Text>
+            <Text style={styles.channelSub}>Tabbowa Dam Community Channel</Text>
           </View>
         </View>
         <ChatBubbleIcon size={24} color="#2563EB" />

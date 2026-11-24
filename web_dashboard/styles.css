@@ -1889,3 +1889,48 @@ footer {
   border-color: rgba(239, 68, 68, 0.4);
   color: #F87171;
 }
+
+/* Rule-based advice card (12 cols) */
+.col-advice {
+  grid-column: span 12;
+}
+.advice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.advice-item {
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.advice-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.advice-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #E2E8F0;
+}
+.advice-value.ok { color: #34D399; }
+.advice-value.warn { color: #FBBF24; }
+.advice-value.bad { color: #F87171; }
+.advice-sub {
+  font-size: 12px;
+  color: #94A3B8;
+  margin-top: 6px;
+  line-height: 1.45;
+}
+.advice-foot {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .advice-grid { grid-template-columns: 1fr; }
+}

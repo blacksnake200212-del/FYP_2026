@@ -1,13 +1,15 @@
 """
-Smart Dam Alert System (SDAS) - Machine Learning Inference Microservice
-Built with FastAPI. Provides 1-hour ahead water-level forecasting,
-Autoencoder sensor anomaly verification, Random Forest hazard classification,
-and Open-Meteo meteorological synchronization.
+Smart Dam Alert System (SDAS) - Rule-Based Decision Support Service
+Built with FastAPI. Gives explainable, rule-based advice to operators:
+1-hour level trend forecast, dual-sensor fault checks, risk stage advice, and
+Open-Meteo rainfall for Puttalam.
+
+ADVISORY ONLY: the ESP32 firmware always controls the gate with its own thresholds.
+(The earlier ML models were replaced with rules on supervisor advice.)
 """
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any
 
 from .models import (
     TelemetryPayload,
@@ -16,111 +18,97 @@ from .models import (
     RiskClassificationRequest, RiskClassificationResponse,
     WeatherResponse
 )
-from .ml_service import ml_service
+from .rule_engine import rule_engine, SENSOR_MOUNT_HEIGHT_CM
 from .weather_service import weather_service
 
 app = FastAPI(
-    title="SDAS Machine Learning Inference Server",
-    description="Hydrological forecasting and dual-sensor anomaly verification service for Tabbowa Dam / Puttalam Basin",
-    version="2.0.0"
+    title="SDAS Rule-Based Decision Support Server",
+    description="Explainable rule-based advice for Tabbowa Dam (Puttalam): trend forecast, sensor checks, risk stage",
+    version="3.0.0"
 )
 
-# Enable Cross-Origin Resource Sharing (CORS) for Expo Mobile Apps & Web Dashboards
+# CORS for the Expo apps and the web dashboard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 @app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
-        "service": "SDAS ML Inference Service",
+        "service": "SDAS Rule-Based Decision Support",
         "status": "ONLINE",
-        "version": "2.0.0",
-        "models_loaded": {
-            "forecaster": ml_service.forecast_bundle is not None,
-            "autoencoder": ml_service.autoencoder_bundle is not None,
-            "random_forest": ml_service.rf_bundle is not None
-        }
+        "version": "3.0.0",
+        "method": "RULE_BASED",
+        "engines": ["linear_trend_forecast", "sensor_rule_checks", "threshold_risk_advice"],
     }
+
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "HEALTHY", "uptime": "OK"}
+    return {"status": "HEALTHY"}
+
 
 @app.post("/api/v1/forecast", response_model=ForecastResponse)
 def get_water_level_forecast(request: ForecastRequest):
-    """
-    Computes a 1-hour ahead (t + 60 min) reservoir level projection
-    using historical water level trends and precipitation data.
-    """
+    """1-hour level projection from the straight-line trend of the last 60 one-minute readings."""
     try:
-        return ml_service.predict_future_level(request)
+        return rule_engine.forecast(request.current_water_level_pct, request.history_levels_60m,
+                                    request.history_rainfall_60m, request.current_gate_percent)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Forecasting inference error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Forecast error: {e}")
+
 
 @app.post("/api/v1/anomaly-check", response_model=AnomalyCheckResponse)
 def check_sensor_anomalies(request: AnomalyCheckRequest):
-    """
-    Reconstructs dual-sensor ultrasonic telemetry using the neural Autoencoder.
-    Flags acoustic drift, multipath reflection errors, or stuck transducers.
-    """
+    """Rule checks: no echo, sensors disagree by more than 5 cm, or a sudden jump."""
     try:
-        return ml_service.detect_anomalies(request)
+        return rule_engine.check_sensors(request.sensor_1_dist_cm, request.sensor_2_dist_cm,
+                                         request.previous_level_cm)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Anomaly detection error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Sensor check error: {e}")
+
 
 @app.post("/api/v1/classify-risk", response_model=RiskClassificationResponse)
 def classify_operational_risk(request: RiskClassificationRequest):
-    """
-    Classifies immediate operational risk category (NORMAL, PRE-WARNING, CLEAR AREA, DANGER)
-    using the Random Forest ensemble classifier.
-    """
+    """Stage from the firmware thresholds (60/80/85 %), raised early when close and rising."""
     try:
-        return ml_service.classify_hazard(request)
+        return rule_engine.classify_risk(request.water_level_pct, request.level_rate_of_change_cm_min,
+                                         request.rain_accum_30m, request.gate_percent, request.temperature_c)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Risk classification error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Risk advice error: {e}")
+
 
 @app.get("/api/v1/weather/puttalam", response_model=WeatherResponse)
 def get_puttalam_weather():
-    """
-    Pulls real-time precipitation and 1-hour/3-hour forecasted rainfall
-    from Open-Meteo for the Puttalam reservoir catchment basin.
-    """
+    """Current and forecast rain for the Puttalam catchment from Open-Meteo."""
     try:
-        weather_data = weather_service.get_weather()
-        return WeatherResponse(**weather_data)
+        return WeatherResponse(**weather_service.get_weather())
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Weather service error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Weather service error: {e}")
+
 
 @app.post("/api/v1/telemetry-hook")
 def ingest_telemetry_webhook(payload: TelemetryPayload):
-    """
-    Ingests live telemetry from Supabase database webhooks or ESP32 nodes
-    and returns comprehensive AI advisory analytics.
-    """
-    # 1. Run Anomaly Verification
-    anom_req = AnomalyCheckRequest(
-        sensor_1_dist_cm=payload.sensor_1_dist_cm,
-        sensor_2_dist_cm=payload.sensor_2_dist_cm
-    )
-    anom_res = ml_service.detect_anomalies(anom_req)
-
-    # 2. Run Risk Classification
-    risk_req = RiskClassificationRequest(
-        water_level_pct=payload.water_level_pct,
-        level_rate_of_change_cm_min=0.05,
-        rain_accum_30m=payload.rainfall_mm or 0.0,
-        gate_percent=payload.gate_percent,
-        temperature_c=payload.temperature_c
-    )
-    risk_res = ml_service.classify_hazard(risk_req)
-
+    """One reading in, sensor check + risk advice out (used by the Wokwi simulation)."""
+    sensors = rule_engine.check_sensors(payload.sensor_1_dist_cm, payload.sensor_2_dist_cm,
+                                        payload.previous_level_cm)
+    rate = payload.level_rate_cm_min
+    valid = [d for d in (payload.sensor_1_dist_cm, payload.sensor_2_dist_cm) if d is not None and d > 0]
+    if rate is None and payload.previous_level_cm is not None and valid:
+        # Readings arrive about every 5 s: convert the depth change to cm per minute
+        depth_now = SENSOR_MOUNT_HEIGHT_CM - min(valid)
+        rate = (depth_now - payload.previous_level_cm) * 12.0
+    risk = rule_engine.classify_risk(payload.water_level_pct, rate or 0.0, payload.rainfall_mm or 0.0,
+                                     payload.gate_percent, payload.temperature_c)
     return {
         "status": "PROCESSED",
-        "anomaly_analysis": anom_res,
-        "risk_classification": risk_res
+        "method": "RULE_BASED",
+        "rate_known": rate is not None,
+        "sensor_check": sensors,
+        "risk_advice": risk,
     }

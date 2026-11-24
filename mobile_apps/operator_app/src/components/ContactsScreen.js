@@ -166,8 +166,10 @@ export default function ContactsScreen({ onBack, operatorUser }) {
         setContacts(mapped);
         await saveContactsLocally(mapped);
       } else if (data && data.length === 0) {
-        // Table is empty: seed default contacts to Supabase so database is initialized
-        seedDefaultContactsToSupabase();
+        // FIX: an empty table used to be re-filled with the 4 default numbers every time, so an
+        // operator could never remove them all. schema.sql already seeds them once; show the empty list.
+        setContacts([]);
+        await saveContactsLocally([]);
       }
     } catch (err) {
       console.warn('Contacts fetch error:', err.message);
@@ -849,7 +851,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
             <Text style={styles.fieldLabel}>Contact Name / Authority *</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="e.g. Eng. T. Perera / Kantalai Hospital"
+              placeholder="e.g. Eng. T. Perera / Puttalam Hospital"
               placeholderTextColor="#64748B"
               value={newName}
               onChangeText={setNewName}

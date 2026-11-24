@@ -57,7 +57,7 @@ export default function SettingsScreen({
                 {
                   action: 'OPERATOR_LOGOUT',
                   payload: {
-                    operator: operatorUser?.email || 'operator@kantalai.gov.lk',
+                    operator: operatorUser?.email || 'unknown',
                     timestamp: new Date().toISOString()
                   }
                 }
@@ -76,7 +76,7 @@ export default function SettingsScreen({
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <Text style={styles.headerTitle}>Operator Settings & Tools</Text>
-      <Text style={styles.headerSubtitle}>Kantalai Hydro-Barrage Station Console</Text>
+      <Text style={styles.headerSubtitle}>Tabbowa Dam (Puttalam) Operator Console</Text>
 
       {/* Operator Profile Card */}
       <View style={styles.card}>
@@ -90,7 +90,7 @@ export default function SettingsScreen({
               {operatorUser?.fullName || 'Chief Disaster Officer'}
             </Text>
             <Text style={styles.profileEmail}>
-              {operatorUser?.email || 'operator@kantalai.gov.lk'}
+              {operatorUser?.email || '--'}
             </Text>
             <View style={styles.roleTag}>
               <Text style={styles.roleTagText}>

@@ -55,12 +55,15 @@ void SDASStateMachine::begin() {
     int savedMode = preferences.getInt("ctrl_mode", (int)MODE_AUTO);
     if (savedMode == (int)MODE_MANUAL) {
         currentStatus.controlMode = MODE_MANUAL;
-        // FIX: after a reboot nobody may be watching, so a restored MANUAL mode also reverts to
-        // AUTO after MANUAL_WATCHDOG_TIMEOUT_SEC (it used to hold forever).
+        // MANUAL holds until AUTO (MANUAL_WATCHDOG_TIMEOUT_SEC = 0), or reverts after that time.
         currentStatus.manualModeExpiryMs = (MANUAL_WATCHDOG_TIMEOUT_SEC > 0)
             ? millis() + (MANUAL_WATCHDOG_TIMEOUT_SEC * 1000UL) : 0;
-        Serial.printf("[FSM] Restored MANUAL mode from NVS (Gate: %d%%). Auto-revert in %d s.\n",
-            savedGate, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        if (MANUAL_WATCHDOG_TIMEOUT_SEC > 0) {
+            Serial.printf("[FSM] Restored MANUAL mode from NVS (Gate: %d%%). Auto-revert in %d s.\n",
+                savedGate, MANUAL_WATCHDOG_TIMEOUT_SEC);
+        } else {
+            Serial.printf("[FSM] Restored MANUAL mode from NVS (Gate: %d%%). Holds until AUTO.\n", savedGate);
+        }
     } else {
         currentStatus.controlMode = MODE_AUTO;
         currentStatus.manualModeExpiryMs = 0;
@@ -395,16 +398,18 @@ void SDASStateMachine::evaluate(const SensorData& sensorData, ActuatorManager& a
     // In AUTO: reflects true reservoir flood stage. In MANUAL: reflects active discharge stage!
     AlertState displayAlert = currentStatus.alertState;
     if (currentStatus.controlMode == MODE_MANUAL) {
+        AlertState gateStage = STATE_NORMAL;
         if (currentStatus.targetGatePercent >= GATE_PCT_DANGER) {
-            displayAlert = STATE_DANGER;      // 50% Emergency flood release: RED
+            gateStage = STATE_DANGER;      // 50% Emergency flood release: RED
         } else if (currentStatus.targetGatePercent >= GATE_PCT_CLEAR_AREA) {
-            displayAlert = STATE_CLEAR_AREA;  // 20% Advisory relief: ORANGE
+            gateStage = STATE_CLEAR_AREA;  // 20% Advisory relief: ORANGE
         } else if (currentStatus.targetGatePercent > 0) {
-            displayAlert = STATE_PRE_WARNING; // Partial gate: YELLOW
-        } else {
-            // Sluice gate is 0% closed: reflect real water level alert (NORMAL = Green)
-            displayAlert = currentStatus.alertState;
+            gateStage = STATE_PRE_WARNING; // Partial gate: YELLOW
         }
+        // FIX: the real water stage must never be hidden by the gate stage. Before, a manual 20%
+        // gate showed ORANGE with the siren OFF even when the reservoir was above 85% (DANGER).
+        // The proposal requires DANGER alarms to continue in MANUAL mode: show the higher one.
+        displayAlert = (currentStatus.alertState > gateStage) ? currentStatus.alertState : gateStage;
     } else if (currentStatus.controlMode == MODE_EMERGENCY) {
         displayAlert = STATE_DANGER; // Red for emergency stop
     }

@@ -22,7 +22,7 @@
    - Copy `secrets.example.h` to `secrets.h` and enter your Wi-Fi name/password. The build stops with an error if `secrets.h` is missing. `secrets.h` is git-ignored, so it never reaches GitHub.
    - Optional: add `#define SDAS_DEVICE_KEY "..."` to `secrets.h` so the node texts the contacts saved in the dashboard / operator app (see `database/README.md` section 4). Without it the 4 numbers in `config.h` are used.
    - Remote commands come from the Supabase `commands` table. Commands on the public MQTT broker are ignored unless you set `MQTT_ACCEPT_COMMANDS 1` in `config.h` (not recommended: anyone can publish there).
-   - Remote MANUAL / OPEN / CLOSE return to AUTO after `MANUAL_WATCHDOG_TIMEOUT_SEC` (300 s). Buttons and Serial commands are not timed.
+   - MANUAL mode holds until the operator sends AUTO (`MANUAL_WATCHDOG_TIMEOUT_SEC` = 0, as in the proposal). Danger alarms and SMS alerts still continue in MANUAL. Set a value such as 300 to make remote manual commands return to AUTO by themselves.
 3. **Library Dependencies:**
    - `PubSubClient` by Nick O'Leary (for MQTT communications).
    - Standard built-in ESP32 libraries: `WiFi`, `HTTPClient`, `Preferences`.

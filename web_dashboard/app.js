@@ -1617,9 +1617,69 @@ async function sendTelemetryToGoogleSheet(data, isBatch = false) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rule-based advice panel (advisory only; the ESP32 controls the gate).
+// Uses its own 60-minute history so the trend is not based on just the last 2 minutes.
+// ---------------------------------------------------------------------------
+async function updateRuleAdvice() {
+  const rules = window.SDASRules;
+  const setText = (id, text, cls) => {
+    const node = document.getElementById(id);
+    if (!node) return;
+    node.textContent = text;
+    if (cls !== undefined) node.className = `advice-value ${cls}`;
+  };
+  if (!rules) return;
+  try {
+    const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const endpoint = `${SUPABASE_URL}/rest/v1/readings?select=created_at,level_pct,distance_1,distance_2` +
+      `&created_at=gte.${encodeURIComponent(since)}&order=created_at.asc&limit=1000`;
+    const res = await fetch(endpoint, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+      setText('advice-forecast', '--', '');
+      setText('advice-forecast-sub', 'No readings in the last 60 minutes.');
+      setText('advice-sensors', '--', '');
+      setText('advice-sensors-sub', 'No readings in the last 60 minutes.');
+      setText('advice-stage', '--', '');
+      setText('advice-stage-sub', 'Advice appears when the node sends data.');
+      return;
+    }
+    const pts = rows.map((r) => ({ t: new Date(r.created_at).getTime(), level: parseFloat(r.level_pct) }));
+    const last = rows[rows.length - 1];
+    const level = parseFloat(last.level_pct) || 0;
+
+    const tr = rules.trend(pts, level);
+    if (tr.ok) {
+      const cls = tr.projectedStage === 'DANGER' ? 'bad' : tr.projectedStage === 'NORMAL' ? 'ok' : 'warn';
+      setText('advice-forecast', `${tr.projected.toFixed(1)}% (${tr.label})`, cls);
+      const eta = tr.minutesToNext !== null ? ` · reaches ${tr.nextThreshold}% in about ${Math.round(tr.minutesToNext)} min` : '';
+      setText('advice-forecast-sub', `Rate ${(tr.rate * 60).toFixed(1)}% per hour from ${tr.points} readings over ${tr.spanMin.toFixed(0)} min${eta}.`);
+    } else {
+      setText('advice-forecast', '--', '');
+      setText('advice-forecast-sub', tr.reason);
+    }
+
+    const sc = rules.sensorCheck(parseFloat(last.distance_1), parseFloat(last.distance_2));
+    setText('advice-sensors', sc.verdict, sc.level);
+    setText('advice-sensors-sub', sc.text);
+
+    const adv = rules.advice(level, tr);
+    const stageCls = adv.adviceStage === 'DANGER' ? 'bad' : adv.adviceStage === 'NORMAL' ? 'ok' : 'warn';
+    setText('advice-stage', adv.adviceStage.replace('_', ' '), stageCls);
+    setText('advice-stage-sub', adv.text);
+    setText('advice-updated', `Advisory only · updated ${new Date().toLocaleTimeString()}`);
+  } catch (err) {
+    setText('advice-forecast-sub', `Could not load history: ${err.message}`);
+  }
+}
+
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
   fetchHistoricalPoints();
+  updateRuleAdvice();
+  setInterval(updateRuleAdvice, 60000);
   fetchLatestHardwareReading();
   setupRealtimeSubscription();
   initMqttWebSocket();

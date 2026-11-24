@@ -22,6 +22,7 @@ import {
 import CircularGauge from '../CircularGauge';
 import { supabase } from '../supabaseClient';
 import { sendGateCommand } from '../commandService';
+import { trend as ruleTrend, sensorCheck as ruleSensorCheck, advice as ruleAdvice } from '../ruleAdvisor';
 
 export default function DashboardScreen({ operatorUser }) {
   const [telemetry, setTelemetry] = useState({
@@ -43,6 +44,35 @@ export default function DashboardScreen({ operatorUser }) {
 
   const [refreshing, setRefreshing] = useState(false);
   const [isSendingCommand, setIsSendingCommand] = useState(false);
+  // Rule-based advice (advisory only; the ESP32 controls the gate)
+  const [ruleInfo, setRuleInfo] = useState(null);
+
+  const loadRuleAdvice = async () => {
+    try {
+      const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('readings')
+        .select('created_at, level_pct, distance_1, distance_2')
+        .gte('created_at', since)
+        .order('created_at', { ascending: true })
+        .limit(1000);
+      if (error || !data || data.length === 0) {
+        setRuleInfo({ empty: true });
+        return;
+      }
+      const last = data[data.length - 1];
+      const level = parseFloat(last.level_pct) || 0;
+      const tr = ruleTrend(data.map((r) => ({ t: new Date(r.created_at).getTime(), level: parseFloat(r.level_pct) })), level);
+      setRuleInfo({
+        empty: false,
+        tr,
+        sc: ruleSensorCheck(parseFloat(last.distance_1), parseFloat(last.distance_2)),
+        adv: ruleAdvice(level, tr)
+      });
+    } catch (e) {
+      setRuleInfo({ empty: true });
+    }
+  };
 
   // Fetch Latest REAL Readings from Supabase (Strictly NO mock data)
   const fetchLatestReading = async () => {
@@ -95,6 +125,12 @@ export default function DashboardScreen({ operatorUser }) {
       console.warn('Dashboard fetch error:', err.message);
     }
   };
+
+  useEffect(() => {
+    loadRuleAdvice();
+    const adviceTimer = setInterval(loadRuleAdvice, 60000);
+    return () => clearInterval(adviceTimer);
+  }, []);
 
   useEffect(() => {
     fetchLatestReading();
@@ -152,6 +188,7 @@ export default function DashboardScreen({ operatorUser }) {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchLatestReading();
+    await loadRuleAdvice();
     setRefreshing(false);
   };
 
@@ -405,6 +442,40 @@ export default function DashboardScreen({ operatorUser }) {
         </View>
       </View>
 
+      {/* Rule-Based Advice Card (advisory only) */}
+      <View style={styles.adviceCard}>
+        <Text style={styles.adviceTitle}>Rule-Based Advice</Text>
+        <Text style={styles.adviceHint}>Advisory only · the ESP32 controls the gate</Text>
+        {!ruleInfo || ruleInfo.empty ? (
+          <Text style={styles.adviceSub}>No readings in the last 60 minutes.</Text>
+        ) : (
+          <>
+            <View style={styles.adviceRow}>
+              <Text style={styles.adviceLabel}>1-hour trend</Text>
+              <Text style={styles.adviceValue}>
+                {ruleInfo.tr.ok ? `${ruleInfo.tr.projected.toFixed(1)}% · ${ruleInfo.tr.label}` : '--'}
+              </Text>
+            </View>
+            <Text style={styles.adviceSub}>
+              {ruleInfo.tr.ok
+                ? `${(ruleInfo.tr.rate * 60).toFixed(1)}% per hour${ruleInfo.tr.minutesToNext !== null ? ` · ${ruleInfo.tr.nextThreshold}% in ~${Math.round(ruleInfo.tr.minutesToNext)} min` : ''}`
+                : ruleInfo.tr.reason}
+            </Text>
+            <View style={styles.adviceRow}>
+              <Text style={styles.adviceLabel}>Sensors</Text>
+              <Text style={[styles.adviceValue, { color: ruleInfo.sc.level === 'ok' ? '#34D399' : ruleInfo.sc.level === 'bad' ? '#F87171' : '#FBBF24' }]}>
+                {ruleInfo.sc.verdict}
+              </Text>
+            </View>
+            <View style={styles.adviceRow}>
+              <Text style={styles.adviceLabel}>Action</Text>
+              <Text style={styles.adviceValue}>{ruleInfo.adv.adviceStage.replace('_', ' ')}</Text>
+            </View>
+            <Text style={styles.adviceSub}>{ruleInfo.adv.text}</Text>
+          </>
+        )}
+      </View>
+
       {/* Quick Actions 2x2 Grid */}
       <View style={styles.quickActionsSection}>
         <Text style={styles.sectionHeader}>Quick Actions</Text>
@@ -454,6 +525,20 @@ export default function DashboardScreen({ operatorUser }) {
 }
 
 const styles = StyleSheet.create({
+  adviceCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    padding: 16,
+    marginBottom: 16
+  },
+  adviceTitle: { fontSize: 15, fontWeight: '800', color: '#E2E8F0' },
+  adviceHint: { fontSize: 11, color: '#64748B', marginTop: 2, marginBottom: 10 },
+  adviceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+  adviceLabel: { fontSize: 12, color: '#94A3B8' },
+  adviceValue: { fontSize: 14, fontWeight: '700', color: '#E2E8F0', flexShrink: 1, textAlign: 'right' },
+  adviceSub: { fontSize: 11.5, color: '#94A3B8', marginTop: 4, lineHeight: 16 },
   container: {
     flex: 1,
     backgroundColor: '#0B132B'

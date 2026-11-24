@@ -112,7 +112,7 @@ export default function LoginScreen({ onLoginSuccess }) {
             <View style={styles.photoOverlay} />
             <View style={styles.photoBadge}>
               <View style={styles.onlineDot} />
-              <Text style={styles.photoBadgeText}>KANTALAI BARRAGE #01</Text>
+              <Text style={styles.photoBadgeText}>TABBOWA DAM #01</Text>
             </View>
           </View>
 

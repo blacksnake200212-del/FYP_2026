@@ -1,3 +1,6 @@
+-- DEMO DATA ONLY: example readings, alerts, flood reports and chat messages for screenshots
+-- and practice. Do NOT run this on the database used for the real bench test or the demo,
+-- or the made-up rows will appear in the apps as if they were real.
 -- ============================================================================
 -- SMART DAM ALERT SYSTEM (SDAS) - SEED DATA FOR TESTING & VERIFICATION V3.0
 -- ============================================================================
@@ -58,34 +61,36 @@ SET min_supported_version = EXCLUDED.min_supported_version,
     apk_url = EXCLUDED.apk_url;
 
 -- ============================================================================
--- 6. Insert Primary Dam Reservoir Profile (Kantalai Dam)
+-- 6. Insert Primary Dam Reservoir Profile (Tabbowa Dam)
 -- ============================================================================
 INSERT INTO public.dams
 (id, name, location, total_height_m, current_level_m, warning_level_m, danger_level_m, latitude, longitude, is_online)
 VALUES
-('KANTALAI-01', 'Kantalai Dam', 'Kantalai, Trincomalee', 3.00, 2.04, 2.40, 2.70, 8.528400, 80.992200, true)
+('TABBOWA-01', 'Tabbowa Dam', 'Puttalam District', 3.00, 2.04, 2.40, 2.70, 8.036200, 79.828300, true)
 ON CONFLICT (id) DO UPDATE
 SET current_level_m = EXCLUDED.current_level_m,
     is_online = EXCLUDED.is_online;
 
 -- ============================================================================
--- 7. Insert Crowdsourced Community Flood Reports (Aligned with Mobile UI Mockup)
+-- 7. Insert SAMPLE Crowdsourced Flood Reports (demo data only, delete before real use)
 -- ============================================================================
+-- FIX: these used Kantalai (Trincomalee) places/coordinates and stock internet flood photos.
+-- They are now clearly marked samples near Tabbowa Dam (Puttalam), with no photos.
 INSERT INTO public.flood_reports
 (dam_id, reporter_name, location_name, latitude, longitude, distance_km, description, photo_url, water_depth_est, status, created_at)
 VALUES
-('KANTALAI-01', 'Tharindu Perera', 'Kantalai, 2.4 km away', 8.531200, 80.998500, 2.4, 'Water is covering the road near the bridge.', 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500', '0.6 m', 'VERIFIED', NOW() - INTERVAL '2 hours'),
-('KANTALAI-01', 'Saman Bandara', 'Mahaweli Rd, 5.1 km', 8.512000, 80.975000, 5.1, 'Moderate water level on the road near agricultural canal.', 'https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=500', '0.4 m', 'PENDING', NOW() - INTERVAL '45 minutes'),
-('KANTALAI-01', 'Kamal Silva', 'Paddithidal, 8.7 km', 8.485000, 80.940000, 8.7, 'Water entering low-lying village pathways. Drain overflow.', NULL, '0.3 m', 'PENDING', NOW() - INTERVAL '1 hour 15 minutes');
+('TABBOWA-01', 'Sample Reporter 1', '[SAMPLE] Road near Tabbowa spill canal (typed by citizen, no GPS)', 8.036200, 79.828300, 2.4, 'SAMPLE: Water is covering the road near the bridge.', NULL, NULL, 'VERIFIED', NOW() - INTERVAL '2 hours'),
+('TABBOWA-01', 'Sample Reporter 2', '[SAMPLE] Paddy field road, downstream (typed by citizen, no GPS)', 8.036200, 79.828300, 5.1, 'SAMPLE: Moderate water level on the road near the agricultural canal.', NULL, NULL, 'PENDING', NOW() - INTERVAL '45 minutes'),
+('TABBOWA-01', 'Sample Reporter 3', '[SAMPLE] Low-lying village path (typed by citizen, no GPS)', 8.036200, 79.828300, 8.7, 'SAMPLE: Water entering low-lying village pathways. Drain overflow.', NULL, NULL, 'PENDING', NOW() - INTERVAL '1 hour 15 minutes');
 
 -- ============================================================================
--- 8. Insert Community Chat Channel Messages (Kantalai Community)
+-- 8. Insert SAMPLE Community Chat Channel Messages (Tabbowa community, demo data only)
 -- ============================================================================
 INSERT INTO public.community_messages
 (dam_id, sender_name, sender_role, message, photo_url, is_system, created_at)
 VALUES
-('KANTALAI-01', 'Tharindu', 'CITIZEN', 'Water is flowing near the old bridge.', 'https://images.unsplash.com/photo-1547683905-f686c993aae5?w=500', false, NOW() - INTERVAL '40 minutes'),
-('KANTALAI-01', 'Saman', 'CITIZEN', 'Be careful everyone. Avoid this area.', NULL, false, NOW() - INTERVAL '35 minutes'),
-('KANTALAI-01', 'System Operator', 'SYSTEM', 'This report is under verification by the operator.', NULL, true, NOW() - INTERVAL '30 minutes');
+('TABBOWA-01', 'Tharindu', 'CITIZEN', 'Water is flowing near the old bridge.', NULL, false, NOW() - INTERVAL '40 minutes'),
+('TABBOWA-01', 'Saman', 'CITIZEN', 'Be careful everyone. Avoid this area.', NULL, false, NOW() - INTERVAL '35 minutes'),
+('TABBOWA-01', 'System Operator', 'SYSTEM', 'This report is under verification by the operator.', NULL, true, NOW() - INTERVAL '30 minutes');
 
 

@@ -1,3 +1,7 @@
+"""
+API tests for the rule-based decision support server (needs fastapi + httpx installed).
+Run from the project folder:  python -m pytest backend_ml/tests -q
+"""
 import os
 import sys
 sys.path.insert(0, os.path.abspath("."))
@@ -7,100 +11,62 @@ from backend_ml.app.main import app
 
 client = TestClient(app)
 
+
 def test_root():
-    response = client.get("/")
-    assert response.status_code == 200
-    data = response.json()
+    data = client.get("/").json()
     assert data["status"] == "ONLINE"
-    assert data["models_loaded"]["forecaster"] is True
-    assert data["models_loaded"]["autoencoder"] is True
-    assert data["models_loaded"]["random_forest"] is True
-    print("[TEST-PASS] Root health & model discovery endpoint")
+    assert data["method"] == "RULE_BASED"
+
 
 def test_forecast_endpoint():
     payload = {
-        "current_water_level_pct": 74.5,
+        "current_water_level_pct": 73.85,
         "history_levels_60m": [65.0 + 0.15 * i for i in range(60)],
-        "history_rainfall_60m": [0.2] * 60,
+        "history_rainfall_60m": [0.0] * 60,
         "current_gate_percent": 0
     }
-    response = client.post("/api/v1/forecast", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "forecast_1h_level_pct" in data
-    assert "projected_hazard_state" in data
-    assert data["forecast_horizon_minutes"] == 60
-    print(f"[TEST-PASS] Forecast Endpoint: Current: {data['current_level_pct']}% -> 1h Forecast: {data['forecast_1h_level_pct']}% (Projected: {data['projected_hazard_state']})")
+    r = client.post("/api/v1/forecast", json=payload)
+    assert r.status_code == 200
+    d = r.json()
+    assert d["forecast_horizon_minutes"] == 60
+    assert d["trend"] == "RISING"
+    assert d["projected_hazard_state"] == "CLEAR_AREA"
 
-def test_anomaly_endpoint():
-    # Test 1: Nominal agreement (matching typical mean level and rate)
-    nominal_payload = {
-        "sensor_1_dist_cm": 19.2,
-        "sensor_2_dist_cm": 19.25,
-        "previous_level_cm": 30.78 # 50 cm mount: depth 30.775 cm, rate ~ 0.005 cm (retrain models first)
-    }
-    res_nom = client.post("/api/v1/anomaly-check", json=nominal_payload)
-    assert res_nom.status_code == 200
-    data_nom = res_nom.json()
-    assert data_nom["is_anomaly"] is False
-    print(f"[TEST-PASS] Nominal Sensor Agreement (Delta {data_nom['sensor_delta_cm']}cm, Anomaly={data_nom['is_anomaly']})")
-
-    # Test 2: Severe divergence fault (>5cm)
-    divergent_payload = {
-        "sensor_1_dist_cm": 32.0,
-        "sensor_2_dist_cm": 46.5, # Delta 14.5 cm
-        "previous_level_cm": 33.0
-    }
-    res_div = client.post("/api/v1/anomaly-check", json=divergent_payload)
-    assert res_div.status_code == 200
-    data_div = res_div.json()
-    assert data_div["is_anomaly"] is True
-    assert "DIVERGENCE" in data_div["anomaly_verdict"]
-    print(f"[TEST-PASS] Sensor Fault Detection (Delta {data_div['sensor_delta_cm']}cm, Anomaly={data_div['is_anomaly']}, Verdict={data_div['anomaly_verdict']})")
-
-    # Test 3 (new): both sensors timed out (-1 cm) must never be reported as healthy
-    dead_payload = {"sensor_1_dist_cm": -1, "sensor_2_dist_cm": -1, "previous_level_cm": 20.0}
-    res_dead = client.post("/api/v1/anomaly-check", json=dead_payload)
-    assert res_dead.status_code == 200
-    data_dead = res_dead.json()
-    assert data_dead["is_anomaly"] is True
-    assert data_dead["anomaly_verdict"] == "BOTH_SENSORS_NO_ECHO"
-    print("[TEST-PASS] Dead sensors (-1/-1) flagged as fault")
 
 def test_forecast_empty_history():
-    # New: an empty history list used to crash with HTTP 500
-    payload = {"current_water_level_pct": 50.0, "history_levels_60m": [], "history_rainfall_60m": [0.0], "current_gate_percent": 0}
-    response = client.post("/api/v1/forecast", json=payload)
-    assert response.status_code == 200
+    payload = {"current_water_level_pct": 50.0, "history_levels_60m": [], "current_gate_percent": 0}
+    r = client.post("/api/v1/forecast", json=payload)
+    assert r.status_code == 200
+    assert r.json()["forecast_1h_level_pct"] == 50.0
+
+
+def test_anomaly_endpoint():
+    ok = client.post("/api/v1/anomaly-check", json={"sensor_1_dist_cm": 19.2, "sensor_2_dist_cm": 19.25}).json()
+    assert ok["is_anomaly"] is False
+    bad = client.post("/api/v1/anomaly-check", json={"sensor_1_dist_cm": 32.0, "sensor_2_dist_cm": 46.5}).json()
+    assert bad["anomaly_verdict"] == "SENSOR_DISAGREEMENT"
+    dead = client.post("/api/v1/anomaly-check", json={"sensor_1_dist_cm": -1, "sensor_2_dist_cm": -1}).json()
+    assert dead["anomaly_verdict"] == "SENSOR_FAULT_BOTH"
+
 
 def test_risk_classification():
-    payload = {
-        "water_level_pct": 86.5,
-        "level_rate_of_change_cm_min": 0.25,
-        "rain_accum_30m": 22.0,
-        "gate_percent": 50,
-        "temperature_c": 28.5
-    }
-    response = client.post("/api/v1/classify-risk", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["hazard_label"] in ["CLEAR AREA", "DANGER", "PRE-WARNING", "NORMAL"]
-    print(f"[TEST-PASS] Risk Classification: Level {payload['water_level_pct']}% -> Class: {data['hazard_label']} (Score: {data['confidence_score']})")
+    payload = {"water_level_pct": 86.5, "level_rate_of_change_cm_min": 0.25, "rain_accum_30m": 0.0,
+               "gate_percent": 50, "temperature_c": 28.5}
+    d = client.post("/api/v1/classify-risk", json=payload).json()
+    assert d["hazard_label"] == "DANGER"
 
-def test_weather_endpoint():
-    response = client.get("/api/v1/weather/puttalam")
-    assert response.status_code == 200
-    data = response.json()
-    assert "temperature_c" in data
-    assert "current_rain_mm" in data
-    print(f"[TEST-PASS] Open-Meteo Weather Service: Temp={data['temperature_c']}°C, Rain={data['current_rain_mm']}mm, Source={data['source']}")
+
+def test_telemetry_hook():
+    payload = {"sensor_1_dist_cm": 17.0, "sensor_2_dist_cm": 17.2, "water_level_pct": 82.5,
+               "gate_percent": 20, "previous_level_cm": 32.8}
+    d = client.post("/api/v1/telemetry-hook", json=payload).json()
+    assert d["method"] == "RULE_BASED"
+    assert d["sensor_check"]["anomaly_verdict"] == "NORMAL"
+    assert d["risk_advice"]["hazard_label"] == "CLEAR_AREA"
+
 
 if __name__ == "__main__":
-    print("\n--- RUNNING SDAS ML INFERENCE TEST SUITE ---")
-    test_root()
-    test_forecast_endpoint()
-    test_anomaly_endpoint()
-    test_risk_classification()
-    test_weather_endpoint()
-    test_forecast_empty_history()
-    print("--- ALL 6 INTEGRATION TESTS PASSED ---\n")
+    for name, fn in list(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"[PASS] {name}")

@@ -164,3 +164,48 @@ Open the Serial Monitor at 115200 baud:
 6. Send OPEN_50 then CLOSE quickly from the dashboard → the gate must end **closed**.
 7. Send MANUAL from the dashboard → after 5 minutes the Serial Monitor shows the return to AUTO.
 8. Add a test number in the dashboard, wait up to 10 minutes (or reboot the node), then "Test SMS" to all → the new number should get the test text.
+
+---
+
+## Third round (24 Nov 2026): proposal alignment, rule-based engine, app review
+
+### Decisions applied
+| Item | Before | Now |
+|---|---|---|
+| Manual mode | Remote MANUAL returned to AUTO after 5 min | **Holds until the operator presses AUTO** (as in the proposal). `MANUAL_WATCHDOG_TIMEOUT_SEC` = 0; set it to e.g. 300 to bring the timeout back. |
+| Danger alarms in MANUAL | A manual 20% gate showed ORANGE with the siren OFF even above 85% | The light and siren show the **higher** of the gate stage and the real water stage, so DANGER alarms always continue (proposal, section 5). |
+| "Machine learning" | MLP forecaster + autoencoder + random forest (scikit-learn), not connected to anything, fake "MAPE 3.8" | **Rule-based engine** (supervisor advice): straight-line 60-min trend forecast, 3 sensor rules, threshold advice with early warning. Same numbers as `config.h`. 8 unit tests pass. No accuracy figures are claimed. |
+| Advice for operators | Nowhere in the apps | New **Rule-Based Advice** panel on the web dashboard and the operator app Dashboard (uses the last 60 min of readings; advisory only). |
+
+### Bugs found and fixed in the apps
+| # | App / file | Bug | Fix |
+|---|---|---|---|
+| 1 | Operator, Contacts → community post | Saved `dam_id 'TABBOWA-01'`, which did not exist in `dams` → insert always failed (foreign key) | `TABBOWA-01` dam row added in `schema.sql`; both apps and defaults use it |
+| 2 | Operator, Contacts | Deleting all contacts re-added the 4 default numbers on the next refresh | No automatic re-seeding (schema seeds them once) |
+| 3 | Operator, Flood Reports | "Verify" always said "Alert dispatched to citizens within X km", even when the save failed and nothing was sent; "Reject" ignored errors | Honest messages; failures shown |
+| 4 | Operator, Weather | Fixed 28.4 °C / 74 %, invented 5-day outlook, "ESP32 connected" always, made-up "Mahaweli inflow +14.2 m³/s", "Kantalai" | Real Open-Meteo forecast for Puttalam, real node online/offline status, `--` when missing |
+| 5 | Public, Safety Chat | Said "NORMAL, no flood danger" even with **no live data**; weather answer was fixed text | Without live data it says it cannot confirm safety and points to DMC 117; weather from Open-Meteo |
+| 6 | Public, Weather | Fixed sunrise/sunset, "feels like" = temperature + 2, "null%" humidity, fake "Kantalai Doppler radar station" card | Open-Meteo values (or `--`), real 5-day outlook card |
+| 7 | Public, notifications | Push registration was never called; no notification on stage change; second registration failed; emulator stored a fake token | Registered at start; phone notification for every new alert row; Edge Function for closed-app push (`supabase/functions/send-stage-push`) |
+| 8 | Public, Report Flood | No-GPS fallback location was Kantalai (Trincomalee) | Puttalam |
+| 9 | Both | "Kantalai" names left in several screens | Tabbowa Dam (Puttalam) |
+| 10 | Operator, Settings | With no email loaded, showed and audit-logged a made-up `operator@kantalai.gov.lk` | Shows `--`; audit log says `unknown` |
+| 11 | `seed_data.sql` | Sample flood reports used Kantalai places/coordinates and stock internet flood photos | Marked `[SAMPLE]`, Tabbowa coordinates, no photos |
+
+### Bench test sheet v2 (`bench_test/SDAS_Bench_Test_Sheet.pdf`, source `.html`)
+Replaces the first sheet. Corrected: only DANGER sounds the siren; Manual holds until AUTO (no 5-min test);
+E-STOP = purple light + continuous buzzer; targets taken from Proposal V.02 (gate < 500 ms, SMS < 15 s,
+command < 10 s, fault ≈ 6 s); downward hysteresis steps added; new tests for Danger-in-Manual, sensor
+disagreement, physical buttons and the rule-based forecast error. Firmware `STATUS` now says the fault
+light is Blue (it said Purple, which is the E-STOP colour).
+
+### New app images
+New icon, Android adaptive icon and splash screen for both apps (same dam design, stage-colour
+gauge; dark + gear = operator, blue + bell = public). The old icons had cut-off text.
+
+### Still to do by you
+- Run `schema.sql` again in Supabase (adds the Tabbowa dam row and defaults).
+- Optional: deploy the push Edge Function (`database/README.md`, section 5).
+- Rebuild both APKs, then take real screenshots from the phones.
+- `backend_ml/app/ml_service.py`, `backend_ml/train/`, `backend_ml/saved_models/` and `backend_ml/data/` are no longer used and can be deleted.
+- Delete the empty `app.json` in the main project folder (created by running a build command there).

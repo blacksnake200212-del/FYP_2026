@@ -7,6 +7,16 @@ import * as Device from 'expo-device';
 import { SUPABASE_CONFIG } from './supabaseClient';
 import { APP_VERSION } from './updateService';
 
+// EAS project id (needed by getExpoPushTokenAsync in standalone APK builds)
+let EAS_PROJECT_ID = 'f1d29dc5-1b3d-4e26-8992-93d1fed12716';
+try {
+  // eslint-disable-next-line global-require
+  const Constants = require('expo-constants').default;
+  EAS_PROJECT_ID = Constants?.expoConfig?.extra?.eas?.projectId || EAS_PROJECT_ID;
+} catch (e) {
+  // expo-constants ships with expo; keep the app.json value if it cannot be read
+}
+
 // Configure foreground notification behavior
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -46,15 +56,16 @@ export async function registerForPushNotificationsAsync(language = 'en') {
         return { success: false, token: null, status: 'PERMISSION_DENIED' };
       }
 
-      const tokenData = await Notifications.getExpoPushTokenAsync().catch((e) => {
+      // FIX: standalone builds need the projectId, otherwise no token is created
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: EAS_PROJECT_ID }).catch((e) => {
         console.warn('[SDAS Notifications] getExpoPushTokenAsync fallback:', e.message);
         return null;
       });
 
       token = tokenData ? tokenData.data : null;
     } else {
-      // Simulator / Dev environment fallback token
-      token = `SIMULATOR_DEVICE_${Platform.OS.toUpperCase()}_${Date.now().toString(36)}`;
+      // FIX: emulators cannot receive push messages; do not store a fake token
+      return { success: false, token: null, status: 'NOT_A_DEVICE' };
     }
 
     if (token) {
@@ -65,7 +76,9 @@ export async function registerForPushNotificationsAsync(language = 'en') {
           apikey: SUPABASE_CONFIG.PUBLISHABLE_KEY,
           Authorization: `Bearer ${SUPABASE_CONFIG.PUBLISHABLE_KEY}`,
           'Content-Type': 'application/json',
-          Prefer: 'resolution=merge-duplicates'
+          // FIX: merge-duplicates needs UPDATE rights that the public app does not have, so a
+          // second registration of the same phone failed. Ignore duplicates instead.
+          Prefer: 'resolution=ignore-duplicates'
         },
         body: JSON.stringify({
           token,
@@ -84,6 +97,48 @@ export async function registerForPushNotificationsAsync(language = 'en') {
   } catch (err) {
     console.warn('[SDAS Notifications] Error registering push notifications:', err.message);
     return { success: false, token: null, status: 'ERROR', error: err.message };
+  }
+}
+
+const STAGE_TEXT = {
+  PRE_WARNING: {
+    title: '⚠️ PRE-WARNING - TABBOWA DAM',
+    body: 'Reservoir reached 60%. Gate on standby. Stay alert and follow official updates.'
+  },
+  CLEAR_AREA: {
+    title: '⚠️ CLEAR THE AREA - TABBOWA DAM',
+    body: 'Reservoir reached 80%. Gate opening 20%. Leave the river banks and spillway area now.'
+  },
+  DANGER: {
+    title: '🚨 DANGER - TABBOWA DAM',
+    body: 'Reservoir reached 85%. Gate opening 50%. Move to higher ground immediately.'
+  },
+  SENSOR_FAULT: {
+    title: 'ℹ️ Dam sensor fault - Tabbowa Dam',
+    body: 'Water level reading is unavailable. Follow official advice (DMC 117).'
+  }
+};
+
+/**
+ * Show a phone notification for a new alert row from Supabase (stage change).
+ * Called from the app's realtime subscription, so it works while the app is open or
+ * in the background. (Closed-app delivery needs the Edge Function in supabase/functions.)
+ */
+export async function showStageNotification(alertRow) {
+  try {
+    const text = STAGE_TEXT[alertRow?.stage];
+    if (!text) return; // NORMAL needs no notification
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: text.title,
+        body: alertRow.message || text.body,
+        data: { stage: alertRow.stage, alertId: alertRow.id },
+        sound: true
+      },
+      trigger: Platform.OS === 'android' ? { channelId: 'sdas_flood_alerts' } : null
+    });
+  } catch (err) {
+    console.warn('[SDAS Notifications] showStageNotification failed:', err.message);
   }
 }
 

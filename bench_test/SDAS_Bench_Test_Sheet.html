@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SDAS Bench Test Sheet</title>
+<style>
+  @page { size: A4; margin: 11mm 11mm 12mm 11mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 9.4pt; color: #14213d; margin: 0; }
+  h1 { font-size: 17pt; margin: 0 0 2px; color: #0b2545; }
+  h2 { font-size: 11.5pt; margin: 12px 0 4px; padding: 3px 7px; background: #0b2545; color: #fff; border-radius: 3px; }
+  p { margin: 3px 0; }
+  .sub { color: #4a5568; font-size: 9pt; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 2px; page-break-inside: avoid; }
+  th, td { border: 1px solid #9aa5b8; padding: 3px 4px; vertical-align: middle; }
+  th { background: #e3e9f3; font-weight: 600; text-align: left; font-size: 8.6pt; }
+  td.f { background: #fff8e1; min-width: 34px; }   /* fill-in box */
+  td.c { text-align: center; }
+  .tick { width: 42px; background: #fff8e1; }
+  .note { font-size: 8.4pt; color: #4a5568; margin-top: 2px; }
+  .box { border: 1px solid #9aa5b8; border-radius: 4px; padding: 6px 8px; margin: 6px 0; }
+  .warn { border-color: #d97706; background: #fff7ed; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 14px; }
+  .line { border-bottom: 1px solid #9aa5b8; height: 17px; }
+  .lbl { font-size: 8.4pt; color: #4a5568; }
+  .pb { page-break-before: always; }
+  .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1px solid #555; vertical-align: -1px; margin-right: 3px; }
+  .g { background: #22c55e; } .y { background: #facc15; } .o { background: #f97316; } .r { background: #dc2626; } .b { background: #2563eb; } .p { background: #a21caf; }
+  .tall td { height: 22px; }
+</style>
+</head>
+<body>
+
+<h1>SDAS Bench Test Sheet</h1>
+<p class="sub">Smart Dam Alert System – Tabbowa Dam (Puttalam) prototype · Version 2 (24 Nov 2026), matches the current firmware and Proposal V.02.
+Write results in the shaded boxes. Tick ✓ or ✗ in the Pass column.</p>
+
+<div class="box">
+  <div class="grid">
+    <div><span class="lbl">Date</span><div class="line"></div></div>
+    <div><span class="lbl">Tester(s)</span><div class="line"></div></div>
+    <div><span class="lbl">Firmware version / git commit</span><div class="line"></div></div>
+    <div><span class="lbl">Power supply (should be 12 V, not USB only)</span><div class="line"></div></div>
+    <div><span class="lbl">Wi-Fi / hotspot name (must be 2.4 GHz)</span><div class="line"></div></div>
+    <div><span class="lbl">Surface: book / cardboard / real water</span><div class="line"></div></div>
+    <div><span class="lbl">Measured sensor height above floor (should be 50 cm)</span><div class="line"></div></div>
+    <div><span class="lbl">Room temperature (°C)</span><div class="line"></div></div>
+    <div><span class="lbl">SIM800L signal light blinks every ~3 s? (Y/N)</span><div class="line"></div></div>
+  </div>
+</div>
+
+<div class="box">
+  <b>Formula:</b> level % = (50 − distance cm) ÷ 40 × 100 &nbsp;·&nbsp; <b>Stages:</b>
+  <span class="sw g"></span>Normal &lt; 60 % &nbsp;
+  <span class="sw y"></span>Pre-Warning 60–79.9 % &nbsp;
+  <span class="sw o"></span>Clear Area 80–84.9 % &nbsp;
+  <span class="sw r"></span>Danger ≥ 85 % &nbsp;
+  <span class="sw b"></span>Sensor fault &nbsp;
+  <span class="sw p"></span>E-STOP<br>
+  <b>Going down (3 % hysteresis):</b> Danger ends below 82 % (17.2 cm), Clear Area ends below 77 % (19.2 cm), Pre-Warning ends below 57 % (27.2 cm).
+  The stage steps down one level per 2-second cycle.
+</div>
+
+<div class="box warn">
+  <b>Corrected from the first sheet:</b> (1) only <b>DANGER</b> sounds the siren. Pre-Warning and Clear Area are silent
+  (a short beep is only a button/command confirmation). (2) Manual mode <b>no longer returns to AUTO after 5 minutes</b>:
+  it holds until the operator presses AUTO. (3) E-STOP shows a <b>purple</b> light with a <b>continuous</b> buzzer.
+  (4) Response-time targets are now the ones in Proposal V.02.
+</div>
+
+<h2>Test 1 – Sensor accuracy</h2>
+<p>Hold the book flat under both sensors. Wait 5 s, read S1 and S2 from Serial Monitor (115200 baud). Remove and replace the book for each try.
+Error = average of the 6 readings − real distance. Target: within ±1 cm.</p>
+<table class="tall">
+  <tr><th>Real distance</th><th>Expected level</th><th>S1 try 1</th><th>S1 try 2</th><th>S1 try 3</th><th>S2 try 1</th><th>S2 try 2</th><th>S2 try 3</th><th>Average (cm)</th><th>Error (cm)</th><th>Level shown (%)</th></tr>
+  <tr><td>45 cm</td><td>12.5 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>40 cm</td><td>25 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>30 cm</td><td>50 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>22 cm</td><td>70 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>17 cm</td><td>82.5 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>13 cm</td><td>92.5 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>10 cm</td><td>100 %</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+</table>
+<p>Average error over all distances: <span style="display:inline-block;width:90px" class="line"></span> cm &nbsp;&nbsp; Largest error: <span style="display:inline-block;width:90px" class="line"></span> cm</p>
+
+<h2>Test 2 – Alert stages (AUTO mode)</h2>
+<p>Move the book in this order and wait about 10 s at each step. Check the light, gate, buzzer and SMS. SMS is sent only when the stage goes <b>up</b>.</p>
+<table class="tall">
+  <tr><th>#</th><th>Distance</th><th>Level</th><th>Expected stage</th><th>Light</th><th>Gate</th><th>Buzzer</th><th>SMS</th><th>What you saw</th><th>Pass</th></tr>
+  <tr><td>1</td><td>40 cm</td><td>25 %</td><td>Normal</td><td><span class="sw g"></span>Green</td><td>0 %</td><td>Off</td><td>No</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>2</td><td>22 cm</td><td>70 %</td><td>Pre-Warning</td><td><span class="sw y"></span>Yellow</td><td>0 %</td><td>Off</td><td>Yes – pre-warning</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>3</td><td>17 cm</td><td>82.5 %</td><td>Clear Area</td><td><span class="sw o"></span>Orange</td><td>20 %</td><td>Off</td><td>Yes – clear area</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>4</td><td>13 cm</td><td>92.5 %</td><td>Danger</td><td><span class="sw r"></span>Red</td><td>50 %</td><td>Pulsed siren</td><td>Yes – danger</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>5</td><td>16.5 cm</td><td>83.75 %</td><td>Stays Danger</td><td><span class="sw r"></span>Red</td><td>50 %</td><td>Pulsed siren</td><td>No</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>6</td><td>17.5 cm</td><td>81.25 %</td><td>Clear Area</td><td><span class="sw o"></span>Orange</td><td>20 %</td><td>Off</td><td>No</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>7</td><td>20 cm</td><td>75 %</td><td>Pre-Warning</td><td><span class="sw y"></span>Yellow</td><td>0 %</td><td>Off</td><td>No</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>8</td><td>28 cm</td><td>55 %</td><td>Normal</td><td><span class="sw g"></span>Green</td><td>0 %</td><td>Off</td><td>No</td><td class="f"></td><td class="tick"></td></tr>
+</table>
+<p class="note">Also check that the web dashboard, operator app and public app show the same stage at each step.</p>
+
+<h2 class="pb">Test 3 – Response times (targets from Proposal V.02)</h2>
+<p>Do each row 5 times. For the gate (under 500 ms) a stopwatch is too slow: use the Serial Monitor timestamps
+(stage-change line to servo line) or a slow-motion phone video.</p>
+<table class="tall">
+  <tr><th>Measure</th><th>How</th><th>Target</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>Average</th><th>Pass</th></tr>
+  <tr><td>Gate response</td><td>Book 40 → 13 cm; stage change to servo moving</td><td>&lt; 500 ms</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>SMS delivery</td><td>Danger starts → SMS arrives on phone</td><td>&lt; 15 s</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Operator command</td><td>Press "Open 20%" in operator app → servo moves</td><td>&lt; 10 s</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Command confirmed</td><td>Button press → app shows EXECUTED</td><td>&lt; 10 s</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Reading to apps</td><td>Move book → level changes in app and dashboard</td><td>about 5–10 s (no proposal target)</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Sensor fault detection</td><td>Unplug both ECHO wires → blue light</td><td>about 6 s</td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="tick"></td></tr>
+</table>
+
+<h2>Test 4 – Safety and control</h2>
+<p>After each test, send <b>AUTO</b> (app or dashboard) or press STOP again to return to normal.</p>
+<table class="tall">
+  <tr><th>#</th><th>Test</th><th>How</th><th>Pass when</th><th>What you saw</th><th>Pass</th></tr>
+  <tr><td>1</td><td>E-STOP button</td><td>Send "Open 50%"; press STOP while the gate is moving</td><td>Gate freezes where it is; <span class="sw p"></span>purple light; continuous buzzer. Press STOP again → AUTO</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>2</td><td>E-STOP from app</td><td>Press E-Stop in the operator app</td><td>Same as #1 within ~5 s; app shows EXECUTED</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>3</td><td>E-STOP while busy</td><td>Press "Open 50%", then E-Stop straight away</td><td>The E-Stop button is not locked; gate freezes</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>4</td><td>Both sensors fail</td><td>Unplug both ECHO wires</td><td>~6 s: <span class="sw b"></span>blue light, SENSOR FAULT in apps, gate holds, 1 SMS only (max one per 30 min)</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>5</td><td>One sensor fails</td><td>Unplug one ECHO wire</td><td>Keeps working on the other sensor (degraded), no fault state</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>6</td><td>Sensors disagree</td><td>Hold a card under one sensor only, &gt; 5 cm closer</td><td>The higher water level is used</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>7</td><td>Manual holds</td><td>Press "Open 20%" in the app, wait 10 min</td><td>Still MANUAL, gate still 20 %. Then AUTO → back to automatic</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>8</td><td>Danger in Manual</td><td>Press "Close" in the app (Manual 0 %), then book to 13 cm</td><td>Gate stays closed (operator's choice); <span class="sw r"></span>red light, siren and danger SMS still happen</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>9</td><td>Gate limit</td><td>Try every way to open past 50 % (app, dashboard, buttons, Serial)</td><td>Never above 50 %</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>10</td><td>Physical OPEN / CLOSE</td><td>Press OPEN twice, then CLOSE</td><td>20 % → 50 % → 0 %, short beep each time, Manual mode</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>11</td><td>DHT22 removed</td><td>Unplug the DHT22 data wire, wait 30 s</td><td>Apps and dashboard show "--", not old or fake numbers</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>12</td><td>Test SMS</td><td>Dashboard "Ping" on one contact</td><td>Only that number gets a text starting "SDAS TEST"</td><td class="f"></td><td class="tick"></td></tr>
+</table>
+<p class="note">Turn the power off before plugging in wires. Unplugging a signal wire while running is fine if done carefully.</p>
+
+<h2 class="pb">Test 5 – No internet</h2>
+<table class="tall">
+  <tr><th>#</th><th>Step</th><th>Pass when</th><th>What you saw</th><th>Pass</th></tr>
+  <tr><td>1</td><td>Turn off the Wi-Fi / hotspot</td><td>Serial Monitor shows Wi-Fi lost; apps show "Not Live" after ~30 s</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>2</td><td>Move the book to 13 cm</td><td>Gate 50 %, red light, pulsed siren</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>3</td><td>Wait for SMS</td><td>Danger SMS arrives (GSM does not need Wi-Fi)</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>4</td><td>Turn Wi-Fi back on</td><td>ESP32 reconnects by itself</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>5</td><td>Check apps</td><td>Apps show Live again with the right stage</td><td class="f"></td><td class="tick"></td></tr>
+</table>
+
+<h2>Test 6 – Long run (1–2 hours)</h2>
+<table class="tall">
+  <tr><th>Item</th><th>Expected</th><th>Result</th><th>Pass</th></tr>
+  <tr><td>Start time / end time</td><td>at least 1 hour</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Restarts in Serial Monitor ("boot" / "reset" lines)</td><td>0</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>New rows in Supabase readings table</td><td>about 720 per hour</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Free heap at start / end (Serial Monitor)</td><td>no steady drop</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>False alarms (stage went up while the level was really below the threshold)</td><td>as low as possible</td><td class="f"></td><td class="tick"></td></tr>
+</table>
+
+<h2>Test 7 – Rule-based trend forecast</h2>
+<p>Use real water filling slowly (or the long run). Read the "Rule-Based Advice" panel on the dashboard or operator app:
+it projects the level 60 minutes ahead from the last 60 minutes of readings. Write the projection, then the real level 60 min later.
+Error in cm = error in % × 0.4.</p>
+<table class="tall">
+  <tr><th>Time</th><th>Level now (%)</th><th>Projected in 60 min (%)</th><th>Real level 60 min later (%)</th><th>Error (%)</th><th>Error (cm)</th></tr>
+  <tr><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+</table>
+<p>Average forecast error: <span style="display:inline-block;width:90px" class="line"></span> cm</p>
+
+<h2 class="pb">Summary (copy into the Preliminary Results slide and the bench test report)</h2>
+<table class="tall">
+  <tr><th>Measure (Proposal V.02)</th><th>Target</th><th>Measured</th><th>Met?</th></tr>
+  <tr><td>Water level error (two sensors, average)</td><td>within ±1 cm</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Gate response (stage change to servo moving)</td><td>&lt; 500 ms</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>SMS delivery (stage change to phone)</td><td>&lt; 15 s</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Operator command (app button to gate moving)</td><td>&lt; 10 s</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>1-hour trend forecast error</td><td>reported in cm</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Sensor fault detection time</td><td>about 6 s</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>False alarm rate</td><td>as low as possible</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Alert stage tests passed (Test 2)</td><td>8 / 8</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>Safety tests passed (Test 4)</td><td>12 / 12</td><td class="f"></td><td class="tick"></td></tr>
+  <tr><td>No-internet tests passed (Test 5)</td><td>5 / 5</td><td class="f"></td><td class="tick"></td></tr>
+</table>
+
+<h2>Problems found and fixes</h2>
+<table class="tall">
+  <tr><th style="width:5%">#</th><th style="width:30%">Problem</th><th style="width:35%">Fix / change made</th><th style="width:30%">Re-tested? Result</th></tr>
+  <tr><td>1</td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>2</td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>3</td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>4</td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+  <tr><td>5</td><td class="f"></td><td class="f"></td><td class="f"></td></tr>
+</table>
+
+<div class="box" style="margin-top:14px">
+  <div class="grid">
+    <div><span class="lbl">Tester signature</span><div class="line" style="height:28px"></div></div>
+    <div><span class="lbl">Supervisor signature</span><div class="line" style="height:28px"></div></div>
+    <div><span class="lbl">Date</span><div class="line" style="height:28px"></div></div>
+  </div>
+</div>
+<p class="note">Take photos of the setup and the filled sheet, and a short video of Tests 2 and 4 as evidence for the report and viva.
+Repeat Tests 1 and 2 later with real water in the tank.</p>
+
+</body>
+</html>

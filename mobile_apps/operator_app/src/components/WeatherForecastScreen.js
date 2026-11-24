@@ -15,32 +15,35 @@ import {
   ThermometerIcon
 } from '../Icons';
 import { supabase } from '../supabaseClient';
+import { fetchPuttalamWeather } from '../weatherService';
 
 export default function WeatherForecastScreen({ onBack }) {
-  const [dht, setDht] = useState({ temp: 28.4, humidity: 74.0 });
+  // FIX: this screen showed a fixed 28.4 °C / 74 %, an invented 5-day outlook, "ESP32 connected"
+  // even when it was offline, and a made-up "Upper Mahaweli inflow +14.2 m³/s". All real now.
+  const [dht, setDht] = useState({ temp: null, humidity: null });
+  const [lastReadingAt, setLastReadingAt] = useState(null);
+  const [wx, setWx] = useState(null);
 
   useEffect(() => {
     supabase
       .from('readings')
-      .select('temperature,humidity')
+      .select('temperature,humidity,created_at')
       .order('created_at', { ascending: false })
       .limit(1)
       .then(({ data }) => {
         if (data && data[0]) {
-          setDht({
-            temp: parseFloat(data[0].temperature) || 28.4,
-            humidity: parseFloat(data[0].humidity) || 74.0
-          });
+          const t = parseFloat(data[0].temperature);
+          const h = parseFloat(data[0].humidity);
+          const missing = !(t || h); // the database stores 0 / 0 when the DHT22 has no reading
+          setDht({ temp: missing ? null : t, humidity: missing ? null : h });
+          setLastReadingAt(new Date(data[0].created_at));
         }
       });
+    fetchPuttalamWeather().then(setWx);
   }, []);
-  const fiveDay = [
-    { day: 'Wed', icon: '☀️', temp: '28°' },
-    { day: 'Thu', icon: '☀️', temp: '27°' },
-    { day: 'Fri', icon: '⛅', temp: '28°' },
-    { day: 'Sat', icon: '☀️', temp: '29°' },
-    { day: 'Sun', icon: '☀️', temp: '30°' }
-  ];
+
+  const nodeOnline = lastReadingAt && Date.now() - lastReadingAt.getTime() <= 30000;
+  const fiveDay = wx?.daily || [];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -63,21 +66,29 @@ export default function WeatherForecastScreen({ onBack }) {
           <View style={styles.heroIconBox}>
             <CloudRainIcon size={64} color="#00F0FF" />
           </View>
-          <Text style={styles.heroTitle}>Kantalai Site {dht.temp}°C</Text>
-          <Text style={styles.heroSub}>DHT22 Sensor: {dht.temp}°C  |  Humidity: {dht.humidity}%  |  Compensated</Text>
+          <Text style={styles.heroTitle}>Tabbowa Dam Site {dht.temp !== null ? `${dht.temp}°C` : '--'}</Text>
+          <Text style={styles.heroSub}>
+            DHT22: {dht.temp !== null ? `${dht.temp}°C` : '--'}  |  Humidity: {dht.humidity !== null ? `${dht.humidity}%` : '--'}
+            {wx ? `  |  Puttalam: ${wx.condition}, rain chance ${wx.rainChancePct ?? '--'}%` : ''}
+          </Text>
         </View>
 
         {/* 5-Day Forecast Row */}
         <View style={styles.forecastCard}>
           <Text style={styles.forecastHeaderTitle}>5-Day Reservoir Catchment Outlook</Text>
           <View style={styles.forecastRow}>
-            {fiveDay.map((item, index) => (
-              <View key={index} style={styles.dayCol}>
-                <Text style={styles.dayText}>{item.day}</Text>
-                <Text style={styles.dayIcon}>{item.icon}</Text>
-                <Text style={styles.dayTemp}>{item.temp}</Text>
-              </View>
-            ))}
+            {fiveDay.length === 0 ? (
+              <Text style={styles.dayText}>Forecast unavailable (no internet).</Text>
+            ) : (
+              fiveDay.map((item, index) => (
+                <View key={index} style={styles.dayCol}>
+                  <Text style={styles.dayText}>{item.day}</Text>
+                  <Text style={styles.dayIcon}>{item.icon}</Text>
+                  <Text style={styles.dayTemp}>{item.tMax !== null ? `${Math.round(item.tMax)}°` : '--'}</Text>
+                  <Text style={styles.dayText}>{item.rainMm !== null ? `${item.rainMm} mm` : '--'}</Text>
+                </View>
+              ))
+            )}
           </View>
         </View>
 
@@ -89,23 +100,27 @@ export default function WeatherForecastScreen({ onBack }) {
             </View>
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.alertTitle}>Telemetry System Feed</Text>
-              <Text style={styles.alertTime}>Live Hardware Active</Text>
+              <Text style={styles.alertTime}>
+                {lastReadingAt ? `Last reading ${lastReadingAt.toLocaleTimeString()}` : 'No readings yet'}
+              </Text>
             </View>
           </View>
 
-          <Text style={[styles.alertWarningText, { color: '#E2E8F0', fontSize: 13, fontWeight: '700' }]}>
-            ESP32 Node SDAS-NODE-01 Connected
+          <Text style={[styles.alertWarningText, { color: nodeOnline ? '#34D399' : '#F87171', fontSize: 13, fontWeight: '700' }]}>
+            {nodeOnline ? 'ESP32 node SDAS-NODE-01 online' : 'ESP32 node offline (no data in the last 30 s)'}
           </Text>
           <Text style={styles.alertDescText}>
-            Dual ultrasonic water telemetry & DHT22 microclimate monitoring active.
+            Dual ultrasonic water level and DHT22 readings arrive about every 5 seconds when the node is online.
           </Text>
         </View>
 
         {/* Doppler Catchment Stream */}
         <View style={styles.catchmentCard}>
-          <Text style={styles.catchmentTitle}>Hydrological Catchment Radar</Text>
+          <Text style={styles.catchmentTitle}>Rain Outlook · Puttalam Catchment</Text>
           <Text style={styles.catchmentDesc}>
-            Upper Mahaweli Basin inflow: +14.2 m³/s. Upstream sensor nodes operating nominally.
+            {wx
+              ? `Rain now: ${wx.rainNowMm ?? '--'} mm · next 3 h: ${wx.rainNext3hMm ?? '--'} mm · wind ${wx.windSpeedKmh ?? '--'} km/h. Source: Open-Meteo.`
+              : 'Weather service unavailable (no internet).'}
           </Text>
         </View>
       </ScrollView>

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { ArrowLeftIcon, SendIcon, WaterDropIcon } from './Icons';
 
-export default function ChatScreen({ onBack, waterLevel = 0.0, alertKey = 'NORMAL', gatePercent = 0 }) {
+export default function ChatScreen({ onBack, waterLevel = 0.0, alertKey = 'NORMAL', gatePercent = 0, isLive = false, weather = null }) {
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState([
     {
@@ -44,8 +44,14 @@ export default function ChatScreen({ onBack, waterLevel = 0.0, alertKey = 'NORMA
       const botTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       let replyText = '';
       const lower = userText.toLowerCase();
+      // FIX: without live data the stage defaults to NORMAL, and the bot used to tell people
+      // "no flood danger". Never give a safety answer from stale or missing data.
+      const offlineText = 'Live dam data is not available right now, so I cannot confirm it is safe. ' +
+        'Stay away from the river and spillway if water is rising, and follow official advice (DMC hotline 117).';
 
-      if (lower.includes('water') || lower.includes('level') || lower.includes('height')) {
+      if (!isLive && !(lower.includes('weather') || lower.includes('rain'))) {
+        replyText = offlineText;
+      } else if (lower.includes('water') || lower.includes('level') || lower.includes('height')) {
         const heightM = ((waterLevel / 100) * 3.0).toFixed(2);
         const heightCm = Math.round((waterLevel / 100) * 300);
         const statusText = alertKey === 'NORMAL' ? 'It is currently safe.' : `System status: ${alertKey}. Please exercise caution.`;
@@ -54,14 +60,19 @@ export default function ChatScreen({ onBack, waterLevel = 0.0, alertKey = 'NORMA
         replyText = `The sluice gate is currently ${gatePercent > 0 ? `OPEN at ${gatePercent}%` : 'CLOSED'}. Gates are operated automatically according to reservoir water level and flood safety protocols.`;
       } else if (lower.includes('flood') || lower.includes('danger') || lower.includes('safe') || lower.includes('evacuat')) {
         if (alertKey === 'NORMAL') {
-          replyText = `Kantalai Reservoir is currently operating under NORMAL conditions. There is no flood danger at this time.`;
+          replyText = `Tabbowa Dam is currently at NORMAL level (${waterLevel.toFixed(0)}%). There is no flood warning at this time. Always follow official advice (DMC 117).`;
         } else {
           replyText = `Current Alert State: ${alertKey}. Please stay away from riverbanks and spillway channels. Follow official evacuation advisories.`;
         }
       } else if (lower.includes('weather') || lower.includes('rain')) {
-        replyText = `The weather at Kantalai Reservoir is Partly Cloudy, 28°C with 78% humidity. Upstream catchment sensors are monitoring inflow.`;
+        // FIX: was a fixed "Partly Cloudy, 28°C, 78% humidity"
+        if (weather && (weather.tempC !== null || weather.rainChancePct !== null)) {
+          replyText = `Puttalam weather: ${weather.condition || 'unknown'}, ${weather.tempC ?? '--'}°C, humidity ${weather.humidityPct ?? '--'}%, rain chance ${weather.rainChancePct ?? '--'}% in the next hour.`;
+        } else {
+          replyText = 'Weather information is not available right now (no internet).';
+        }
       } else {
-        replyText = `I am monitoring Kantalai Reservoir 24/7. Current water level: ${((waterLevel / 100) * 3.0).toFixed(2)} m (${waterLevel.toFixed(0)}%), Gate: ${gatePercent}%, Status: ${alertKey}. How else can I assist you?`;
+        replyText = `I am monitoring Tabbowa Dam. Current water level: ${((waterLevel / 100) * 3.0).toFixed(2)} m (${waterLevel.toFixed(0)}%), Gate: ${gatePercent}%, Status: ${alertKey}. How else can I assist you?`;
       }
 
       setMessages((prev) => [

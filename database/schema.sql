@@ -198,6 +198,13 @@ INSERT INTO public.dams (id, name, location, total_height_m, current_level_m, wa
 VALUES ('KANTALAI-01', 'Kantalai Reservoir', 'Trincomalee District, Eastern Province', 3.00, 0.00, 2.40, 2.70, 8.5284, 80.9922, true)
 ON CONFLICT (id) DO UPDATE SET is_online = true;
 
+-- FIX: the project dam is Tabbowa (Puttalam). The apps now save flood reports and community
+-- messages with dam_id 'TABBOWA-01'; without this row those inserts failed the foreign key.
+-- KANTALAI-01 is kept so older rows still point at a valid dam.
+INSERT INTO public.dams (id, name, location, total_height_m, current_level_m, warning_level_m, danger_level_m, latitude, longitude, is_online)
+VALUES ('TABBOWA-01', 'Tabbowa Dam', 'Puttalam District, North Western Province', 3.00, 0.00, 2.40, 2.70, 8.0362, 79.8283, true)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, location = EXCLUDED.location, is_online = true;
+
 -- ============================================================================
 -- 12. FLOOD_REPORTS TABLE (Crowdsourced Citizen Flood Reports & Operator Verification)
 -- ============================================================================
@@ -237,6 +244,9 @@ CREATE TABLE IF NOT EXISTS public.community_messages (
 );
 
 CREATE INDEX IF NOT EXISTS idx_community_messages_created_at ON public.community_messages (created_at ASC);
+ALTER TABLE public.dams ALTER COLUMN id SET DEFAULT 'TABBOWA-01';
+ALTER TABLE public.flood_reports ALTER COLUMN dam_id SET DEFAULT 'TABBOWA-01';
+ALTER TABLE public.community_messages ALTER COLUMN dam_id SET DEFAULT 'TABBOWA-01';
 
 -- ============================================================================
 -- 14. SAFE OBJECT CLEANUP (Prevents ERROR 42809: "is not a view")

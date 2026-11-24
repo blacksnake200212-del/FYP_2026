@@ -95,7 +95,7 @@ FYP_2026/
 9. **Three Decoupled Paths:**
    - **Local Loop:** Sensors $\rightarrow$ ESP32 rules $\rightarrow$ Gate, Siren, SMS (zero cloud dependence).
    - **Telemetry Path:** ESP32 $\rightarrow$ Wi-Fi $\rightarrow$ Supabase & ML server.
-   - **Command Path:** Operator App $\rightarrow$ MQTT $\rightarrow$ ESP32 with 300s watchdog timeout.
+   - **Command Path:** Operator App / Dashboard $\rightarrow$ Supabase `commands` table $\rightarrow$ ESP32 (polled every 5 s). Manual mode holds until AUTO.
 10. **4-Tier State Machine with 3% Hysteresis:**
     - NORMAL (<60%): Gate 0%, LED Green.
     - PRE-WARNING ($\ge 60\%$): Gate 0% (preserve water), LED Yellow, Operator can trigger manual SMS.

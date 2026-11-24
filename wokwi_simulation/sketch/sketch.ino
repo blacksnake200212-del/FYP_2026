@@ -410,16 +410,16 @@ void syncCloudTelemetry() {
         int httpCode = http.POST(requestBody);
         if (httpCode == 200) {
             String response = http.getString();
-            StaticJsonDocument<512> resDoc;
+            StaticJsonDocument<2048> resDoc;
             deserializeJson(resDoc, response);
 
-            Serial.println("\n[CLOUD-AI] Telemetry Synchronized to Render Backend:");
-            const char* verdict = resDoc["anomaly_analysis"]["anomaly_verdict"];
-            const char* risk    = resDoc["risk_classification"]["hazard_label"];
-            float conf          = resDoc["risk_classification"]["confidence_score"];
+            Serial.println("\n[RULE ENGINE] Advice from the rule-based decision support server:");
+            const char* verdict = resDoc["sensor_check"]["anomaly_verdict"];
+            const char* stage   = resDoc["risk_advice"]["hazard_label"];
+            const char* advice  = resDoc["risk_advice"]["advisory_stage"];
 
-            Serial.printf("  > Autoencoder Anomaly Verdict : %s\n", verdict ? verdict : "OK");
-            Serial.printf("  > Random Forest Hazard Class  : %s (Conf: %.1f%%)\n", risk ? risk : "NORMAL", conf * 100.0f);
+            Serial.printf("  > Sensor check   : %s\n", verdict ? verdict : "UNKNOWN");
+            Serial.printf("  > Stage / advice : %s / %s\n", stage ? stage : "UNKNOWN", advice ? advice : "UNKNOWN");
         }
         http.end();
     }

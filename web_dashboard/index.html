@@ -343,11 +343,11 @@
                     </div>
                   </button>
 
-                  <button id="btn-cmd-manual" class="cmd-btn btn-manual" title="Operator manual override: holds the current gate position. Remote manual commands return to AUTO after 5 minutes (300 s) unless sent again.">
+                  <button id="btn-cmd-manual" class="cmd-btn btn-manual" title="Operator manual override: holds the current gate position until you press AUTO. Danger alarms and SMS alerts still continue.">
                     <span class="btn-icon">🟡</span>
                     <div class="btn-text">
                       <strong>MANUAL MODE</strong>
-                      <small>Holds position · auto-returns to AUTO in 5 min</small>
+                      <small>Holds position until AUTO</small>
                     </div>
                   </button>
                 </div>
@@ -355,7 +355,7 @@
 
               <!-- Manual Positioning Actions -->
               <div class="gate-actions-grid">
-                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate (Manual Mode, returns to AUTO after 5 minutes)">
+                <button id="btn-cmd-close" class="cmd-btn btn-close" title="Fully lower and close the sluice gate (Manual Mode, holds until AUTO)">
                   <span class="btn-icon">⚪</span>
                   <div class="btn-text">
                     <strong>MANUAL CLOSE (0%)</strong>
@@ -363,7 +363,7 @@
                   </div>
                 </button>
 
-                <button id="btn-cmd-open20" class="cmd-btn btn-open20" title="Open gate to 20% Clear Area relief (Manual Mode, returns to AUTO after 5 minutes)">
+                <button id="btn-cmd-open20" class="cmd-btn btn-open20" title="Open gate to 20% Clear Area relief (Manual Mode, holds until AUTO)">
                   <span class="btn-icon">🟡</span>
                   <div class="btn-text">
                     <strong>MANUAL OPEN 20%</strong>
@@ -371,7 +371,7 @@
                   </div>
                 </button>
 
-                <button id="btn-cmd-open50" class="cmd-btn btn-open50" title="Open gate to 50% Maximum Safe travel (Manual Mode, returns to AUTO after 5 minutes)">
+                <button id="btn-cmd-open50" class="cmd-btn btn-open50" title="Open gate to 50% Maximum Safe travel (Manual Mode, holds until AUTO)">
                   <span class="btn-icon">🔴</span>
                   <div class="btn-text">
                     <strong>MANUAL OPEN 50%</strong>
@@ -498,6 +498,36 @@
 
           </div>
         </div>
+      </div>
+
+      <!-- Rule-based decision support (advisory only; the ESP32 controls the gate) -->
+      <div class="card col-advice" id="advice-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">🧭</span> Rule-Based Advice
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted);" id="advice-updated">
+            Advisory only &bull; the ESP32 controls the gate
+          </div>
+        </div>
+        <div class="advice-grid">
+          <div class="advice-item">
+            <div class="advice-label">1-hour trend forecast</div>
+            <div class="advice-value" id="advice-forecast">--</div>
+            <div class="advice-sub" id="advice-forecast-sub">Waiting for readings...</div>
+          </div>
+          <div class="advice-item">
+            <div class="advice-label">Sensor check</div>
+            <div class="advice-value" id="advice-sensors">--</div>
+            <div class="advice-sub" id="advice-sensors-sub">Waiting for readings...</div>
+          </div>
+          <div class="advice-item">
+            <div class="advice-label">Recommended action</div>
+            <div class="advice-value" id="advice-stage">--</div>
+            <div class="advice-sub" id="advice-stage-sub">Waiting for readings...</div>
+          </div>
+        </div>
+        <div class="advice-foot">Rules: straight-line trend of the last 60 min &bull; sensors must agree within 5 cm &bull; thresholds 60 / 80 / 85 % (same as the ESP32)</div>
       </div>
 
       <!-- 6. Real-Time Telemetry Trend Chart (7 cols) -->
@@ -737,6 +767,7 @@
     </div>
   </footer>
 
+  <script src="rule_advisor.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

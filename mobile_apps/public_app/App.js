@@ -34,6 +34,8 @@ import { translations } from './src/i18n';
 import CircularGauge from './src/CircularGauge';
 import WelcomeScreen from './src/WelcomeScreen';
 import WeatherScreen from './src/WeatherScreen';
+import { fetchPuttalamWeather } from './src/weatherService';
+import { registerForPushNotificationsAsync, showStageNotification } from './src/notificationService';
 import NotificationsScreen from './src/NotificationsScreen';
 import ChatScreen from './src/ChatScreen';
 import LanguageScreen from './src/LanguageScreen';
@@ -63,6 +65,30 @@ export default function PublicApp() {
   const [trend, setTrend] = useState('STEADY');
   const [lastSyncTime, setLastSyncTime] = useState('Connecting...');
   const [hasRealTelemetry, setHasRealTelemetry] = useState(false);
+  const [openMeteo, setOpenMeteo] = useState(null); // real Puttalam weather (null = not loaded / offline)
+
+  // FIX: push registration was never called, and nothing notified the phone on a stage change.
+  // Register once, then show a notification for every new alert row (stage change, operator alert).
+  useEffect(() => {
+    registerForPushNotificationsAsync(lang).catch(() => {});
+    const alertChannel = supabase
+      .channel('public-app-stage-alerts')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts' }, (payload) => {
+        if (payload?.new) showStageNotification(payload.new);
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(alertChannel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const loadWeather = () => fetchPuttalamWeather().then((w) => { if (w) setOpenMeteo(w); });
+    loadWeather();
+    const timer = setInterval(loadWeather, 15 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, []);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
 
@@ -76,15 +102,20 @@ export default function PublicApp() {
   });
 
   // Weather Telemetry Derived from Live DHT22 Sensor
+  // FIX: sunrise/sunset were fixed text and "feels like" was just temperature + 2 °C.
+  // Dam-site DHT22 values are used first; the rest comes from Open-Meteo (or '--' if offline).
   const weatherData = {
-    condition: dhtData.condition,
-    tempC: dhtData.temperature,
-    feelsLikeC: dhtData.temperature !== null ? Math.round(dhtData.temperature + 2) : null,
-    windSpeedKmh: null,   // FIX: was a fixed 12 km/h shown as real weather
-    humidityPct: dhtData.humidity,
-    rainChancePct: null,  // FIX: was a fixed 20% shown as real weather
-    sunrise: '5:52 AM',
-    sunset: '6:12 PM'
+    condition: openMeteo?.condition || dhtData.condition,
+    tempC: dhtData.temperature ?? openMeteo?.tempC ?? null,
+    feelsLikeC: openMeteo?.feelsLikeC ?? null,
+    windSpeedKmh: openMeteo?.windSpeedKmh ?? null,
+    humidityPct: dhtData.humidity ?? openMeteo?.humidityPct ?? null,
+    rainChancePct: openMeteo?.rainChancePct ?? null,
+    rainNext3hMm: openMeteo?.rainNext3hMm ?? null,
+    sunrise: openMeteo?.sunrise ?? '--',
+    sunset: openMeteo?.sunset ?? '--',
+    daily: openMeteo?.daily || [],
+    source: openMeteo ? 'Open-Meteo' : null
   };
 
   // Fetch Live Status & DHT Telemetry from Supabase
@@ -328,6 +359,8 @@ export default function PublicApp() {
         waterLevel={waterLevel}
         alertKey={alertKey}
         gatePercent={gatePercent}
+        isLive={hasRealTelemetry}
+        weather={weatherData}
         onBack={() => setCurrentScreen('HOME')}
       />
     );

@@ -44,3 +44,22 @@ One-time setup:
 
 Without the key, the node uses the 4 `CONTACT_OPERATOR_*` numbers in `config.h`. At most 10 numbers
 are used (tier 1 first).
+
+---
+
+## 5. Push notifications when the public app is closed (optional)
+`schema.sql` adds a row to `alerts` every time the stage changes. The public app shows a phone
+notification for each new alert while it is open or in the background. To reach phones where
+the app is fully closed, deploy the Edge Function in `supabase/functions/send-stage-push/`:
+
+1. Supabase dashboard → **Edge Functions** → Deploy a new function → name `send-stage-push` →
+   paste `supabase/functions/send-stage-push/index.ts` → Deploy.
+2. **Database → Webhooks** → Create a new hook: table `public.alerts`, event **Insert**,
+   type **Supabase Edge Functions**, function `send-stage-push`.
+3. Test: insert an alert row with `stage = 'PRE_WARNING'`; phones with the public app installed
+   (and notifications allowed) receive a push.
+
+## 6. Dam
+The project dam is **Tabbowa Dam (Puttalam)**, id `TABBOWA-01`. `KANTALAI-01` is kept only so
+older rows stay valid. `seed_data.sql` is demo data only; do not run it on the database used for
+the real bench test or the demo.

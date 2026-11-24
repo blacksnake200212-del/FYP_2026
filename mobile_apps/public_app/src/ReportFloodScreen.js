@@ -52,14 +52,15 @@ export default function ReportFloodScreen({ t, userLocation, onReportSubmitted, 
       // Database requires coordinates; without GPS the dam location is used and the report
       // says so, instead of looking like a real citizen location.
       const hasGps = Boolean(userLocation?.latitude && userLocation?.longitude);
-      const lat = hasGps ? userLocation.latitude : 8.5312;
-      const lon = hasGps ? userLocation.longitude : 80.9985;
+      // Puttalam district (the old fallback pointed at Kantalai, Trincomalee)
+      const lat = hasGps ? userLocation.latitude : 8.0362;
+      const lon = hasGps ? userLocation.longitude : 79.8283;
 
       const { data, error } = await supabase
         .from('flood_reports')
         .insert([
           {
-            dam_id: 'KANTALAI-01',
+            dam_id: 'TABBOWA-01',
             reporter_name: 'Citizen (Public App)',
             location_name: hasGps ? locationName.trim() : `${locationName.trim()} (typed by citizen, no GPS)`,
             latitude: lat,
