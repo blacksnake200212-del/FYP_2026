@@ -65,8 +65,9 @@ const int GATE_PCT_CLEAR_AREA      = 20;   // 20% - Advisory release (36 deg)
 const int GATE_PCT_DANGER          = 50;   // 50% - Emergency release (90 deg)
 const int GATE_PCT_MAX_LIMIT       = 50;   // 50% - Maximum allowable open limit
 
-// Watchdog Timeout (reverts to AUTO after 60s in simulation)
-const unsigned long MANUAL_WATCHDOG_MS = 60000;
+// Manual hold, same as the real firmware and Proposal V.02: MANUAL stays until the operator
+// returns to AUTO (0 = no timeout). Set e.g. 60000 to make manual mode time out after 60 s.
+const unsigned long MANUAL_WATCHDOG_MS = 0;
 
 // ----------------------------------------------------------------------------
 // ENUMS & STATE STRUCTURES
@@ -395,7 +396,7 @@ void syncCloudTelemetry() {
     if (http.begin(client, CLOUD_TELEMETRY_URL)) {
         http.addHeader("Content-Type", "application/json");
 
-        StaticJsonDocument<256> doc;
+        JsonDocument doc; // FIX: StaticJsonDocument is deprecated in ArduinoJson 7
         doc["water_level_pct"]   = round(currentWaterLevelPct * 10.0f) / 10.0f;
         doc["sensor_1_dist_cm"]  = round(sensor1DistCm * 10.0f) / 10.0f;
         doc["sensor_2_dist_cm"]  = round(sensor2DistCm * 10.0f) / 10.0f;
@@ -410,7 +411,7 @@ void syncCloudTelemetry() {
         int httpCode = http.POST(requestBody);
         if (httpCode == 200) {
             String response = http.getString();
-            StaticJsonDocument<2048> resDoc;
+            JsonDocument resDoc;
             deserializeJson(resDoc, response);
 
             Serial.println("\n[RULE ENGINE] Advice from the rule-based decision support server:");
@@ -471,7 +472,7 @@ void handleButtons() {
             } else {
                 Serial.printf(">>> [MANUAL] CLOSE PRESSED -> Sluice Gate Stepped Down to %d%% (%d deg) <<<\n", targetPct, (int)currentServoAngle);
             }
-            Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+            Serial.println("     Manual mode active. Holds until AUTO (type AUTO in the Serial Monitor).");
             Serial.println("=======================================================");
         }
 
@@ -487,7 +488,7 @@ void handleButtons() {
             } else {
                 Serial.printf(">>> [MANUAL] OPEN PRESSED -> Sluice Gate OPENED TO %d%% (%d deg) <<<\n", targetPct, (int)currentServoAngle);
             }
-            Serial.printf("     Manual mode active. Auto-watchdog reverts in %lu seconds.\n", MANUAL_WATCHDOG_MS / 1000);
+            Serial.println("     Manual mode active. Holds until AUTO (type AUTO in the Serial Monitor).");
             Serial.println("=======================================================");
         }
     }
@@ -496,8 +497,8 @@ void handleButtons() {
     prevOpen  = readOpen;
     prevClose = readClose;
 
-    // 4. Manual Mode Safety Watchdog - Revert to AUTO after 60s
-    if (currentControlMode == MODE_MANUAL) {
+    // 4. Optional manual timeout (off by default: MANUAL holds until AUTO, as in the proposal)
+    if (MANUAL_WATCHDOG_MS > 0 && currentControlMode == MODE_MANUAL) {
         if (millis() > manualModeTimeoutMs) {
             Serial.printf("\n[WATCHDOG] Manual override timed out (%lu s). Reverting to autonomous regulation.\n", MANUAL_WATCHDOG_MS / 1000);
             currentControlMode = MODE_AUTO;

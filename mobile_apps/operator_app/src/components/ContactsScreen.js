@@ -451,7 +451,7 @@ export default function ContactsScreen({ onBack, operatorUser }) {
                     recipient_count: targetContacts.length,
                     group: activeTab,
                     message: msg,
-                    operator: operatorUser?.email || 'operator@tabbowa.gov.lk'
+                    operator: operatorUser?.email || 'unknown'
                   }
                 }
               ]);

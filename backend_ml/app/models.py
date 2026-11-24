@@ -79,8 +79,9 @@ class WeatherResponse(BaseModel):
     source: str
     latitude: float
     longitude: float
-    temperature_c: float
-    humidity_pct: float
-    current_rain_mm: float
-    forecast_next_1h_rain_mm: float
-    forecast_next_3h_rain_mm: float
+    # None = Open-Meteo not reachable yet (no made-up values)
+    temperature_c: Optional[float] = None
+    humidity_pct: Optional[float] = None
+    current_rain_mm: Optional[float] = None
+    forecast_next_1h_rain_mm: Optional[float] = None
+    forecast_next_3h_rain_mm: Optional[float] = None

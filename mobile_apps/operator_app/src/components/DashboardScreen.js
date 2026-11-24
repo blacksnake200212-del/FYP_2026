@@ -206,7 +206,8 @@ export default function DashboardScreen({ operatorUser }) {
       if (type === 'OPEN_20' || type === 'OPEN_50') {
         setTelemetry((prev) => ({ ...prev, gatePercent: type === 'OPEN_50' ? 50 : 20, controlMode: 'MANUAL' }));
       } else if (type === 'CLOSE') {
-        setTelemetry((prev) => ({ ...prev, gatePercent: 0 }));
+        // FIX: the ESP32 treats a remote CLOSE as Manual mode (held until AUTO)
+        setTelemetry((prev) => ({ ...prev, gatePercent: 0, controlMode: 'MANUAL' }));
       } else if (type === 'AUTO') {
         setTelemetry((prev) => ({ ...prev, controlMode: 'AUTO' }));
       } else if (type === 'MANUAL') {

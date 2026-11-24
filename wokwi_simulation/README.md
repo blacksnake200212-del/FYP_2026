@@ -128,7 +128,7 @@ While the simulation is running, you can click on any component to adjust its va
      - **1st Click (from 50%):** Sluice gate steps down to **20% (36°)**.
      - **2nd Click (from 20%):** Sluice gate fully closes to **0% (0°)**.
   3. Click the **red E-STOP button** (GPIO22 or press keyboard key **`S`**) $\rightarrow$ Sluice gate locks instantly in place and continuous emergency siren sounds. Press **`S`** again to safely release E-STOP.
-  4. Leave the dam untouched for **60 seconds** $\rightarrow$ Watchdog safely expires and restores autonomous regulation (`MODE_AUTO`), setting the gate to match current water levels.
+  4. Leave the dam untouched: MANUAL mode **holds** (same as the real firmware and Proposal V.02). Type `AUTO` in the Serial Monitor to restore autonomous regulation (`MODE_AUTO`), which sets the gate to match the current water level. (Set `MANUAL_WATCHDOG_MS` in the sketch to e.g. 60000 for a 60-second timeout.)
   5. **Serial Monitor Console:** You can also type `20`, `50`, `0`, `OPEN`, `CLOSE`, `AUTO`, or `STOP` into the Serial Monitor for instant testing!
 
 ### Scenario 8: Live Render AI Backend Sync

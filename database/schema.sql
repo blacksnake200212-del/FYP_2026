@@ -176,6 +176,11 @@ CREATE TABLE IF NOT EXISTS public.audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_created_at ON public.audit_log (created_at DESC);
 
+-- FIX: the operator app inserts audit rows without user_id. After rls_hardening.sql the insert
+-- policy needs user_id = auth.uid(), so every audit row was silently rejected. Fill it in
+-- automatically from the logged-in operator's session.
+ALTER TABLE public.audit_log ALTER COLUMN user_id SET DEFAULT auth.uid();
+
 -- ============================================================================
 -- 11. DAMS TABLE (Metadata and operational limits per reservoir node)
 -- ============================================================================

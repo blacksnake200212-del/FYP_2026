@@ -1,3 +1,8 @@
+> **Historical document (V.01 design).** Parts of this blueprint are out of date: the ML models
+> were replaced by rule-based advice, gate commands go through Supabase (MQTT commands are off),
+> and MANUAL mode holds until AUTO (no 300 s auto-revert). See **`SDAS_Project_Proposal_V02.pdf`**
+> and `FIXES.md` for the current design.
+
 # SDAS System Architecture Blueprint & Dataflow Specification
 
 ## 1. Architectural Overview & Separation of Concerns

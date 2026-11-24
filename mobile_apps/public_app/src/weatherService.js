@@ -28,8 +28,11 @@ const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Returns null when offline or the service fails (screens then show "--").
 export async function fetchPuttalamWeather() {
+  // FIX: on a weak mobile signal fetch() could hang forever; give up after 10 s
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 10000) : null;
   try {
-    const res = await fetch(URL);
+    const res = await fetch(URL, ctrl ? { signal: ctrl.signal } : undefined);
     if (!res.ok) return null;
     const j = await res.json();
     const c = j.current || {};
@@ -65,5 +68,7 @@ export async function fetchPuttalamWeather() {
     };
   } catch (e) {
     return null;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

@@ -1,3 +1,9 @@
+> **Historical document (V.01 design).** This file describes the earlier design: ML models
+> (LSTM / autoencoder / random forest), MQTT gate commands, a 300 s manual watchdog and
+> result figures that had not been measured. It is kept for reference only. The current design is
+> **`SDAS_Project_Proposal_V02.pdf`** (rule-based advice, Supabase commands, MANUAL holds until
+> AUTO, results to be measured in the bench test).
+
 # Smart Dam Alert System with Automated Gate Control (SDAS)
 ## Final Year Project Proposal & Technical Specification Report (Version 2.4)
 

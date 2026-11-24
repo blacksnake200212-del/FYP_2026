@@ -192,6 +192,27 @@ Open the Serial Monitor at 115200 baud:
 | 10 | Operator, Settings | With no email loaded, showed and audit-logged a made-up `operator@kantalai.gov.lk` | Shows `--`; audit log says `unknown` |
 | 11 | `seed_data.sql` | Sample flood reports used Kantalai places/coordinates and stock internet flood photos | Marked `[SAMPLE]`, Tabbowa coordinates, no photos |
 
+### Full code check (24 Nov 2026, evening)
+How it was checked: firmware compiled with the real Arduino ESP32 core 3.3.12 (no errors, no warnings,
+89 % flash); every app file parsed with Babel, with imports and undeclared names checked (0 problems);
+web dashboard and tools `node --check`; Python compiled and all 14 backend tests pass.
+
+| # | Where | Bug | Fix |
+|---|---|---|---|
+| 1 | Public app, `notificationService.js` | A phone registering a second time got HTTP 409: "ignore duplicates" only checked the `id` key, not the unique `token` | `?on_conflict=token` |
+| 2 | Public app, `notificationService.js` | `shouldShowAlert` is deprecated in expo-notifications (SDK 57); alerts might not show while the app is open | `shouldShowBanner` + `shouldShowList` |
+| 3 | `schema.sql` (audit_log) | Operator app audit rows have no `user_id`; after `rls_hardening.sql` every one was silently rejected, so nothing was audited | `user_id` defaults to `auth.uid()` |
+| 4 | Backend `weather_service.py` | Before the first fetch it returned made-up weather (28.5 °C, 78 %, 0.5 / 1.2 mm rain) | Returns `null` ("unavailable") |
+| 5 | Backend `weather_service.py` | "Next 1 h / 3 h rain" used the midnight hours, not the current hour | Starts from the current hour |
+| 6 | Both apps, `weatherService.js` | Weather request could hang forever on a weak signal | 10 s timeout |
+| 7 | Operator app, Dashboard | "Close Gate" did not show MANUAL, although the ESP32 switches to Manual | Shows MANUAL |
+| 8 | Operator app, Contacts | Audit log fallback email `operator@tabbowa.gov.lk` (made up) | `unknown` |
+
+**Run `schema.sql` (then `rls_hardening.sql`) again in Supabase** for fix 3. Rebuild the public APK for fixes 1–2.
+
+Also (your decisions): the Wokwi sketch now holds MANUAL until AUTO like the real firmware
+(`MANUAL_WATCHDOG_MS = 0`), and the two old `proposal_report` .md files are marked as the V.01 design.
+
 ### Bench test sheet v2 (`bench_test/SDAS_Bench_Test_Sheet.pdf`, source `.html`)
 Replaces the first sheet. Corrected: only DANGER sounds the siren; Manual holds until AUTO (no 5-min test);
 E-STOP = purple light + continuous buzzer; targets taken from Proposal V.02 (gate < 500 ms, SMS < 15 s,

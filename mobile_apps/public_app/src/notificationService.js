@@ -19,8 +19,10 @@ try {
 
 // Configure foreground notification behavior
 Notifications.setNotificationHandler({
+  // FIX: shouldShowAlert is deprecated in expo-notifications (SDK 53+); use banner + list
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false
   })
@@ -70,7 +72,9 @@ export async function registerForPushNotificationsAsync(language = 'en') {
 
     if (token) {
       // Store in Supabase push_tokens table (with ON CONFLICT do update)
-      const res = await fetch(`${SUPABASE_CONFIG.URL}/rest/v1/push_tokens`, {
+      // FIX: without on_conflict=token, PostgREST checks only the primary key (id), so a phone
+      // registering again hit the UNIQUE(token) constraint and got HTTP 409.
+      const res = await fetch(`${SUPABASE_CONFIG.URL}/rest/v1/push_tokens?on_conflict=token`, {
         method: 'POST',
         headers: {
           apikey: SUPABASE_CONFIG.PUBLISHABLE_KEY,
